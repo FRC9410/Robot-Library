@@ -1,0 +1,27 @@
+plugins {
+    id 'java-gradle-plugin'
+    id 'maven-publish'
+}
+
+group = 'org.team9410'
+version = '0.1.0-SNAPSHOT'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+gradlePlugin {
+    plugins {
+        robotLibrary {
+            id = 'org.team9410.robot-library'
+            implementationClass = 'org.team9410.robotlibrary.RobotLibraryPlugin'
+            displayName = 'Team 9410 Robot Library'
+            description = 'Installs Team 9410 robot project conventions and helper code.'
+        }
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
