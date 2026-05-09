@@ -62,6 +62,20 @@ To keep replacement backups after a successful install, add this flag:
 ./gradlew -I .robot-library-install.gradle robotLibraryInstall -PpowerlibKeepBackups=true
 ```
 
+
+## Latest Vendordeps
+
+By default, the installer downloads latest vendordeps first, then applies pinned overrides for known fragile packages. To keep the latest vendordeps instead, add this flag:
+
+```powershell
+-PpowerlibLatestVendordeps=true
+```
+
+Example:
+
+```powershell
+.\gradlew.bat -I .robot-library-install.gradle robotLibraryInstall -PpowerlibLatestVendordeps=true
+```
 ## Local Test
 
 From the root of a test robot project, run the installer directly from a local checkout:
@@ -87,5 +101,6 @@ Files that intentionally replace stock robot project files belong under:
 ```text
 templates/replacements/
 ```
+
 
 
