@@ -11,7 +11,7 @@ class TemplateFile {
 class VendorDependency {
     String label
     String url
-    String source
+    String pinnedSource
 }
 
 def templateFiles = [
@@ -38,7 +38,8 @@ def vendorDependencies = [
     ),
     new VendorDependency(
         label: 'MapleSim',
-        source: 'vendordeps/maple-sim-0.4.0-beta.json'
+        url: 'https://shenzhen-robotics-alliance.github.io/maple-sim/vendordep/maple-sim.json',
+        pinnedSource: 'vendordeps/maple-sim-0.4.0-beta.json'
     ),
     new VendorDependency(
         label: 'Phoenix 6 Replay',
@@ -52,6 +53,7 @@ def vendorDependencies = [
 
 def rawBaseUrl = 'https://raw.githubusercontent.com/FRC9410/Robot-Library/main/templates'
 def keepBackupsPropertyName = 'powerlibKeepBackups'
+def latestVendordepsPropertyName = 'powerlibLatestVendordeps'
 
 def findLocalTemplateRoot = {
     File initScript = gradle.startParameter.allInitScripts.find { script ->
@@ -112,24 +114,31 @@ def parseJsonFile = { File file ->
     }
 }
 
-def installVendorDependency = { Project project, VendorDependency dependency ->
+def readVendordepJson = { VendorDependency dependency, boolean usePinnedVersion ->
+    File localTemplateRoot = findLocalTemplateRoot()
+    File localVendordep = usePinnedVersion && dependency.pinnedSource != null && localTemplateRoot != null
+        ? new File(localTemplateRoot, dependency.pinnedSource)
+        : null
+
+    if (localVendordep != null && localVendordep.exists()) {
+        return localVendordep.getText('UTF-8')
+    }
+
+    if (usePinnedVersion && dependency.pinnedSource != null) {
+        return new URL("${rawBaseUrl}/${dependency.pinnedSource}").getText('UTF-8')
+    }
+
+    return new URL(dependency.url).getText('UTF-8')
+}
+
+def installVendorDependency = { Project project, VendorDependency dependency, boolean usePinnedVersion ->
     File vendorDepsDir = project.file('vendordeps')
     vendorDepsDir.mkdirs()
 
-    String jsonText
-    File localTemplateRoot = findLocalTemplateRoot()
-    File localVendordep = dependency.source == null || localTemplateRoot == null ? null : new File(localTemplateRoot, dependency.source)
-
-    if (localVendordep != null && localVendordep.exists()) {
-        jsonText = localVendordep.getText('UTF-8')
-    } else if (dependency.source != null) {
-        jsonText = new URL("${rawBaseUrl}/${dependency.source}").getText('UTF-8')
-    } else {
-        jsonText = new URL(dependency.url).getText('UTF-8')
-    }
-
+    String jsonText = readVendordepJson(dependency, usePinnedVersion)
     def json = new JsonSlurper().parseText(jsonText)
-    String fileName = json.fileName ?: (dependency.url ?: dependency.source).tokenize('/').last()
+    String fallbackName = usePinnedVersion ? dependency.pinnedSource : dependency.url
+    String fileName = json.fileName ?: fallbackName.tokenize('/').last()
     File destination = new File(vendorDepsDir, fileName)
 
     vendorDepsDir.listFiles({ File file -> file.name.endsWith('.json') } as FileFilter)?.each { existing ->
@@ -143,7 +152,8 @@ def installVendorDependency = { Project project, VendorDependency dependency ->
     }
 
     destination.text = jsonText
-    logger.lifecycle("Installed ${dependency.label} vendordep: ${destination.name}")
+    String sourceLabel = usePinnedVersion ? 'pinned' : 'latest'
+    logger.lifecycle("Installed ${dependency.label} ${sourceLabel} vendordep: ${destination.name}")
 }
 
 gradle.projectsLoaded {
@@ -155,6 +165,7 @@ gradle.projectsLoaded {
             doLast {
                 List<File> backups = []
                 boolean keepBackups = project.findProperty(keepBackupsPropertyName).toString().toBoolean()
+                boolean useLatestVendordeps = project.findProperty(latestVendordepsPropertyName).toString().toBoolean()
 
                 templateFiles.each { template ->
                     File backup = copyTemplateFile(project, template)
@@ -164,7 +175,13 @@ gradle.projectsLoaded {
                 }
 
                 vendorDependencies.each { dependency ->
-                    installVendorDependency(project, dependency)
+                    installVendorDependency(project, dependency, false)
+                }
+
+                if (!useLatestVendordeps) {
+                    vendorDependencies.findAll { dependency -> dependency.pinnedSource != null }.each { dependency ->
+                        installVendorDependency(project, dependency, true)
+                    }
                 }
 
                 if (keepBackups) {
@@ -207,6 +224,3 @@ gradle.buildFinished {
         ['sh', '-c', "sleep 2; rm -f '${downloadedInstaller.absolutePath.replace("'", "'\\''")}'"].execute()
     }
 }
-
-
-
