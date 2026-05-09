@@ -1,3 +1,75 @@
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+
+class TemplateFile {
+    String source
+    String destination
+    boolean replacement
+}
+
+def templateFiles = [
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/PowerRobotContainer.java',
+        destination: 'src/main/java/frc/powerlib/PowerRobotContainer.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/RobotContainer.java',
+        destination: 'src/main/java/frc/robot/RobotContainer.java',
+        replacement: true
+    )
+]
+
+def rawBaseUrl = 'https://raw.githubusercontent.com/FRC9410/Robot-Library/main/templates'
+
+def findLocalTemplateRoot = {
+    File initScript = gradle.startParameter.allInitScripts.find { script ->
+        script.name == 'install.gradle' || script.name == '.robot-library-install.gradle'
+    }
+
+    if (initScript == null) {
+        return null
+    }
+
+    File templateRoot = new File(initScript.parentFile, 'templates')
+    return templateRoot.exists() ? templateRoot : null
+}
+
+def backupExistingFile = { File destination ->
+    if (!destination.exists()) {
+        return
+    }
+
+    File backup = new File(destination.parentFile, "${destination.name}.powerlib.bak")
+    int index = 1
+    while (backup.exists()) {
+        backup = new File(destination.parentFile, "${destination.name}.powerlib.bak.${index}")
+        index++
+    }
+
+    Files.copy(destination.toPath(), backup.toPath(), StandardCopyOption.COPY_ATTRIBUTES)
+}
+
+def copyTemplateFile = { Project project, TemplateFile template ->
+    File destination = project.file(template.destination)
+    destination.parentFile.mkdirs()
+
+    if (template.replacement) {
+        backupExistingFile(destination)
+    }
+
+    File localTemplateRoot = findLocalTemplateRoot()
+    File localTemplate = localTemplateRoot == null ? null : new File(localTemplateRoot, template.source)
+
+    if (localTemplate != null && localTemplate.exists()) {
+        Files.copy(localTemplate.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        return
+    }
+
+    URL templateUrl = new URL("${rawBaseUrl}/${template.source}")
+    destination.text = templateUrl.getText('UTF-8')
+}
+
 gradle.projectsLoaded {
     rootProject {
         tasks.register('robotLibraryInstall') {
@@ -5,17 +77,11 @@ gradle.projectsLoaded {
             description = 'Installs Team 9410 PowerLib starter files into this robot project.'
 
             doLast {
-                File powerLibDir = file('src/main/java/frc/powerlib')
-                if (!powerLibDir.exists() && !powerLibDir.mkdirs()) {
-                    throw new GradleException("Could not create ${powerLibDir}")
+                templateFiles.each { template ->
+                    copyTemplateFile(project, template)
                 }
 
-                File keepFile = new File(powerLibDir, '.gitkeep')
-                if (!keepFile.exists()) {
-                    keepFile.text = ''
-                }
-
-                logger.lifecycle("PowerLib installed at ${powerLibDir}")
+                logger.lifecycle('PowerLib install complete')
             }
         }
     }
@@ -36,7 +102,7 @@ gradle.buildFinished {
     if (System.getProperty('os.name').toLowerCase().contains('windows')) {
         [
             'cmd', '/c',
-            "start", "", "/min", "cmd", "/c",
+            'start', '', '/min', 'cmd', '/c',
             "ping 127.0.0.1 -n 3 > nul && del /f /q \"${downloadedInstaller.absolutePath}\""
         ].execute()
     } else {

@@ -4,13 +4,27 @@ One-time installer for Team 9410 robot project setup.
 
 The installer is meant to be run from inside a newly-created WPILib Java robot project. It uses the robot project's Gradle wrapper, so Gradle does not need to be installed globally.
 
-For now, the installer creates this folder:
+## What It Installs
+
+PowerLib files:
 
 ```text
-src/main/java/frc/powerlib
+src/main/java/frc/powerlib/PowerRobotContainer.java
 ```
 
-It also adds a `.gitkeep` file so the new folder can be committed before it contains Java files.
+Replacement starter files:
+
+```text
+src/main/java/frc/robot/RobotContainer.java
+```
+
+Before replacing a stock file, the installer creates a backup next to it:
+
+```text
+src/main/java/frc/robot/RobotContainer.java.powerlib.bak
+```
+
+If a backup already exists, it creates `.powerlib.bak.1`, `.powerlib.bak.2`, and so on.
 
 ## Windows
 
@@ -30,10 +44,28 @@ curl -fsSL "https://raw.githubusercontent.com/FRC9410/Robot-Library/main/install
 ./gradlew -I .robot-library-install.gradle robotLibraryInstall
 ```
 
+## Local Test
+
+From the root of a test robot project, run the installer directly from a local checkout:
+
+```powershell
+.\gradlew.bat -I E:\code\projects\Robot-Library\install.gradle robotLibraryInstall
+```
+
 ## After Install
 
 The `.robot-library-install.gradle` file is only needed for the install run. The installer deletes it automatically after a successful run.
 
-Future installer steps can live in `install.gradle`, and files that should be copied into robot projects can live under `templates/`.
+Future installer steps can live in `install.gradle`.
 
+Files that should be added under `frc.powerlib` belong under:
 
+```text
+templates/powerlib/
+```
+
+Files that intentionally replace stock robot project files belong under:
+
+```text
+templates/replacements/
+```
