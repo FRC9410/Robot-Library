@@ -11,6 +11,7 @@ class TemplateFile {
 class VendorDependency {
     String label
     String url
+    String source
 }
 
 def templateFiles = [
@@ -37,7 +38,7 @@ def vendorDependencies = [
     ),
     new VendorDependency(
         label: 'MapleSim',
-        url: 'https://shenzhen-robotics-alliance.github.io/maple-sim/vendordep/maple-sim.json'
+        source: 'vendordeps/maple-sim-0.4.0-beta.json'
     ),
     new VendorDependency(
         label: 'Phoenix 6 Replay',
@@ -115,9 +116,20 @@ def installVendorDependency = { Project project, VendorDependency dependency ->
     File vendorDepsDir = project.file('vendordeps')
     vendorDepsDir.mkdirs()
 
-    String jsonText = new URL(dependency.url).getText('UTF-8')
+    String jsonText
+    File localTemplateRoot = findLocalTemplateRoot()
+    File localVendordep = dependency.source == null || localTemplateRoot == null ? null : new File(localTemplateRoot, dependency.source)
+
+    if (localVendordep != null && localVendordep.exists()) {
+        jsonText = localVendordep.getText('UTF-8')
+    } else if (dependency.source != null) {
+        jsonText = new URL("${rawBaseUrl}/${dependency.source}").getText('UTF-8')
+    } else {
+        jsonText = new URL(dependency.url).getText('UTF-8')
+    }
+
     def json = new JsonSlurper().parseText(jsonText)
-    String fileName = json.fileName ?: dependency.url.tokenize('/').last()
+    String fileName = json.fileName ?: (dependency.url ?: dependency.source).tokenize('/').last()
     File destination = new File(vendorDepsDir, fileName)
 
     vendorDepsDir.listFiles({ File file -> file.name.endsWith('.json') } as FileFilter)?.each { existing ->
@@ -195,4 +207,6 @@ gradle.buildFinished {
         ['sh', '-c', "sleep 2; rm -f '${downloadedInstaller.absolutePath.replace("'", "'\\''")}'"].execute()
     }
 }
+
+
 

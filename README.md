@@ -23,14 +23,14 @@ Vendor dependencies:
 ```text
 vendordeps/ChoreoLib2026.json
 vendordeps/PathplannerLib-<latest>.json
-vendordeps/maple-sim-<latest>.json
+vendordeps/maple-sim-0.4.0-beta.json
 vendordeps/Phoenix6-replay-<latest>.json
 vendordeps/Phoenix5-replay-<latest>.json
 ```
 
 Before replacing a stock file, the installer creates a temporary backup. If the install succeeds, that backup is deleted during cleanup unless you pass `-PpowerlibKeepBackups=true`. If the install fails halfway through, the backup is left in place next to the original file.
 
-When installing vendordeps, the installer downloads from the official latest URLs, saves each JSON using its `fileName`, and removes older vendordep JSONs with the same vendor `name` or `uuid`.
+When installing vendordeps, the installer downloads from the official latest URLs where they are buildable. MapleSim is currently pinned to `0.4.0-beta` because the current latest vendordep points to an unpublished Maven artifact. The installer saves each JSON using its `fileName`, and removes older vendordep JSONs with the same vendor `name` or `uuid`.
 
 ## Windows
 
@@ -87,3 +87,4 @@ Files that intentionally replace stock robot project files belong under:
 ```text
 templates/replacements/
 ```
+
