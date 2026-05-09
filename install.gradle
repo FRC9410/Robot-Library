@@ -1,3 +1,4 @@
+import groovy.json.JsonSlurper
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
@@ -5,6 +6,11 @@ class TemplateFile {
     String source
     String destination
     boolean replacement
+}
+
+class VendorDependency {
+    String label
+    String url
 }
 
 def templateFiles = [
@@ -17,6 +23,29 @@ def templateFiles = [
         source: 'replacements/src/main/java/frc/robot/RobotContainer.java',
         destination: 'src/main/java/frc/robot/RobotContainer.java',
         replacement: true
+    )
+]
+
+def vendorDependencies = [
+    new VendorDependency(
+        label: 'ChoreoLib',
+        url: 'https://choreo.autos/lib/ChoreoLib2026.json'
+    ),
+    new VendorDependency(
+        label: 'PathPlannerLib',
+        url: 'https://3015rangerrobotics.github.io/pathplannerlib/PathplannerLib.json'
+    ),
+    new VendorDependency(
+        label: 'MapleSim',
+        url: 'https://shenzhen-robotics-alliance.github.io/maple-sim/vendordep/maple-sim.json'
+    ),
+    new VendorDependency(
+        label: 'Phoenix 6 Replay',
+        url: 'https://maven.ctr-electronics.com/release/com/ctre/phoenix6/latest/Phoenix6-replay-frc2026-latest.json'
+    ),
+    new VendorDependency(
+        label: 'Phoenix 5 Replay Compatibility',
+        url: 'https://maven.ctr-electronics.com/release/com/ctre/phoenix/Phoenix5-replay-frc2026-latest.json'
     )
 ]
 
@@ -74,6 +103,37 @@ def copyTemplateFile = { Project project, TemplateFile template ->
     return backup
 }
 
+def parseJsonFile = { File file ->
+    try {
+        return new JsonSlurper().parse(file)
+    } catch (Exception ignored) {
+        return null
+    }
+}
+
+def installVendorDependency = { Project project, VendorDependency dependency ->
+    File vendorDepsDir = project.file('vendordeps')
+    vendorDepsDir.mkdirs()
+
+    String jsonText = new URL(dependency.url).getText('UTF-8')
+    def json = new JsonSlurper().parseText(jsonText)
+    String fileName = json.fileName ?: dependency.url.tokenize('/').last()
+    File destination = new File(vendorDepsDir, fileName)
+
+    vendorDepsDir.listFiles({ File file -> file.name.endsWith('.json') } as FileFilter)?.each { existing ->
+        if (existing.name != destination.name) {
+            def existingJson = parseJsonFile(existing)
+            boolean sameVendor = existingJson != null && ((json.uuid && existingJson.uuid == json.uuid) || (json.name && existingJson.name == json.name))
+            if (sameVendor && !existing.delete()) {
+                logger.warn("Could not remove old vendordep ${existing}")
+            }
+        }
+    }
+
+    destination.text = jsonText
+    logger.lifecycle("Installed ${dependency.label} vendordep: ${destination.name}")
+}
+
 gradle.projectsLoaded {
     rootProject {
         tasks.register('robotLibraryInstall') {
@@ -89,6 +149,10 @@ gradle.projectsLoaded {
                     if (backup != null) {
                         backups.add(backup)
                     }
+                }
+
+                vendorDependencies.each { dependency ->
+                    installVendorDependency(project, dependency)
                 }
 
                 if (keepBackups) {
@@ -131,3 +195,4 @@ gradle.buildFinished {
         ['sh', '-c', "sleep 2; rm -f '${downloadedInstaller.absolutePath.replace("'", "'\\''")}'"].execute()
     }
 }
+

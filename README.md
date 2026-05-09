@@ -18,7 +18,19 @@ Replacement starter files:
 src/main/java/frc/robot/RobotContainer.java
 ```
 
+Vendor dependencies:
+
+```text
+vendordeps/ChoreoLib2026.json
+vendordeps/PathplannerLib-<latest>.json
+vendordeps/maple-sim-<latest>.json
+vendordeps/Phoenix6-replay-<latest>.json
+vendordeps/Phoenix5-replay-<latest>.json
+```
+
 Before replacing a stock file, the installer creates a temporary backup. If the install succeeds, that backup is deleted during cleanup unless you pass `-PpowerlibKeepBackups=true`. If the install fails halfway through, the backup is left in place next to the original file.
+
+When installing vendordeps, the installer downloads from the official latest URLs, saves each JSON using its `fileName`, and removes older vendordep JSONs with the same vendor `name` or `uuid`.
 
 ## Windows
 
@@ -29,6 +41,12 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FRC9410/Robot-Library/
 .\gradlew.bat -I .robot-library-install.gradle robotLibraryInstall
 ```
 
+To keep replacement backups after a successful install, add this flag:
+
+```powershell
+.\gradlew.bat -I .robot-library-install.gradle robotLibraryInstall -PpowerlibKeepBackups=true
+```
+
 ## macOS / Linux
 
 From the root of the new robot project:
@@ -36,6 +54,12 @@ From the root of the new robot project:
 ```bash
 curl -fsSL "https://raw.githubusercontent.com/FRC9410/Robot-Library/main/install.gradle" -o ".robot-library-install.gradle"
 ./gradlew -I .robot-library-install.gradle robotLibraryInstall
+```
+
+To keep replacement backups after a successful install, add this flag:
+
+```bash
+./gradlew -I .robot-library-install.gradle robotLibraryInstall -PpowerlibKeepBackups=true
 ```
 
 ## Local Test
@@ -63,6 +87,3 @@ Files that intentionally replace stock robot project files belong under:
 ```text
 templates/replacements/
 ```
-
-
-
