@@ -1,0 +1,22 @@
+gradle.projectsLoaded {
+    rootProject {
+        tasks.register('robotLibraryInstall') {
+            group = 'robot library'
+            description = 'Installs Team 9410 PowerLib starter files into this robot project.'
+
+            doLast {
+                File powerLibDir = file('src/main/java/frc/powerlib')
+                if (!powerLibDir.exists() && !powerLibDir.mkdirs()) {
+                    throw new GradleException("Could not create ${powerLibDir}")
+                }
+
+                File keepFile = new File(powerLibDir, '.gitkeep')
+                if (!keepFile.exists()) {
+                    keepFile.text = ''
+                }
+
+                logger.lifecycle("PowerLib installed at ${powerLibDir}")
+            }
+        }
+    }
+}

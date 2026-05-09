@@ -1,42 +1,37 @@
 # Robot-Library
 
-Gradle plugin for installing Team 9410 robot project conventions and shared library files.
+One-time installer for Team 9410 robot project setup.
 
-## Install from GitHub
+The installer is meant to be run from inside a newly-created WPILib Java robot project. It uses the robot project's Gradle wrapper, so Gradle does not need to be installed globally.
 
-Push this repository to GitHub, then create a Git tag that matches the library version in `build.gradle`:
+For now, the installer creates this folder:
+
+```text
+src/main/java/frc/powerlib
+```
+
+It also adds a `.gitkeep` file so the new folder can be committed before it contains Java files.
+
+## Windows
+
+From the root of the new robot project:
 
 ```powershell
-git tag 0.1.0
-git push origin main --tags
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FRC9410/Robot-Library/main/install.gradle" -OutFile ".robot-library-install.gradle"
+.\gradlew.bat -I .robot-library-install.gradle robotLibraryInstall
 ```
 
-In a robot project's `settings.gradle`, add a source dependency mapping. Replace the URL with your GitHub repository URL:
+## macOS / Linux
 
-```gradle
-sourceControl {
-    gitRepository('https://github.com/YOUR_GITHUB_USERNAME/Robot-Library.git') {
-        producesModule('org.team9410:robot-library')
-    }
-}
+From the root of the new robot project:
+
+```bash
+curl -fsSL "https://raw.githubusercontent.com/FRC9410/Robot-Library/main/install.gradle" -o ".robot-library-install.gradle"
+./gradlew -I .robot-library-install.gradle robotLibraryInstall
 ```
 
-In the robot project's `build.gradle`, add the plugin to the buildscript classpath and apply it:
+## After Install
 
-```gradle
-buildscript {
-    dependencies {
-        classpath 'org.team9410:robot-library:0.1.0'
-    }
-}
+The `.robot-library-install.gradle` file is only needed for the install run. You can delete it after the install finishes.
 
-apply plugin: 'org.team9410.robot-library'
-```
-
-Then run:
-
-```powershell
-.\gradlew installRobotLibrary
-```
-
-For now, the install task creates `src/main/java/frc/powerlib`.
+Future installer steps can live in `install.gradle`, and files that should be copied into robot projects can live under `templates/`.
