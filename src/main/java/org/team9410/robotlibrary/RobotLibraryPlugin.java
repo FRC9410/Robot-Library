@@ -11,7 +11,7 @@ public class RobotLibraryPlugin implements Plugin<Project> {
             task.setDescription("Installs Team 9410 robot library files into this robot project.");
 
             task.doLast(action -> {
-                project.mkdir(project.file("src/main/java/frc/9410lib"));
+                project.mkdir(project.file("src/main/java/frc/powerlib"));
             });
         });
     }

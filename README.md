@@ -39,4 +39,4 @@ Then run:
 .\gradlew installRobotLibrary
 ```
 
-For now, the install task creates `src/main/java/frc/9410lib`.
+For now, the install task creates `src/main/java/frc/powerlib`.
