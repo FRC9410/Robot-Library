@@ -15,6 +15,11 @@ gradle.projectsLoaded {
                     keepFile.text = ''
                 }
 
+                File downloadedInstaller = file('.robot-library-install.gradle')
+                if (downloadedInstaller.exists() && !downloadedInstaller.delete()) {
+                    logger.warn("Could not delete ${downloadedInstaller}")
+                }
+
                 logger.lifecycle("PowerLib installed at ${powerLibDir}")
             }
         }

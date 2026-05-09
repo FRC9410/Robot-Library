@@ -32,6 +32,8 @@ curl -fsSL "https://raw.githubusercontent.com/FRC9410/Robot-Library/main/install
 
 ## After Install
 
-The `.robot-library-install.gradle` file is only needed for the install run. You can delete it after the install finishes.
+The `.robot-library-install.gradle` file is only needed for the install run. The installer deletes it automatically after a successful run.
 
 Future installer steps can live in `install.gradle`, and files that should be copied into robot projects can live under `templates/`.
+
+
