@@ -21,6 +21,7 @@ def templateFiles = [
 ]
 
 def rawBaseUrl = 'https://raw.githubusercontent.com/FRC9410/Robot-Library/main/templates'
+def keepBackupsPropertyName = 'powerlibKeepBackups'
 
 def findLocalTemplateRoot = {
     File initScript = gradle.startParameter.allInitScripts.find { script ->
@@ -37,7 +38,7 @@ def findLocalTemplateRoot = {
 
 def backupExistingFile = { File destination ->
     if (!destination.exists()) {
-        return
+        return null
     }
 
     File backup = new File(destination.parentFile, "${destination.name}.powerlib.bak")
@@ -48,14 +49,16 @@ def backupExistingFile = { File destination ->
     }
 
     Files.copy(destination.toPath(), backup.toPath(), StandardCopyOption.COPY_ATTRIBUTES)
+    return backup
 }
 
 def copyTemplateFile = { Project project, TemplateFile template ->
     File destination = project.file(template.destination)
     destination.parentFile.mkdirs()
 
+    File backup = null
     if (template.replacement) {
-        backupExistingFile(destination)
+        backup = backupExistingFile(destination)
     }
 
     File localTemplateRoot = findLocalTemplateRoot()
@@ -63,11 +66,12 @@ def copyTemplateFile = { Project project, TemplateFile template ->
 
     if (localTemplate != null && localTemplate.exists()) {
         Files.copy(localTemplate.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
-        return
+    } else {
+        URL templateUrl = new URL("${rawBaseUrl}/${template.source}")
+        destination.text = templateUrl.getText('UTF-8')
     }
 
-    URL templateUrl = new URL("${rawBaseUrl}/${template.source}")
-    destination.text = templateUrl.getText('UTF-8')
+    return backup
 }
 
 gradle.projectsLoaded {
@@ -77,8 +81,26 @@ gradle.projectsLoaded {
             description = 'Installs Team 9410 PowerLib starter files into this robot project.'
 
             doLast {
+                List<File> backups = []
+                boolean keepBackups = project.findProperty(keepBackupsPropertyName).toString().toBoolean()
+
                 templateFiles.each { template ->
-                    copyTemplateFile(project, template)
+                    File backup = copyTemplateFile(project, template)
+                    if (backup != null) {
+                        backups.add(backup)
+                    }
+                }
+
+                if (keepBackups) {
+                    backups.each { backup ->
+                        logger.lifecycle("Kept backup ${backup}")
+                    }
+                } else {
+                    backups.each { backup ->
+                        if (backup.exists() && !backup.delete()) {
+                            logger.warn("Could not delete temporary backup ${backup}")
+                        }
+                    }
                 }
 
                 logger.lifecycle('PowerLib install complete')

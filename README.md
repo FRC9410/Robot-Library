@@ -18,13 +18,7 @@ Replacement starter files:
 src/main/java/frc/robot/RobotContainer.java
 ```
 
-Before replacing a stock file, the installer creates a backup next to it:
-
-```text
-src/main/java/frc/robot/RobotContainer.java.powerlib.bak
-```
-
-If a backup already exists, it creates `.powerlib.bak.1`, `.powerlib.bak.2`, and so on.
+Before replacing a stock file, the installer creates a temporary backup. If the install succeeds, that backup is deleted during cleanup unless you pass `-PpowerlibKeepBackups=true`. If the install fails halfway through, the backup is left in place next to the original file.
 
 ## Windows
 
@@ -69,3 +63,6 @@ Files that intentionally replace stock robot project files belong under:
 ```text
 templates/replacements/
 ```
+
+
+
