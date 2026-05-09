@@ -15,13 +15,31 @@ gradle.projectsLoaded {
                     keepFile.text = ''
                 }
 
-                File downloadedInstaller = file('.robot-library-install.gradle')
-                if (downloadedInstaller.exists() && !downloadedInstaller.delete()) {
-                    logger.warn("Could not delete ${downloadedInstaller}")
-                }
-
                 logger.lifecycle("PowerLib installed at ${powerLibDir}")
             }
         }
+    }
+}
+
+gradle.buildFinished {
+    File downloadedInstaller = gradle.rootProject.file('.robot-library-install.gradle')
+    if (!downloadedInstaller.exists()) {
+        return
+    }
+
+    if (downloadedInstaller.delete()) {
+        return
+    }
+
+    downloadedInstaller.deleteOnExit()
+
+    if (System.getProperty('os.name').toLowerCase().contains('windows')) {
+        [
+            'cmd', '/c',
+            "start", "", "/min", "cmd", "/c",
+            "ping 127.0.0.1 -n 3 > nul && del /f /q \"${downloadedInstaller.absolutePath}\""
+        ].execute()
+    } else {
+        ['sh', '-c', "sleep 2; rm -f '${downloadedInstaller.absolutePath.replace("'", "'\\''")}'"].execute()
     }
 }
