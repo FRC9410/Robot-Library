@@ -111,7 +111,7 @@ function Get-JavaIdentifierParts {
 function Convert-ToPascalCase {
     param([Parameter(Mandatory = $true)][string]$Value)
 
-    $parts = Get-JavaIdentifierParts $Value
+    $parts = @(Get-JavaIdentifierParts $Value)
     if ($parts.Count -eq 0) {
         throw "Subsystem name must contain at least one letter or number."
     }
