@@ -172,7 +172,7 @@ def vendorDependencies = [
 ]
 
 def rawBaseUrl = 'https://raw.githubusercontent.com/FRC9410/Robot-Library/main/templates'
-def generatorScriptUrl = 'https://raw.githubusercontent.com/FRC9410/Robot-Library/main/generate-subsystem.gradle'
+def generatorScriptUrl = 'https://raw.githubusercontent.com/FRC9410/Robot-Library/main/generate-subsystem.ps1'
 def keepBackupsPropertyName = 'powerlibKeepBackups'
 def latestVendordepsPropertyName = 'powerlibLatestVendordeps'
 def skipBuildPropertyName = 'powerlibSkipBuild'
@@ -241,8 +241,12 @@ def copyTemplateFile = { Project project, TemplateFile template ->
 
 
 def installGeneratorScript = { Project project ->
-    File generatorScript = project.file('.robot-library-generate-subsystem.gradle')
+    File generatorScript = project.file('.robot-library-generate-subsystem.ps1')
     generatorScript.text = new URL(generatorScriptUrl).getText('UTF-8')
+    File oldGeneratorScript = project.file('.robot-library-generate-subsystem.gradle')
+    if (oldGeneratorScript.exists() && !oldGeneratorScript.delete()) {
+        logger.warn("Could not remove old subsystem generator script: ${oldGeneratorScript.name}")
+    }
     logger.lifecycle("Installed subsystem generator script: ${generatorScript.name}")
 }
 def parseJsonFile = { File file ->

@@ -130,29 +130,29 @@ From the root of a test robot project, run the installer directly from a local c
 
 ## Generate Subsystems
 
-After running the installer, you can generate subsystem configs and initialize predefined PowerLib subsystem types in `StateMachine`. The installer downloads `.robot-library-generate-subsystem.gradle` into the robot project for this command.
+After running the installer, you can generate subsystem configs and initialize predefined PowerLib subsystem types in `StateMachine`. The installer downloads `.robot-library-generate-subsystem.ps1` into the robot project for this command.
 
 Windows:
 
 ```powershell
-.\gradlew.bat --no-daemon --console=plain --quiet -I .robot-library-generate-subsystem.gradle powerlibGenerateSubsystem
+powershell -ExecutionPolicy Bypass -File .\.robot-library-generate-subsystem.ps1
 ```
 
-macOS / Linux:
+To skip the build check after generation:
 
-```bash
-./gradlew --no-daemon --console=plain --quiet -I .robot-library-generate-subsystem.gradle powerlibGenerateSubsystem
+```powershell
+powershell -ExecutionPolicy Bypass -File .\.robot-library-generate-subsystem.ps1 -SkipBuild
 ```
 
 Local test from a robot project:
 
 ```powershell
-.\gradlew.bat --no-daemon --console=plain --quiet -I E:\code\projects\Robot-Library\generate-subsystem.gradle powerlibGenerateSubsystem
+powershell -ExecutionPolicy Bypass -File E:\code\projects\Robot-Library\generate-subsystem.ps1
 ```
 
 The generator script stays in the robot project so you can run it again later. The generator currently supports `velocity` and `position` subsystem types. It creates a constants file, adds the constants barrel entry in `Constants.java`, and inserts the initialized subsystem between the `POWERLIB GENERATED SUBSYSTEMS` markers in `StateMachine.java`.
 
-By default, generation finalizes with the robot project's `build` task. Add `-PpowerlibSkipBuild=true` to skip the build check.
+By default, generation runs the robot project's `build` task after the prompts finish. Add `-SkipBuild` to skip the build check.
 ## Build Check
 
 By default, the installer runs the robot project's `build` task after installing files and vendordeps. To skip that build check, add this flag:
