@@ -153,6 +153,29 @@ powershell -ExecutionPolicy Bypass -File E:\code\projects\Robot-Library\generate
 The generator script stays in the robot project so you can run it again later. The generator currently supports `velocity` and `position` subsystem types. It creates a constants file, adds the constants barrel entry in `Constants.java`, and inserts the initialized subsystem between the `POWERLIB GENERATED SUBSYSTEMS` markers in `StateMachine.java`.
 
 By default, generation runs the robot project's `build` task after the prompts finish. Add `-SkipBuild` to skip the build check.
+
+The generator also maintains `powerlib-subsystems.json` in the robot project. Interactive generation adds or updates subsystem entries in that JSON document, then rewrites the generated Java files from the document. After each subsystem, the script asks whether to add another.
+
+Enum prompts show the accepted values in the prompt. For example:
+
+```text
+Subsystem type (accepted: velocity, position) [velocity]
+Leader neutral mode (accepted: Brake, Coast) [Brake]
+```
+
+You can edit `powerlib-subsystems.json` directly, then reconcile the robot code from it:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\.robot-library-generate-subsystem.ps1 -UpdateSubsystems
+```
+
+To reconcile without running the build check:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\.robot-library-generate-subsystem.ps1 -UpdateSubsystems -SkipBuild
+```
+
+The update command changes generated constants, adds new subsystems, removes generated subsystem constants that are no longer in the JSON, and rewrites the generated block in `StateMachine.java`.
 ## Build Check
 
 By default, the installer runs the robot project's `build` task after installing files and vendordeps. To skip that build check, add this flag:
