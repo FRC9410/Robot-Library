@@ -1,3 +1,4 @@
+import org.gradle.api.logging.configuration.ConsoleOutput
 import java.util.Locale
 
 class GeneratedSubsystem {
@@ -10,6 +11,8 @@ class GeneratedSubsystem {
     String subsystemClassName
     String configConstantName
 }
+
+gradle.startParameter.consoleOutput = ConsoleOutput.Plain
 
 def skipBuildPropertyName = 'powerlibSkipBuild'
 def stateMachineStartMarker = '  // POWERLIB GENERATED SUBSYSTEMS START - DO NOT DELETE'
@@ -327,6 +330,7 @@ gradle.projectsLoaded {
         }
     }
 }
+
 
 
 
