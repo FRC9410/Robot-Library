@@ -1,10 +1,13 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const execFileAsync = promisify(execFile);
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 
@@ -17,6 +20,10 @@ function getSubsystemJsonCandidates() {
       path.resolve(app.getAppPath(), "..", "powerlib-subsystems.json")
     ])
   );
+}
+
+function getRobotRoot(subsystemsJsonPath: string) {
+  return path.dirname(subsystemsJsonPath);
 }
 
 ipcMain.handle("powerlib:read-subsystems", async () => {
@@ -49,6 +56,70 @@ ipcMain.handle("powerlib:read-subsystems", async () => {
   };
 });
 
+ipcMain.handle("powerlib:save-subsystems", async (_event, subsystems: unknown[]) => {
+  let targetPath = getSubsystemJsonCandidates()[1];
+
+  for (const candidate of getSubsystemJsonCandidates()) {
+    try {
+      await fs.access(candidate);
+      targetPath = candidate;
+      break;
+    } catch {
+      // Keep looking. If none exist, write to the installed robot root candidate.
+    }
+  }
+
+  const document = {
+    subsystems: Array.isArray(subsystems) ? subsystems : []
+  };
+
+  await fs.writeFile(targetPath, `${JSON.stringify(document, null, 2)}\n`, "utf-8");
+  return {
+    exists: true,
+    path: targetPath,
+    subsystems: document.subsystems
+  };
+});
+
+ipcMain.handle("powerlib:update-subsystem-code", async () => {
+  const subsystemsPath = getSubsystemJsonCandidates()[1];
+  let targetPath = subsystemsPath;
+
+  for (const candidate of getSubsystemJsonCandidates()) {
+    try {
+      await fs.access(candidate);
+      targetPath = candidate;
+      break;
+    } catch {
+      // Keep looking.
+    }
+  }
+
+  const robotRoot = getRobotRoot(targetPath);
+  const scriptPath = path.join(robotRoot, ".robot-library-generate-subsystem.ps1");
+
+  try {
+    await fs.access(scriptPath);
+  } catch {
+    throw new Error(`Missing ${scriptPath}. Install PowerLib helper scripts first.`);
+  }
+
+  const { stdout, stderr } = await execFileAsync(
+    "powershell",
+    ["-ExecutionPolicy", "Bypass", "-File", scriptPath, "-UpdateSubsystems", "-SubsystemsJson", targetPath],
+    {
+      cwd: robotRoot,
+      windowsHide: true,
+      maxBuffer: 1024 * 1024 * 4
+    }
+  );
+
+  return {
+    stdout,
+    stderr
+  };
+});
+
 function createWindow() {
   const window = new BrowserWindow({
     width: 1180,
@@ -71,7 +142,6 @@ function createWindow() {
 
   if (isDev && process.env.VITE_DEV_SERVER_URL) {
     window.loadURL(process.env.VITE_DEV_SERVER_URL);
-    window.webContents.openDevTools({ mode: "detach" });
   } else {
     window.loadFile(path.join(__dirname, "../dist-renderer/index.html"));
   }

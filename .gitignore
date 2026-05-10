@@ -35,6 +35,7 @@ build/
 
 # Local installer artifacts
 .robot-library-install.gradle
+.robot-library-install.ps1
 .robot-library-generate-subsystem.gradle
 .robot-library-generate-subsystem.ps1
 powerlib-generate-subsystem.cmd

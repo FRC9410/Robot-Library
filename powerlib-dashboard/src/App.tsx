@@ -6,11 +6,13 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   Chip,
   CircularProgress,
   Container,
   Divider,
   FormControl,
+  FormControlLabel,
   InputLabel,
   MenuItem,
   Paper,
@@ -32,9 +34,13 @@ import AddIcon from "@mui/icons-material/Add";
 import CableIcon from "@mui/icons-material/Cable";
 import ConstructionIcon from "@mui/icons-material/Construction";
 import DashboardIcon from "@mui/icons-material/Dashboard";
+import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
 import HubIcon from "@mui/icons-material/Hub";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import SaveIcon from "@mui/icons-material/Save";
 import SendIcon from "@mui/icons-material/Send";
+import TerminalIcon from "@mui/icons-material/Terminal";
 import {
   NtPrimitive,
   NtTopicSnapshot,
@@ -91,6 +97,25 @@ type SubsystemDocumentState = {
   error: string | null;
 };
 
+type SubsystemFormState = {
+  mode: "create" | "edit";
+  index: number | null;
+  id: string;
+  name: string;
+  type: "velocity" | "position";
+  leaderId: string;
+  leaderNeutralMode: "Brake" | "Coast";
+  leaderReversed: boolean;
+  sensorToMechanism: string;
+  rotorToSensor: string;
+  acceleration: string;
+  cancoderId: string;
+  cancoderMagnetOffset: string;
+  cancoderDiscontinuityPoint: string;
+  positionUnits: string;
+  defaultPosition: string;
+};
+
 const targetPresets: TargetPreset[] = [
   { id: "sim-localhost", label: "Local simulation", host: "localhost", port: 5810 },
   { id: "sim-loopback", label: "Loopback", host: "127.0.0.1", port: 5810 },
@@ -107,6 +132,131 @@ const defaultTopics = [
 ];
 
 const defaultPrefixes = ["/SmartDashboard/", "/Shuffleboard/", "/LiveWindow/", "/FMSInfo/"];
+
+function toCamelCase(value: string) {
+  const parts = value
+    .trim()
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean);
+
+  return parts
+    .map((part, index) => {
+      const lower = part.toLowerCase();
+      return index === 0 ? lower : `${lower.charAt(0).toUpperCase()}${lower.slice(1)}`;
+    })
+    .join("");
+}
+
+function toNumberText(value: unknown, fallback: string) {
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+
+  return String(value);
+}
+
+function createEmptySubsystemForm(): SubsystemFormState {
+  return {
+    mode: "create",
+    index: null,
+    id: "",
+    name: "",
+    type: "velocity",
+    leaderId: "",
+    leaderNeutralMode: "Brake",
+    leaderReversed: false,
+    sensorToMechanism: "1.0",
+    rotorToSensor: "1.0",
+    acceleration: "0.0",
+    cancoderId: "",
+    cancoderMagnetOffset: "0.0",
+    cancoderDiscontinuityPoint: "0.5",
+    positionUnits: "rotations",
+    defaultPosition: ""
+  };
+}
+
+function subsystemToForm(subsystem: GeneratedSubsystem, index: number): SubsystemFormState {
+  const leader = subsystem.motors?.find((motor) => motor.role === "leader") ?? subsystem.motors?.[0];
+  return {
+    mode: "edit",
+    index,
+    id: subsystem.id ?? toCamelCase(subsystem.name ?? ""),
+    name: subsystem.name ?? "",
+    type: subsystem.type === "position" ? "position" : "velocity",
+    leaderId: toNumberText(leader?.id, ""),
+    leaderNeutralMode: leader?.neutralMode === "Coast" ? "Coast" : "Brake",
+    leaderReversed: Boolean(leader?.reversed),
+    sensorToMechanism: toNumberText(subsystem.ratios?.sensorToMechanism, "1.0"),
+    rotorToSensor: toNumberText(subsystem.ratios?.rotorToSensor, "1.0"),
+    acceleration: toNumberText(subsystem.motionMagic?.acceleration, "0.0"),
+    cancoderId: toNumberText(subsystem.cancoder?.id, ""),
+    cancoderMagnetOffset: toNumberText(subsystem.cancoder?.magnetOffset, "0.0"),
+    cancoderDiscontinuityPoint: toNumberText(subsystem.cancoder?.discontinuityPoint, "0.5"),
+    positionUnits: subsystem.position?.units ?? "rotations",
+    defaultPosition: toNumberText(subsystem.position?.default, "")
+  };
+}
+
+function textToNumber(value: string, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function formToSubsystem(form: SubsystemFormState, existing?: GeneratedSubsystem): GeneratedSubsystem {
+  const id = form.id.trim() || toCamelCase(form.name);
+  const existingFollowers = existing?.motors?.filter((motor) => motor.role !== "leader") ?? [];
+  const subsystem: GeneratedSubsystem = {
+    ...existing,
+    id,
+    name: form.name.trim(),
+    type: form.type,
+    motors: [
+      {
+        role: "leader",
+        id: textToNumber(form.leaderId, 0),
+        neutralMode: form.leaderNeutralMode,
+        reversed: form.leaderReversed
+      },
+      ...existingFollowers
+    ],
+    pid: existing?.pid ?? {
+      kP: 0.0,
+      kI: 0.0,
+      kD: 0.0,
+      kG: 0.0,
+      kS: null,
+      kV: null,
+      kA: null
+    },
+    ratios: {
+      sensorToMechanism: textToNumber(form.sensorToMechanism, 1),
+      rotorToSensor: textToNumber(form.rotorToSensor, 1)
+    },
+    motionMagic: {
+      ...existing?.motionMagic,
+      acceleration: textToNumber(form.acceleration, 0)
+    }
+  };
+
+  if (form.type === "position") {
+    subsystem.cancoder = {
+      id: textToNumber(form.cancoderId, 0),
+      magnetOffset: textToNumber(form.cancoderMagnetOffset, 0),
+      discontinuityPoint: textToNumber(form.cancoderDiscontinuityPoint, 0.5)
+    };
+    subsystem.motionMagic = {
+      ...subsystem.motionMagic,
+      cruiseVelocity: existing?.motionMagic?.cruiseVelocity ?? 0.0
+    };
+    subsystem.position = {
+      units: form.positionUnits.trim() || "rotations",
+      default: form.defaultPosition.trim() ? textToNumber(form.defaultPosition, 0) : null
+    };
+  }
+
+  return subsystem;
+}
 
 function stringifyValue(value: NtValue) {
   if (value instanceof ArrayBuffer) {
@@ -164,6 +314,10 @@ export function App() {
     subsystems: [],
     error: null
   });
+  const [subsystemForm, setSubsystemForm] = useState<SubsystemFormState | null>(null);
+  const [subsystemActionMessage, setSubsystemActionMessage] = useState<string | null>(null);
+  const [subsystemSaving, setSubsystemSaving] = useState(false);
+  const [subsystemUpdatingCode, setSubsystemUpdatingCode] = useState(false);
 
   const sortedTopics = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -172,7 +326,7 @@ export function App() {
       .sort((left, right) => left.name.localeCompare(right.name));
   }, [topics, search]);
 
-  async function loadSubsystems() {
+  async function loadSubsystems(clearMessage = true) {
     setSubsystemDocument((current) => ({ ...current, loading: true, error: null }));
 
     try {
@@ -188,12 +342,115 @@ export function App() {
         subsystems: result.subsystems as GeneratedSubsystem[],
         error: result.error ?? null
       });
+      if (clearMessage) {
+        setSubsystemActionMessage(null);
+      }
     } catch (caught) {
       setSubsystemDocument((current) => ({
         ...current,
         loading: false,
         error: caught instanceof Error ? caught.message : "Could not load generated subsystems."
       }));
+    }
+  }
+
+  async function saveSubsystems(subsystems: GeneratedSubsystem[]) {
+    if (!window.powerlib?.saveSubsystems) {
+      throw new Error("PowerLib file bridge is not available.");
+    }
+
+    const result = await window.powerlib.saveSubsystems(subsystems);
+    setSubsystemDocument({
+      loading: false,
+      exists: result.exists,
+      path: result.path,
+      subsystems: result.subsystems as GeneratedSubsystem[],
+      error: null
+    });
+  }
+
+  async function saveSubsystemForm() {
+    if (!subsystemForm) {
+      return;
+    }
+
+    const existing =
+      subsystemForm.mode === "edit" && subsystemForm.index !== null
+        ? subsystemDocument.subsystems[subsystemForm.index]
+        : undefined;
+    const subsystem = formToSubsystem(subsystemForm, existing);
+    if (!subsystem.name || !subsystem.id) {
+      setSubsystemDocument((current) => ({ ...current, error: "Subsystem name is required." }));
+      return;
+    }
+
+    if (!subsystem.motors?.[0]?.id) {
+      setSubsystemDocument((current) => ({ ...current, error: "Leader CAN ID is required." }));
+      return;
+    }
+
+    setSubsystemSaving(true);
+    try {
+      const nextSubsystems = [...subsystemDocument.subsystems];
+      if (subsystemForm.mode === "edit" && subsystemForm.index !== null) {
+        nextSubsystems[subsystemForm.index] = subsystem;
+      } else {
+        nextSubsystems.push(subsystem);
+      }
+
+      await saveSubsystems(nextSubsystems);
+      setSubsystemActionMessage(`Saved ${subsystem.name}. Use Update Code when you are ready to regenerate Java files.`);
+      setSubsystemForm(null);
+    } catch (caught) {
+      setSubsystemDocument((current) => ({
+        ...current,
+        error: caught instanceof Error ? caught.message : "Could not save subsystem JSON."
+      }));
+    } finally {
+      setSubsystemSaving(false);
+    }
+  }
+
+  async function deleteSubsystem(index: number) {
+    const subsystem = subsystemDocument.subsystems[index];
+    setSubsystemSaving(true);
+    try {
+      await saveSubsystems(subsystemDocument.subsystems.filter((_, currentIndex) => currentIndex !== index));
+      setSubsystemActionMessage(`Removed ${subsystem?.name ?? "subsystem"}. Use Update Code to reconcile generated Java files.`);
+      if (subsystemForm?.index === index) {
+        setSubsystemForm(null);
+      }
+    } catch (caught) {
+      setSubsystemDocument((current) => ({
+        ...current,
+        error: caught instanceof Error ? caught.message : "Could not delete subsystem."
+      }));
+    } finally {
+      setSubsystemSaving(false);
+    }
+  }
+
+  async function updateSubsystemCode() {
+    setSubsystemUpdatingCode(true);
+    setSubsystemActionMessage(null);
+    setSubsystemDocument((current) => ({ ...current, error: null }));
+
+    try {
+      if (!window.powerlib?.updateSubsystemCode) {
+        throw new Error("PowerLib update bridge is not available.");
+      }
+
+      const result = await window.powerlib.updateSubsystemCode();
+      const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+      setSubsystemActionMessage(output || "Updated generated subsystem code.");
+      await loadSubsystems(false);
+    } catch (caught) {
+      setSubsystemDocument((current) => ({
+        ...current,
+        error: caught instanceof Error ? caught.message : "Could not update generated subsystem code."
+      }));
+    } finally {
+      setSubsystemUpdatingCode(false);
     }
   }
 
@@ -552,14 +809,34 @@ export function App() {
                     <Button
                       startIcon={subsystemDocument.loading ? <CircularProgress size={18} /> : <RefreshIcon />}
                       variant="outlined"
-                      onClick={loadSubsystems}
+                      onClick={() => void loadSubsystems()}
                       disabled={subsystemDocument.loading}
                     >
                       Refresh
                     </Button>
+                    <Button
+                      startIcon={<AddIcon />}
+                      variant="contained"
+                      onClick={() => setSubsystemForm(createEmptySubsystemForm())}
+                    >
+                      Create Subsystem
+                    </Button>
+                    <Button
+                      startIcon={subsystemUpdatingCode ? <CircularProgress size={18} /> : <TerminalIcon />}
+                      variant="outlined"
+                      onClick={updateSubsystemCode}
+                      disabled={subsystemUpdatingCode}
+                    >
+                      Update Code
+                    </Button>
                   </Stack>
 
                   {subsystemDocument.error && <Alert severity="error">{subsystemDocument.error}</Alert>}
+                  {subsystemActionMessage && (
+                    <Alert severity="success" variant="outlined" sx={{ whiteSpace: "pre-wrap" }}>
+                      {subsystemActionMessage}
+                    </Alert>
+                  )}
 
                   {!subsystemDocument.error && !subsystemDocument.exists && !subsystemDocument.loading && (
                     <Alert severity="info" variant="outlined">
@@ -577,6 +854,209 @@ export function App() {
                     </Stack>
                   )}
 
+                  {subsystemForm && (
+                    <Card variant="outlined" sx={{ bgcolor: "grey.50" }}>
+                      <CardContent>
+                        <Stack spacing={2}>
+                          <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                            <TextField
+                              label="Subsystem name"
+                              size="small"
+                              value={subsystemForm.name}
+                              onChange={(event) =>
+                                setSubsystemForm((current) =>
+                                  current
+                                    ? {
+                                        ...current,
+                                        name: event.target.value,
+                                        id: current.mode === "create" ? toCamelCase(event.target.value) : current.id
+                                      }
+                                    : current
+                                )
+                              }
+                              sx={{ flexGrow: 1 }}
+                            />
+                            <TextField
+                              label="Stable ID"
+                              size="small"
+                              value={subsystemForm.id}
+                              onChange={(event) =>
+                                setSubsystemForm((current) => (current ? { ...current, id: event.target.value } : current))
+                              }
+                              sx={{ minWidth: 220 }}
+                            />
+                            <FormControl size="small" sx={{ minWidth: 160 }}>
+                              <InputLabel id="subsystem-type-label">Type</InputLabel>
+                              <Select
+                                labelId="subsystem-type-label"
+                                label="Type"
+                                value={subsystemForm.type}
+                                onChange={(event) =>
+                                  setSubsystemForm((current) =>
+                                    current ? { ...current, type: event.target.value as "velocity" | "position" } : current
+                                  )
+                                }
+                              >
+                                <MenuItem value="velocity">velocity</MenuItem>
+                                <MenuItem value="position">position</MenuItem>
+                              </Select>
+                            </FormControl>
+                          </Stack>
+
+                          <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                            <TextField
+                              label="Leader CAN ID"
+                              size="small"
+                              type="number"
+                              value={subsystemForm.leaderId}
+                              onChange={(event) =>
+                                setSubsystemForm((current) => (current ? { ...current, leaderId: event.target.value } : current))
+                              }
+                            />
+                            <FormControl size="small" sx={{ minWidth: 160 }}>
+                              <InputLabel id="neutral-mode-label">Neutral mode</InputLabel>
+                              <Select
+                                labelId="neutral-mode-label"
+                                label="Neutral mode"
+                                value={subsystemForm.leaderNeutralMode}
+                                onChange={(event) =>
+                                  setSubsystemForm((current) =>
+                                    current ? { ...current, leaderNeutralMode: event.target.value as "Brake" | "Coast" } : current
+                                  )
+                                }
+                              >
+                                <MenuItem value="Brake">Brake</MenuItem>
+                                <MenuItem value="Coast">Coast</MenuItem>
+                              </Select>
+                            </FormControl>
+                            <FormControlLabel
+                              control={
+                                <Checkbox
+                                  checked={subsystemForm.leaderReversed}
+                                  onChange={(event) =>
+                                    setSubsystemForm((current) =>
+                                      current ? { ...current, leaderReversed: event.target.checked } : current
+                                    )
+                                  }
+                                />
+                              }
+                              label="Leader reversed"
+                            />
+                            <TextField
+                              label="Acceleration"
+                              size="small"
+                              type="number"
+                              value={subsystemForm.acceleration}
+                              onChange={(event) =>
+                                setSubsystemForm((current) => (current ? { ...current, acceleration: event.target.value } : current))
+                              }
+                            />
+                          </Stack>
+
+                          <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                            <TextField
+                              label="Sensor-to-mechanism ratio"
+                              size="small"
+                              type="number"
+                              value={subsystemForm.sensorToMechanism}
+                              onChange={(event) =>
+                                setSubsystemForm((current) =>
+                                  current ? { ...current, sensorToMechanism: event.target.value } : current
+                                )
+                              }
+                            />
+                            <TextField
+                              label="Rotor-to-sensor ratio"
+                              size="small"
+                              type="number"
+                              value={subsystemForm.rotorToSensor}
+                              onChange={(event) =>
+                                setSubsystemForm((current) => (current ? { ...current, rotorToSensor: event.target.value } : current))
+                              }
+                            />
+                            {subsystemForm.type === "position" && (
+                              <>
+                                <TextField
+                                  label="CANcoder CAN ID"
+                                  size="small"
+                                  type="number"
+                                  value={subsystemForm.cancoderId}
+                                  onChange={(event) =>
+                                    setSubsystemForm((current) =>
+                                      current ? { ...current, cancoderId: event.target.value } : current
+                                    )
+                                  }
+                                />
+                                <TextField
+                                  label="Position units"
+                                  size="small"
+                                  value={subsystemForm.positionUnits}
+                                  onChange={(event) =>
+                                    setSubsystemForm((current) =>
+                                      current ? { ...current, positionUnits: event.target.value } : current
+                                    )
+                                  }
+                                />
+                              </>
+                            )}
+                          </Stack>
+
+                          {subsystemForm.type === "position" && (
+                            <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                              <TextField
+                                label="CANcoder magnet offset"
+                                size="small"
+                                type="number"
+                                value={subsystemForm.cancoderMagnetOffset}
+                                onChange={(event) =>
+                                  setSubsystemForm((current) =>
+                                    current ? { ...current, cancoderMagnetOffset: event.target.value } : current
+                                  )
+                                }
+                              />
+                              <TextField
+                                label="CANcoder discontinuity point"
+                                size="small"
+                                type="number"
+                                value={subsystemForm.cancoderDiscontinuityPoint}
+                                onChange={(event) =>
+                                  setSubsystemForm((current) =>
+                                    current ? { ...current, cancoderDiscontinuityPoint: event.target.value } : current
+                                  )
+                                }
+                              />
+                              <TextField
+                                label="Default position"
+                                size="small"
+                                type="number"
+                                value={subsystemForm.defaultPosition}
+                                onChange={(event) =>
+                                  setSubsystemForm((current) =>
+                                    current ? { ...current, defaultPosition: event.target.value } : current
+                                  )
+                                }
+                              />
+                            </Stack>
+                          )}
+
+                          <Stack direction="row" spacing={1}>
+                            <Button
+                              startIcon={subsystemSaving ? <CircularProgress size={18} /> : <SaveIcon />}
+                              variant="contained"
+                              onClick={saveSubsystemForm}
+                              disabled={subsystemSaving}
+                            >
+                              Save Subsystem
+                            </Button>
+                            <Button variant="outlined" onClick={() => setSubsystemForm(null)}>
+                              Cancel
+                            </Button>
+                          </Stack>
+                        </Stack>
+                      </CardContent>
+                    </Card>
+                  )}
+
                   <TableContainer component={Paper} elevation={0} sx={{ border: 1, borderColor: "divider" }}>
                     <Table size="small">
                       <TableHead>
@@ -587,6 +1067,7 @@ export function App() {
                           <TableCell sx={{ width: 260 }}>PID</TableCell>
                           <TableCell sx={{ width: 180 }}>Ratios</TableCell>
                           <TableCell sx={{ width: 180 }}>Extra</TableCell>
+                          <TableCell sx={{ width: 150 }}>Actions</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -615,11 +1096,31 @@ export function App() {
                                 ? `CANcoder ${stringifyOptional(subsystem.cancoder?.id)}`
                                 : `accel ${stringifyOptional(subsystem.motionMagic?.acceleration)}`}
                             </TableCell>
+                            <TableCell>
+                              <Stack direction="row" spacing={1}>
+                                <Button
+                                  size="small"
+                                  startIcon={<EditIcon />}
+                                  onClick={() => setSubsystemForm(subsystemToForm(subsystem, index))}
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  size="small"
+                                  color="error"
+                                  startIcon={<DeleteIcon />}
+                                  onClick={() => void deleteSubsystem(index)}
+                                  disabled={subsystemSaving}
+                                >
+                                  Delete
+                                </Button>
+                              </Stack>
+                            </TableCell>
                           </TableRow>
                         ))}
                         {subsystemDocument.exists && subsystemDocument.subsystems.length === 0 && (
                           <TableRow>
-                            <TableCell colSpan={6}>
+                            <TableCell colSpan={7}>
                               <Typography color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
                                 The subsystem JSON exists, but it does not contain any generated subsystems yet.
                               </Typography>
@@ -628,7 +1129,7 @@ export function App() {
                         )}
                         {!subsystemDocument.exists && (
                           <TableRow>
-                            <TableCell colSpan={6}>
+                            <TableCell colSpan={7}>
                               <Typography color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
                                 No generated subsystems to display.
                               </Typography>
