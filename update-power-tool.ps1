@@ -15,9 +15,11 @@ $launcherPath = Join-Path $robotRoot "power-tool.cmd"
 $scriptLauncherPath = Join-Path $scriptsRoot "power-tool.ps1"
 $updaterPath = Join-Path $scriptsRoot "update-power-tool.ps1"
 $logPath = Join-Path $robotRoot "build\power-tool-update.log"
+$transcriptStarted = $false
 
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $logPath) | Out-Null
 Start-Transcript -Path $logPath -Force | Out-Null
+$transcriptStarted = $true
 
 function Remove-DirectoryIfExists {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -89,7 +91,9 @@ npm start
 
     Write-Host "Power Tool updated. Restarting..."
     Start-Process -FilePath $launcherPath -WorkingDirectory $robotRoot
-    Stop-Transcript | Out-Null
 } finally {
+    if ($transcriptStarted) {
+        Stop-Transcript | Out-Null
+    }
     Remove-DirectoryIfExists $tempRoot
 }

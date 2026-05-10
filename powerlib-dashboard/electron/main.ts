@@ -169,7 +169,7 @@ ipcMain.handle("powerlib:update-power-tool", async () => {
     "-ParentPid",
     String(process.pid),
     ";",
-    "if ($LASTEXITCODE -ne 0) { Write-Host ''; Write-Host 'Power Tool update failed. Press Enter to close.'; [Console]::ReadLine() | Out-Null }"
+    "if ($LASTEXITCODE -ne 0) { Write-Host ''; Write-Host 'Power Tool update failed. Press Enter to close.'; [Console]::ReadLine() | Out-Null; exit $LASTEXITCODE }; exit 0"
   ].join(" ");
 
   const child = spawn(
