@@ -71,6 +71,11 @@ def templateFiles = [
         replacement: false
     ),
     new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/utils/DriveUtil.java',
+        destination: 'src/main/java/frc/powerlib/utils/DriveUtil.java',
+        replacement: false
+    ),
+    new TemplateFile(
         source: 'replacements/src/main/java/frc/robot/commands/SwerveDriveCommand.java',
         destination: 'src/main/java/frc/robot/commands/SwerveDriveCommand.java',
         replacement: true
@@ -133,11 +138,6 @@ def templateFiles = [
     new TemplateFile(
         source: 'replacements/src/main/java/frc/robot/subsystems/Vision.java',
         destination: 'src/main/java/frc/robot/subsystems/Vision.java',
-        replacement: true
-    ),
-    new TemplateFile(
-        source: 'replacements/src/main/java/frc/robot/utils/DriveUtil.java',
-        destination: 'src/main/java/frc/robot/utils/DriveUtil.java',
         replacement: true
     ),
     new TemplateFile(
@@ -348,6 +348,7 @@ gradle.buildFinished {
         ['sh', '-c', "sleep 2; rm -f '${downloadedInstaller.absolutePath.replace("'", "'\\''")}'"].execute()
     }
 }
+
 
 
 

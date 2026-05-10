@@ -11,23 +11,21 @@ import static edu.wpi.first.units.Units.RotationsPerSecond;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
+import frc.powerlib.utils.DriveUtil;
 import frc.robot.Constants;
 import frc.robot.subsystems.Swerve;
-import frc.robot.utils.DriveUtil;
 
 public class SwerveDriveCommand extends Command {
   private final Swerve drivetrain;
   private final CommandXboxController controller;
-  private final boolean autoDrive;
 
   public final double maxSpeed = Constants.Tuner.kSpeedAt12Volts.in(MetersPerSecond);
   public final double maxAngularRate = RotationsPerSecond.of(1.5).in(RadiansPerSecond);
   public final double skewCompensation = -0.03;
 
-  public SwerveDriveCommand(Swerve drivetrain, CommandXboxController controller, boolean autoDrive) {
+  public SwerveDriveCommand(Swerve drivetrain, CommandXboxController controller) {
     this.drivetrain = drivetrain;
     this.controller = controller;
-    this.autoDrive = autoDrive;
 
     addRequirements(drivetrain);
   }

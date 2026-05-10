@@ -20,7 +20,7 @@ public class RobotContainer implements PowerRobotContainer {
   public RobotContainer() {
     configureBindings();
     stateMachine.drivetrain.setDefaultCommand(
-        new SwerveDriveCommand(stateMachine.drivetrain, driverController, false));
+        new SwerveDriveCommand(stateMachine.drivetrain, driverController));
   }
 
   private void configureBindings() {}
@@ -33,5 +33,6 @@ public class RobotContainer implements PowerRobotContainer {
     return stateMachine;
   }
 }
+
 
 
