@@ -160,21 +160,45 @@ ipcMain.handle("powerlib:update-power-tool", async () => {
   }
 
   const tempUpdaterPath = path.join(robotRoot, "build", "power-tool-update.ps1");
+  const tempUpdaterRunnerPath = path.join(robotRoot, "build", "run-power-tool-update.ps1");
   await fs.mkdir(path.dirname(tempUpdaterPath), { recursive: true });
   await fs.copyFile(updaterPath, tempUpdaterPath);
 
-  const updateCommand = [
-    "&",
-    `'${tempUpdaterPath.replace(/'/g, "''")}'`,
-    "-ParentPid",
-    String(process.pid),
-    ";",
-    "if ($LASTEXITCODE -ne 0) { Write-Host ''; Write-Host 'Power Tool update failed. Press Enter to close.'; [Console]::ReadLine() | Out-Null; exit $LASTEXITCODE }; exit 0"
-  ].join(" ");
+  await fs.writeFile(
+    tempUpdaterRunnerPath,
+    [
+      "$ErrorActionPreference = 'Stop'",
+      "try {",
+      `  & '${tempUpdaterPath.replace(/'/g, "''")}' -ParentPid ${process.pid}`,
+      "  if ($LASTEXITCODE -is [int] -and $LASTEXITCODE -ne 0) {",
+      "    throw \"Power Tool updater exited with code $LASTEXITCODE.\"",
+      "  }",
+      "  exit 0",
+      "} catch {",
+      "  Write-Host ''",
+      "  Write-Host $_",
+      "  Write-Host ''",
+      "  Write-Host 'Power Tool update failed. Press Enter to close.'",
+      "  [Console]::ReadLine() | Out-Null",
+      "  exit 1",
+      "}"
+    ].join("\r\n"),
+    "utf-8"
+  );
 
   const child = spawn(
     "cmd.exe",
-    ["/c", "start", "Power Tool Update", "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", updateCommand],
+    [
+      "/c",
+      "start",
+      "Power Tool Update",
+      "powershell",
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      tempUpdaterRunnerPath
+    ],
     {
       cwd: robotRoot,
       detached: true,

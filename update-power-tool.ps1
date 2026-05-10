@@ -15,6 +15,7 @@ $launcherPath = Join-Path $robotRoot "power-tool.cmd"
 $scriptLauncherPath = Join-Path $scriptsRoot "power-tool.ps1"
 $updaterPath = Join-Path $scriptsRoot "update-power-tool.ps1"
 $logPath = Join-Path $robotRoot "build\power-tool-update.log"
+$runnerPath = Join-Path $robotRoot "build\run-power-tool-update.ps1"
 $transcriptStarted = $false
 
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $logPath) | Out-Null
@@ -96,4 +97,5 @@ npm start
         Stop-Transcript | Out-Null
     }
     Remove-DirectoryIfExists $tempRoot
+    Remove-Item -LiteralPath $runnerPath -Force -ErrorAction SilentlyContinue
 }
