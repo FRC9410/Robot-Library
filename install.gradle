@@ -183,6 +183,8 @@ def installScriptsPropertyName = 'powerlibInstallScripts'
 def installVendordepsPropertyName = 'powerlibInstallVendordeps'
 def installToolsPropertyName = 'powerlibInstallTools'
 def installDashboardPropertyName = 'powerlibInstallDashboard'
+def interactiveInstallPropertyName = 'powerlibInteractive'
+def dashboardInstallScriptName = 'powerlib-dashboard-install.ps1'
 
 def findBooleanProperty = { Project project, String propertyName, boolean defaultValue ->
     if (!project.hasProperty(propertyName)) {
@@ -192,9 +194,21 @@ def findBooleanProperty = { Project project, String propertyName, boolean defaul
     return project.findProperty(propertyName).toString().toBoolean()
 }
 
+def standardInputReader = new BufferedReader(new InputStreamReader(System.in))
+
 def promptBoolean = { String prompt, boolean defaultValue ->
     String suffix = defaultValue ? '[Y/n]' : '[y/N]'
-    String answer = System.console().readLine("${prompt} ${suffix}: ")
+    String fullPrompt = "${prompt} ${suffix}: "
+    String answer
+
+    if (System.console() != null) {
+        answer = System.console().readLine(fullPrompt)
+    } else {
+        print fullPrompt
+        System.out.flush()
+        answer = standardInputReader.readLine()
+    }
+
     if (answer == null || answer.trim().isEmpty()) {
         return defaultValue
     }
@@ -207,7 +221,7 @@ def findInstallChoice = { Project project, String propertyName, String prompt, b
         return project.findProperty(propertyName).toString().toBoolean()
     }
 
-    if (System.console() != null) {
+    if (findBooleanProperty(project, interactiveInstallPropertyName, true)) {
         return promptBoolean(prompt, defaultValue)
     }
 
@@ -362,25 +376,29 @@ powershell -ExecutionPolicy Bypass -File "%~dp0.robot-library-generate-subsystem
         logger.warn("Could not remove old subsystem generator script: ${oldGeneratorScript.name}")
     }
 
-    File dashboardBuildScript = project.file('powerlib-build-dashboard.ps1')
-    File localDashboardBuildScript = localInstallerRoot == null ? null : new File(localInstallerRoot, 'build-dashboard-install.ps1')
-    if (localDashboardBuildScript != null && localDashboardBuildScript.exists()) {
-        Files.copy(localDashboardBuildScript.toPath(), dashboardBuildScript.toPath(), StandardCopyOption.REPLACE_EXISTING)
-    } else {
-        dashboardBuildScript.text = new URL(dashboardBuildScriptUrl).getText('UTF-8')
-    }
-
     logger.lifecycle("Installed subsystem generator script: ${generatorScript.name}")
     logger.lifecycle("Installed subsystem generator command: ${generateCommand.name}")
     logger.lifecycle("Installed subsystem update command: ${updateCommand.name}")
-    logger.lifecycle("Installed dashboard build script: ${dashboardBuildScript.name}")
+}
+
+def deleteOldDashboardBuildScript = { Project project ->
+    File oldDashboardBuildScript = project.file('powerlib-build-dashboard.ps1')
+    if (oldDashboardBuildScript.exists() && !oldDashboardBuildScript.delete()) {
+        logger.warn("Could not remove old dashboard build script: ${oldDashboardBuildScript.name}")
+    }
 }
 
 def installDashboardTools = { Project project ->
+    File dashboardInstallScript = project.file("build/${dashboardInstallScriptName}")
     try {
-        File dashboardBuildScript = project.file('powerlib-build-dashboard.ps1')
-        if (!dashboardBuildScript.exists()) {
-            throw new GradleException('Missing powerlib-build-dashboard.ps1. Install scripts first.')
+        dashboardInstallScript.parentFile.mkdirs()
+
+        File localInstallerRoot = findLocalInstallerRoot()
+        File localDashboardInstallScript = localInstallerRoot == null ? null : new File(localInstallerRoot, 'build-dashboard-install.ps1')
+        if (localDashboardInstallScript != null && localDashboardInstallScript.exists()) {
+            Files.copy(localDashboardInstallScript.toPath(), dashboardInstallScript.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        } else {
+            dashboardInstallScript.text = new URL(dashboardBuildScriptUrl).getText('UTF-8')
         }
 
         runCommand(project.rootDir, [
@@ -388,10 +406,16 @@ def installDashboardTools = { Project project ->
             '-ExecutionPolicy',
             'Bypass',
             '-File',
-            dashboardBuildScript.absolutePath
+            dashboardInstallScript.absolutePath
         ])
     } catch (Exception exception) {
         logger.warn("Skipped PowerLib Dashboard install: ${exception.message}")
+    } finally {
+        if (dashboardInstallScript.exists() && !dashboardInstallScript.delete()) {
+            dashboardInstallScript.deleteOnExit()
+        }
+
+        deleteOldDashboardBuildScript(project)
     }
 }
 
@@ -495,22 +519,11 @@ gradle.projectsLoaded {
                     logger.lifecycle('Skipped helper scripts')
                 }
 
-                if (installDashboard && !installScripts) {
-                    logger.lifecycle('Installing dashboard build script because dashboard install was selected')
-                    File dashboardBuildScript = project.file('powerlib-build-dashboard.ps1')
-                    File localInstallerRoot = findLocalInstallerRoot()
-                    File localDashboardBuildScript = localInstallerRoot == null ? null : new File(localInstallerRoot, 'build-dashboard-install.ps1')
-                    if (localDashboardBuildScript != null && localDashboardBuildScript.exists()) {
-                        Files.copy(localDashboardBuildScript.toPath(), dashboardBuildScript.toPath(), StandardCopyOption.REPLACE_EXISTING)
-                    } else {
-                        dashboardBuildScript.text = new URL(dashboardBuildScriptUrl).getText('UTF-8')
-                    }
-                }
-
                 if (installDashboard) {
                     installDashboardTools(project)
                 } else {
                     logger.lifecycle(installTools ? 'Skipped PowerLib Dashboard' : 'Skipped PowerLib tools')
+                    deleteOldDashboardBuildScript(project)
                 }
 
                 if (installVendordeps && !useLatestVendordeps) {

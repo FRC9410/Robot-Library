@@ -37,7 +37,6 @@ vendordeps/Phoenix5-replay-<latest>.json
 PowerLib tools:
 
 ```text
-powerlib-build-dashboard.ps1
 powerlib-dashboard/
 powerlib-dashboard.cmd
 powerlib-dashboard.ps1
@@ -53,26 +52,26 @@ From the root of the new robot project:
 
 ```powershell
 Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FRC9410/Robot-Library/main/install.gradle" -OutFile ".robot-library-install.gradle"
-.\gradlew.bat -I .robot-library-install.gradle robotLibraryInstall
+.\gradlew.bat --no-daemon --console=plain -I .robot-library-install.gradle robotLibraryInstall
 ```
 
 To keep replacement backups after a successful install, add this flag:
 
 ```powershell
-.\gradlew.bat -I .robot-library-install.gradle robotLibraryInstall -PpowerlibKeepBackups=true
+.\gradlew.bat --no-daemon --console=plain -I .robot-library-install.gradle robotLibraryInstall -PpowerlibKeepBackups=true
 ```
 
 To update only part of an installed project, turn off the sections you do not want. By default, all sections are installed.
 
 ```powershell
 # Update helper scripts and vendordeps, but leave Java library/starter files alone.
-.\gradlew.bat -I .robot-library-install.gradle robotLibraryInstall -PpowerlibInstallLib=false
+.\gradlew.bat --no-daemon --console=plain -I .robot-library-install.gradle robotLibraryInstall -PpowerlibInstallLib=false
 
 # Update Java library/starter files and helper scripts, but leave vendordeps alone.
-.\gradlew.bat -I .robot-library-install.gradle robotLibraryInstall -PpowerlibInstallVendordeps=false
+.\gradlew.bat --no-daemon --console=plain -I .robot-library-install.gradle robotLibraryInstall -PpowerlibInstallVendordeps=false
 
 # Update only vendordeps.
-.\gradlew.bat -I .robot-library-install.gradle robotLibraryInstall -PpowerlibInstallLib=false -PpowerlibInstallScripts=false
+.\gradlew.bat --no-daemon --console=plain -I .robot-library-install.gradle robotLibraryInstall -PpowerlibInstallLib=false -PpowerlibInstallScripts=false
 ```
 
 When run from an interactive terminal, the installer asks at the beginning whether to install each section, including the dashboard.
@@ -83,26 +82,26 @@ From the root of the new robot project:
 
 ```bash
 curl -fsSL "https://raw.githubusercontent.com/FRC9410/Robot-Library/main/install.gradle" -o ".robot-library-install.gradle"
-./gradlew -I .robot-library-install.gradle robotLibraryInstall
+./gradlew --no-daemon --console=plain -I .robot-library-install.gradle robotLibraryInstall
 ```
 
 To keep replacement backups after a successful install, add this flag:
 
 ```bash
-./gradlew -I .robot-library-install.gradle robotLibraryInstall -PpowerlibKeepBackups=true
+./gradlew --no-daemon --console=plain -I .robot-library-install.gradle robotLibraryInstall -PpowerlibKeepBackups=true
 ```
 
 To update only part of an installed project, turn off the sections you do not want. By default, all sections are installed.
 
 ```bash
 # Update helper scripts and vendordeps, but leave Java library/starter files alone.
-./gradlew -I .robot-library-install.gradle robotLibraryInstall -PpowerlibInstallLib=false
+./gradlew --no-daemon --console=plain -I .robot-library-install.gradle robotLibraryInstall -PpowerlibInstallLib=false
 
 # Update Java library/starter files and helper scripts, but leave vendordeps alone.
-./gradlew -I .robot-library-install.gradle robotLibraryInstall -PpowerlibInstallVendordeps=false
+./gradlew --no-daemon --console=plain -I .robot-library-install.gradle robotLibraryInstall -PpowerlibInstallVendordeps=false
 
 # Update only vendordeps.
-./gradlew -I .robot-library-install.gradle robotLibraryInstall -PpowerlibInstallLib=false -PpowerlibInstallScripts=false
+./gradlew --no-daemon --console=plain -I .robot-library-install.gradle robotLibraryInstall -PpowerlibInstallLib=false -PpowerlibInstallScripts=false
 ```
 
 When run from an interactive terminal, the installer asks at the beginning whether to install each section, including the dashboard.
@@ -117,6 +116,7 @@ These flags control which sections the installer updates. They all default to `t
 -PpowerlibInstallVendordeps=true
 -PpowerlibInstallTools=true
 -PpowerlibInstallDashboard=true
+-PpowerlibInteractive=true
 ```
 
 At the beginning of an interactive install, the installer asks whether to install:
@@ -128,7 +128,9 @@ vendor dependencies
 PowerLib Dashboard source and npm dependencies
 ```
 
-The tools section installs `powerlib-build-dashboard.ps1`. The dashboard option uses that script to download the PowerLib Dashboard source and run `npm install`.
+The dashboard option downloads the PowerLib Dashboard source, runs `npm install`, and writes the dashboard run scripts.
+
+Set `-PpowerlibInteractive=false` to skip prompts and use the flag/default values directly.
 
 To skip dashboard tools during install or update:
 
@@ -140,12 +142,6 @@ To install tools but skip the dashboard download/npm install:
 
 ```powershell
 -PpowerlibInstallDashboard=false
-```
-
-Installed robot projects get `powerlib-build-dashboard.ps1`. From the robot project root, it downloads the dashboard source from GitHub, runs `npm install`, writes `powerlib-dashboard/`, creates launcher scripts, and deletes the temporary downloaded archive:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\powerlib-build-dashboard.ps1
 ```
 
 To start the dashboard after it is installed:
@@ -197,14 +193,14 @@ By default, the installer downloads latest vendordeps first, then applies pinned
 Example:
 
 ```powershell
-.\gradlew.bat -I .robot-library-install.gradle robotLibraryInstall -PpowerlibLatestVendordeps=true
+.\gradlew.bat --no-daemon --console=plain -I .robot-library-install.gradle robotLibraryInstall -PpowerlibLatestVendordeps=true
 ```
 ## Local Test
 
 From the root of a test robot project, run the installer directly from a local checkout:
 
 ```powershell
-.\gradlew.bat -I E:\code\projects\Robot-Library\install.gradle robotLibraryInstall
+.\gradlew.bat --no-daemon --console=plain -I E:\code\projects\Robot-Library\install.gradle robotLibraryInstall
 ```
 
 
