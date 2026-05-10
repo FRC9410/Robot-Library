@@ -48,29 +48,34 @@ npm start        Run the built Electron app.
 
 ## Publish The App
 
-Every time you want the installer to ship a new dashboard build, run:
+The GitHub installer downloads this dashboard source into the robot project and runs `npm install`. It does not ship the compiled app because the packaged output is too large for normal repository pushes.
+
+From an installed robot project, start the dashboard with:
 
 ```powershell
-cd E:\code\projects\Robot-Library
-.\build-dashboard.ps1 -Publish
+.\powerlib-dashboard.cmd
 ```
 
-That command rebuilds the Electron app and refreshes:
+Or:
 
-```text
-E:\code\projects\Robot-Library\PowerLibDashboard\
+```powershell
+powershell -ExecutionPolicy Bypass -File .\powerlib-dashboard.ps1
 ```
 
-The packaged app is intentionally ignored by Git because it is too large for normal repository pushes.
-
-For a local app rebuild without refreshing the installer-facing app folder, run:
+For a local app rebuild from this library repo, run:
 
 ```powershell
 cd E:\code\projects\Robot-Library
 .\build-dashboard.ps1
 ```
 
-That writes to `E:\code\projects\Robot-Library\PowerLibDashboard-local\win-unpacked`, so it can rebuild even if the published dashboard app folder is locked.
+That writes to `E:\code\projects\Robot-Library\PowerLibDashboard-local\`.
+
+To make a compiled dashboard app locally:
+
+```powershell
+.\build-dashboard.ps1 -Publish
+```
 
 To target another platform explicitly:
 
@@ -78,10 +83,4 @@ To target another platform explicitly:
 .\build-dashboard.ps1 -Platform win
 .\build-dashboard.ps1 -Platform mac
 .\build-dashboard.ps1 -Platform linux
-```
-
-After packaging, run the app from the repository root:
-
-```powershell
-.\PowerLibDashboard.cmd
 ```

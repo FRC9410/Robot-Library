@@ -28,7 +28,6 @@ PowerLibDashboard.exe.blockmap
 win-unpacked/
 builder-debug.yml
 builder-effective-config.yaml
-!PowerLibDashboard.cmd
 
 # Gradle/local build output
 .gradle/

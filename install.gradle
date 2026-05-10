@@ -261,6 +261,19 @@ def unzip = { File zipFile, File destination ->
     }
 }
 
+def runCommand = { File workingDirectory, List<String> command ->
+    Process process = new ProcessBuilder(command)
+        .directory(workingDirectory)
+        .redirectErrorStream(true)
+        .start()
+
+    process.inputStream.eachLine { line -> logger.lifecycle(line) }
+    int exitCode = process.waitFor()
+    if (exitCode != 0) {
+        throw new GradleException("Command failed (${exitCode}): ${command.join(' ')}")
+    }
+}
+
 
 def backupExistingFile = { File destination ->
     if (!destination.exists()) {
@@ -342,22 +355,29 @@ powershell -ExecutionPolicy Bypass -File "%~dp0.robot-library-generate-subsystem
 
 def installDashboardTools = { Project project ->
     try {
-        File localInstallerRoot = findLocalInstallerRoot()
-        File localDashboard = localInstallerRoot == null ? null : new File(localInstallerRoot, 'PowerLibDashboard')
-        File dashboardDestination = project.file('PowerLibDashboard')
-        File launcher = project.file('PowerLibDashboard.cmd')
-
-        if (localDashboard == null || !localDashboard.exists()) {
-            logger.lifecycle('Skipped PowerLib Dashboard app because no local packaged app was found. Run build-dashboard.ps1, then run the installer locally to copy it.')
+        if (System.console() != null) {
+            String answer = System.console().readLine('Install PowerLib Dashboard source and npm dependencies? [y/N]: ')
+            if (answer == null || !answer.trim().equalsIgnoreCase('y')) {
+                logger.lifecycle('Skipped PowerLib Dashboard by user choice')
+                return
+            }
+        } else if (!findBooleanProperty(project, 'powerlibInstallDashboard', false)) {
+            logger.lifecycle('Skipped PowerLib Dashboard. Run with -PpowerlibInstallDashboard=true to install it in non-interactive mode.')
             return
         }
 
-        copyDirectory(localDashboard, dashboardDestination)
-        launcher.text = '''@echo off
-start "" "%~dp0PowerLibDashboard\\win-unpacked\\PowerLib Dashboard.exe" %*
-'''
-        logger.lifecycle("Installed PowerLib Dashboard app: ${dashboardDestination.name}")
-        logger.lifecycle("Installed PowerLib Dashboard launcher: ${launcher.name}")
+        File dashboardBuildScript = project.file('powerlib-build-dashboard.ps1')
+        if (!dashboardBuildScript.exists()) {
+            throw new GradleException('Missing powerlib-build-dashboard.ps1. Install scripts first.')
+        }
+
+        runCommand(project.rootDir, [
+            'powershell',
+            '-ExecutionPolicy',
+            'Bypass',
+            '-File',
+            dashboardBuildScript.absolutePath
+        ])
     } catch (Exception exception) {
         logger.warn("Skipped PowerLib Dashboard install: ${exception.message}")
     }

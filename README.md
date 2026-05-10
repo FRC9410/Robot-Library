@@ -37,9 +37,10 @@ vendordeps/Phoenix5-replay-<latest>.json
 PowerLib tools:
 
 ```text
-PowerLibDashboard/
-PowerLibDashboard.cmd
 powerlib-build-dashboard.ps1
+powerlib-dashboard/
+powerlib-dashboard.cmd
+powerlib-dashboard.ps1
 ```
 
 Before replacing a stock file, the installer creates a temporary backup. If the install succeeds, that backup is deleted during cleanup unless you pass `-PpowerlibKeepBackups=true`. If the install fails halfway through, the backup is left in place next to the original file.
@@ -113,26 +114,53 @@ These flags control which sections the installer updates. They all default to `t
 -PpowerlibInstallTools=true
 ```
 
-The tools section installs PowerLib Dashboard by default during local installs when `PowerLibDashboard/` exists next to `install.gradle`. To skip dashboard tools during install or update:
+The tools section installs `powerlib-build-dashboard.ps1`. During an interactive install, it also asks whether to download the PowerLib Dashboard source and install npm dependencies.
+
+To skip dashboard tools during install or update:
 
 ```powershell
 -PpowerlibInstallTools=false
 ```
 
-To publish a new dashboard build for future installs:
+For non-interactive installs, pass this flag when you want the installer to download the dashboard source and run `npm install`:
+
+```powershell
+-PpowerlibInstallDashboard=true
+```
+
+Installed robot projects get `powerlib-build-dashboard.ps1`. From the robot project root, it downloads the dashboard source from GitHub, runs `npm install`, writes `powerlib-dashboard/`, creates launcher scripts, and deletes the temporary downloaded archive:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\powerlib-build-dashboard.ps1
+```
+
+To start the dashboard after it is installed:
+
+```powershell
+.\powerlib-dashboard.cmd
+```
+
+Or:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\powerlib-dashboard.ps1
+```
+
+The dashboard source stays in the robot project so it can be run or edited locally. Its `node_modules` folder is created by `npm install` and should not be committed.
+
+To build the dashboard locally from this library repo:
 
 ```powershell
 cd E:\code\projects\Robot-Library
+.\build-dashboard.ps1
+```
+
+To make a compiled dashboard app locally:
+
+```powershell
 .\build-dashboard.ps1 -Publish
 ```
 
-That refreshes `PowerLibDashboard/` for local installs. The packaged app is intentionally ignored by Git because it is too large for normal repository pushes.
-
-For a local dashboard rebuild only:
-
-```powershell
-.\build-dashboard.ps1
-```
 To target another platform explicitly:
 
 ```powershell
@@ -141,13 +169,7 @@ To target another platform explicitly:
 .\build-dashboard.ps1 -Platform linux
 ```
 
-Local rebuilds write to `PowerLibDashboard-local/`. Publish builds write to `PowerLibDashboard/`.
-
-Installed robot projects also get `powerlib-build-dashboard.ps1`. From the robot project root, it downloads the dashboard source, builds the app, writes `PowerLibDashboard/`, creates `PowerLibDashboard.cmd` on Windows, and deletes the temporary source:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\powerlib-build-dashboard.ps1
-```
+Compiled app output is ignored by Git and is not used by the GitHub installer.
 
 
 ## Latest Vendordeps
