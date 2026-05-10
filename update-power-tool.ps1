@@ -64,13 +64,13 @@ try {
 
     Copy-Item -Path $PSCommandPath -Destination $updaterPath -Force
 
-Set-Content -Path $launcherPath -Encoding ascii -Value '@echo off
-cd /d "%~dp0power-tool"
-npm start
+    Set-Content -Path $launcherPath -Encoding ascii -Value '@echo off
+powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command "Start-Process -FilePath npm.cmd -ArgumentList start -WorkingDirectory ''%~dp0power-tool'' -WindowStyle Hidden"
 '
 
-    Set-Content -Path $scriptLauncherPath -Encoding ascii -Value 'Set-Location -Path (Split-Path -Parent $PSScriptRoot)
-npm start
+    Set-Content -Path $scriptLauncherPath -Encoding ascii -Value '$toolRoot = Split-Path -Parent $PSScriptRoot
+$npm = if ($IsWindows) { "npm.cmd" } else { "npm" }
+Start-Process -FilePath $npm -ArgumentList "start" -WorkingDirectory $toolRoot -WindowStyle Hidden
 '
 
     Push-Location $toolRoot
