@@ -180,6 +180,15 @@ To reconcile without running the build check:
 ```
 
 The update flow changes generated constants, adds new subsystems, removes generated subsystem constants that are no longer in the JSON, and rewrites the generated block in `StateMachine.java`.
+
+Generated subsystem constants files include a protected custom block:
+
+```java
+  // POWERLIB CUSTOM CONSTANTS START - DO NOT DELETE
+  // POWERLIB CUSTOM CONSTANTS END - DO NOT DELETE
+```
+
+Add hand-written constants between those markers. Updates preserve that block while regenerating the subsystem config from `powerlib-subsystems.json`.
 ## Build Check
 
 By default, the installer runs the robot project's `build` task after installing files and vendordeps. To skip that build check, add this flag:
