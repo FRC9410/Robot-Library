@@ -243,11 +243,24 @@ def copyTemplateFile = { Project project, TemplateFile template ->
 def installGeneratorScript = { Project project ->
     File generatorScript = project.file('.robot-library-generate-subsystem.ps1')
     generatorScript.text = new URL(generatorScriptUrl).getText('UTF-8')
+
+    File generateCommand = project.file('powerlib-generate-subsystem.cmd')
+    generateCommand.text = '''@echo off
+powershell -ExecutionPolicy Bypass -File "%~dp0.robot-library-generate-subsystem.ps1" %*
+'''
+
+    File updateCommand = project.file('powerlib-update-subsystems.cmd')
+    updateCommand.text = '''@echo off
+powershell -ExecutionPolicy Bypass -File "%~dp0.robot-library-generate-subsystem.ps1" -UpdateSubsystems %*
+'''
+
     File oldGeneratorScript = project.file('.robot-library-generate-subsystem.gradle')
     if (oldGeneratorScript.exists() && !oldGeneratorScript.delete()) {
         logger.warn("Could not remove old subsystem generator script: ${oldGeneratorScript.name}")
     }
     logger.lifecycle("Installed subsystem generator script: ${generatorScript.name}")
+    logger.lifecycle("Installed subsystem generator command: ${generateCommand.name}")
+    logger.lifecycle("Installed subsystem update command: ${updateCommand.name}")
 }
 def parseJsonFile = { File file ->
     try {

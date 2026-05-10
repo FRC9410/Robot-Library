@@ -266,6 +266,30 @@ function New-InteractiveMotors {
     return $motors
 }
 
+function New-InteractivePidConfig {
+    if (-not (Prompt-Boolean "Configure PID/feedforward values?" $false)) {
+        return [ordered]@{
+            kP = "0.0"
+            kI = "0.0"
+            kD = "0.0"
+            kG = "0.0"
+            kS = $null
+            kV = $null
+            kA = $null
+        }
+    }
+
+    return [ordered]@{
+        kP = Prompt-DoubleText "kP" "0.0"
+        kI = Prompt-DoubleText "kI" "0.0"
+        kD = Prompt-DoubleText "kD" "0.0"
+        kG = Prompt-DoubleText "kG" "0.0"
+        kS = Prompt-OptionalDoubleText "kS"
+        kV = Prompt-OptionalDoubleText "kV"
+        kA = Prompt-OptionalDoubleText "kA"
+    }
+}
+
 function New-InteractiveSubsystem {
     $rawName = Prompt-Required "Subsystem name, example shooter"
     $type = (Prompt-Enum "Subsystem type" @("velocity", "position") "velocity").ToLowerInvariant()
@@ -274,15 +298,7 @@ function New-InteractiveSubsystem {
         name = $rawName
         type = $type
         motors = @(New-InteractiveMotors)
-        pid = [ordered]@{
-            kP = Prompt-DoubleText "kP" "0.0"
-            kI = Prompt-DoubleText "kI" "0.0"
-            kD = Prompt-DoubleText "kD" "0.0"
-            kG = Prompt-DoubleText "kG" "0.0"
-            kS = Prompt-OptionalDoubleText "kS"
-            kV = Prompt-OptionalDoubleText "kV"
-            kA = Prompt-OptionalDoubleText "kA"
-        }
+        pid = New-InteractivePidConfig
         ratios = [ordered]@{
             sensorToMechanism = Prompt-DoubleText "Sensor-to-mechanism ratio" "1.0"
             rotorToSensor = Prompt-DoubleText "Rotor-to-sensor ratio" "1.0"
@@ -616,6 +632,12 @@ if ($UpdateSubsystems) {
 
 Write-Host "PowerLib subsystem generator starting. Answer the prompts below."
 Write-Host "Enum prompts show accepted values before the default."
+
+if ((Test-Path $SubsystemsJson) -and (Prompt-Boolean "Update subsystems from $SubsystemsJson?" $true)) {
+    Update-SubsystemsFromJson $SubsystemsJson
+    Invoke-BuildIfNeeded
+    exit 0
+}
 
 $document = Read-SubsystemDocument $SubsystemsJson
 

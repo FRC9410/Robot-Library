@@ -130,18 +130,20 @@ From the root of a test robot project, run the installer directly from a local c
 
 ## Generate Subsystems
 
-After running the installer, you can generate subsystem configs and initialize predefined PowerLib subsystem types in `StateMachine`. The installer downloads `.robot-library-generate-subsystem.ps1` into the robot project for this command.
+After running the installer, you can generate subsystem configs and initialize predefined PowerLib subsystem types in `StateMachine`. The installer downloads `.robot-library-generate-subsystem.ps1` and creates short Windows command wrappers in the robot project.
 
 Windows:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\.robot-library-generate-subsystem.ps1
+.\powerlib-generate-subsystem.cmd
 ```
+
+If `powerlib-subsystems.json` already exists, the command first asks whether to update the generated code from that JSON. Answer no to add subsystems interactively instead.
 
 To skip the build check after generation:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\.robot-library-generate-subsystem.ps1 -SkipBuild
+.\powerlib-generate-subsystem.cmd -SkipBuild
 ```
 
 Local test from a robot project:
@@ -163,19 +165,21 @@ Subsystem type (accepted: velocity, position) [velocity]
 Leader neutral mode (accepted: Brake, Coast) [Brake]
 ```
 
-You can edit `powerlib-subsystems.json` directly, then reconcile the robot code from it:
+By default, interactive generation skips PID/feedforward tuning and writes zero PID values with empty feedforward optionals. Answer yes to `Configure PID/feedforward values?` when you want to enter `kP`, `kI`, `kD`, `kG`, `kS`, `kV`, and `kA`.
+
+You can edit `powerlib-subsystems.json` directly, then run the generator and answer yes when it asks to update from JSON:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\.robot-library-generate-subsystem.ps1 -UpdateSubsystems
+.\powerlib-generate-subsystem.cmd
 ```
 
 To reconcile without running the build check:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\.robot-library-generate-subsystem.ps1 -UpdateSubsystems -SkipBuild
+.\powerlib-generate-subsystem.cmd -SkipBuild
 ```
 
-The update command changes generated constants, adds new subsystems, removes generated subsystem constants that are no longer in the JSON, and rewrites the generated block in `StateMachine.java`.
+The update flow changes generated constants, adds new subsystems, removes generated subsystem constants that are no longer in the JSON, and rewrites the generated block in `StateMachine.java`.
 ## Build Check
 
 By default, the installer runs the robot project's `build` task after installing files and vendordeps. To skip that build check, add this flag:
