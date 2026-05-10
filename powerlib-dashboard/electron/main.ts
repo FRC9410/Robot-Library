@@ -163,9 +163,18 @@ ipcMain.handle("powerlib:update-power-tool", async () => {
   await fs.mkdir(path.dirname(tempUpdaterPath), { recursive: true });
   await fs.copyFile(updaterPath, tempUpdaterPath);
 
+  const updateCommand = [
+    "&",
+    `'${tempUpdaterPath.replace(/'/g, "''")}'`,
+    "-ParentPid",
+    String(process.pid),
+    ";",
+    "if ($LASTEXITCODE -ne 0) { Write-Host ''; Write-Host 'Power Tool update failed. Press Enter to close.'; [Console]::ReadLine() | Out-Null }"
+  ].join(" ");
+
   const child = spawn(
-    "powershell",
-    ["-ExecutionPolicy", "Bypass", "-File", tempUpdaterPath, "-ParentPid", String(process.pid)],
+    "cmd.exe",
+    ["/c", "start", "Power Tool Update", "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", updateCommand],
     {
       cwd: robotRoot,
       detached: true,
