@@ -24,6 +24,16 @@ def templateFiles = [
         source: 'replacements/src/main/java/frc/robot/RobotContainer.java',
         destination: 'src/main/java/frc/robot/RobotContainer.java',
         replacement: true
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/subsystems/StateMachine.java',
+        destination: 'src/main/java/frc/robot/subsystems/StateMachine.java',
+        replacement: true
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/subsystems/LED.java',
+        destination: 'src/main/java/frc/robot/subsystems/LED.java',
+        replacement: true
     )
 ]
 
@@ -224,3 +234,5 @@ gradle.buildFinished {
         ['sh', '-c', "sleep 2; rm -f '${downloadedInstaller.absolutePath.replace("'", "'\\''")}'"].execute()
     }
 }
+
+

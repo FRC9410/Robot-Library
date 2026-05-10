@@ -16,6 +16,8 @@ Replacement starter files:
 
 ```text
 src/main/java/frc/robot/RobotContainer.java
+src/main/java/frc/robot/subsystems/StateMachine.java
+src/main/java/frc/robot/subsystems/LED.java
 ```
 
 Vendor dependencies:
@@ -101,6 +103,8 @@ Files that intentionally replace stock robot project files belong under:
 ```text
 templates/replacements/
 ```
+
+
 
 
 

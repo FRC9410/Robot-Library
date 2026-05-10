@@ -7,8 +7,11 @@ package frc.robot;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
 import frc.powerlib.PowerRobotContainer;
+import frc.robot.subsystems.StateMachine;
 
 public class RobotContainer implements PowerRobotContainer {
+  private final StateMachine stateMachine = new StateMachine();
+
   public RobotContainer() {
     configureBindings();
   }
@@ -17,5 +20,9 @@ public class RobotContainer implements PowerRobotContainer {
 
   public Command getAutonomousCommand() {
     return Commands.print("No autonomous command configured");
+  }
+
+  public StateMachine getStateMachine() {
+    return stateMachine;
   }
 }
