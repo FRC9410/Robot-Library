@@ -19,7 +19,8 @@ def reader = new BufferedReader(new InputStreamReader(System.in))
 
 def prompt = { String message, String defaultValue = null ->
     String suffix = defaultValue == null || defaultValue.isEmpty() ? '' : " [${defaultValue}]"
-    print("${message}${suffix}: ")
+    System.out.print("${message}${suffix}: ")
+    System.out.flush()
     String value = reader.readLine()
     if (value == null || value.trim().isEmpty()) {
         return defaultValue
@@ -303,6 +304,7 @@ gradle.projectsLoaded {
             description = 'Interactively generates PowerLib subsystem constants and StateMachine initialization.'
 
             doLast {
+                logger.lifecycle('PowerLib subsystem generator starting. Answer the prompts below.')
                 GeneratedSubsystem subsystem = createSubsystemModel()
                 File constantsFile = writeConstantsFile(project, subsystem)
 
@@ -325,26 +327,4 @@ gradle.projectsLoaded {
     }
 }
 
-gradle.buildFinished {
-    File downloadedGenerator = gradle.rootProject.file('.robot-library-generate-subsystem.gradle')
-    if (!downloadedGenerator.exists()) {
-        return
-    }
-
-    if (downloadedGenerator.delete()) {
-        return
-    }
-
-    downloadedGenerator.deleteOnExit()
-
-    if (System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows')) {
-        [
-            'cmd', '/c',
-            'start', '', '/min', 'cmd', '/c',
-            "ping 127.0.0.1 -n 3 > nul && del /f /q \"${downloadedGenerator.absolutePath}\""
-        ].execute()
-    } else {
-        ['sh', '-c', "sleep 2; rm -f '${downloadedGenerator.absolutePath.replace("'", "'\\''")}'"].execute()
-    }
-}
 
