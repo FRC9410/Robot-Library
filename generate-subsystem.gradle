@@ -19,7 +19,7 @@ def reader = new BufferedReader(new InputStreamReader(System.in))
 
 def prompt = { String message, String defaultValue = null ->
     String suffix = defaultValue == null || defaultValue.isEmpty() ? '' : " [${defaultValue}]"
-    System.out.print("${message}${suffix}: ")
+    System.out.println()`r`n    System.out.print("POWERLIB> ${message}${suffix}: ")
     System.out.flush()
     String value = reader.readLine()
     if (value == null || value.trim().isEmpty()) {
@@ -326,5 +326,6 @@ gradle.projectsLoaded {
         }
     }
 }
+
 
 

@@ -99,19 +99,19 @@ After running the installer, you can generate subsystem configs and initialize p
 Windows:
 
 ```powershell
-.\gradlew.bat --no-daemon -I .robot-library-generate-subsystem.gradle powerlibGenerateSubsystem
+.\gradlew.bat --no-daemon --console=plain -I .robot-library-generate-subsystem.gradle powerlibGenerateSubsystem
 ```
 
 macOS / Linux:
 
 ```bash
-./gradlew --no-daemon -I .robot-library-generate-subsystem.gradle powerlibGenerateSubsystem
+./gradlew --no-daemon --console=plain -I .robot-library-generate-subsystem.gradle powerlibGenerateSubsystem
 ```
 
 Local test from a robot project:
 
 ```powershell
-.\gradlew.bat --no-daemon -I E:\code\projects\Robot-Library\generate-subsystem.gradle powerlibGenerateSubsystem
+.\gradlew.bat --no-daemon --console=plain -I E:\code\projects\Robot-Library\generate-subsystem.gradle powerlibGenerateSubsystem
 ```
 
 The generator script stays in the robot project so you can run it again later. The generator currently supports `velocity` and `position` subsystem types. It creates a constants file, adds the constants barrel entry in `Constants.java`, and inserts the initialized subsystem between the `POWERLIB GENERATED SUBSYSTEMS` markers in `StateMachine.java`.
@@ -141,6 +141,7 @@ Files that intentionally replace stock robot project files belong under:
 ```text
 templates/replacements/
 ```
+
 
 
 
