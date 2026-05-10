@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   AppBar,
@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
   Chip,
+  CircularProgress,
   Container,
   Divider,
   FormControl,
@@ -15,18 +16,22 @@ import {
   Paper,
   Select,
   Stack,
+  Tab,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
+  Tabs,
   TextField,
   Toolbar,
   Typography
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import CableIcon from "@mui/icons-material/Cable";
+import ConstructionIcon from "@mui/icons-material/Construction";
+import DashboardIcon from "@mui/icons-material/Dashboard";
 import HubIcon from "@mui/icons-material/Hub";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SendIcon from "@mui/icons-material/Send";
@@ -40,11 +45,50 @@ import {
 
 type ConnectionState = "idle" | "connecting" | "connected" | "disconnected";
 
+type AppView = "networktables" | "subsystems";
+
 type TargetPreset = {
   id: string;
   label: string;
   host: string;
   port: number;
+};
+
+type GeneratedMotor = {
+  role?: string;
+  id?: number;
+  neutralMode?: string;
+  reversed?: boolean;
+};
+
+type GeneratedSubsystem = {
+  id?: string;
+  name?: string;
+  type?: string;
+  motors?: GeneratedMotor[];
+  pid?: Record<string, number | string | null>;
+  ratios?: {
+    sensorToMechanism?: number | string;
+    rotorToSensor?: number | string;
+  };
+  motionMagic?: Record<string, number | string | null>;
+  cancoder?: {
+    id?: number;
+    magnetOffset?: number | string;
+    discontinuityPoint?: number | string;
+  };
+  position?: {
+    units?: string;
+    default?: number | string | null;
+  };
+};
+
+type SubsystemDocumentState = {
+  loading: boolean;
+  exists: boolean;
+  path: string;
+  subsystems: GeneratedSubsystem[];
+  error: string | null;
 };
 
 const targetPresets: TargetPreset[] = [
@@ -76,8 +120,31 @@ function stringifyValue(value: NtValue) {
   return String(value);
 }
 
+function stringifyOptional(value: unknown) {
+  return value === null || value === undefined || value === "" ? "-" : String(value);
+}
+
+function getMotorSummary(subsystem: GeneratedSubsystem) {
+  const motors = subsystem.motors ?? [];
+  if (motors.length === 0) {
+    return "-";
+  }
+
+  return motors
+    .map((motor) => `${motor.role ?? "motor"} ${stringifyOptional(motor.id)}`)
+    .join(", ");
+}
+
+function getPidSummary(subsystem: GeneratedSubsystem) {
+  const pid = subsystem.pid ?? {};
+  return ["kP", "kI", "kD", "kG"]
+    .map((key) => `${key} ${stringifyOptional(pid[key])}`)
+    .join(" / ");
+}
+
 export function App() {
   const clientRef = useRef(new PowerLibNt4Client());
+  const [activeView, setActiveView] = useState<AppView>("networktables");
   const [targetId, setTargetId] = useState("sim-localhost");
   const [host, setHost] = useState("localhost");
   const [port, setPort] = useState(5810);
@@ -90,6 +157,13 @@ export function App() {
   const [topicType, setTopicType] = useState<NtTopicType>("double");
   const [topicValue, setTopicValue] = useState("0");
   const [error, setError] = useState<string | null>(null);
+  const [subsystemDocument, setSubsystemDocument] = useState<SubsystemDocumentState>({
+    loading: false,
+    exists: false,
+    path: "",
+    subsystems: [],
+    error: null
+  });
 
   const sortedTopics = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -97,6 +171,37 @@ export function App() {
       .filter((topic) => !normalizedSearch || topic.name.toLowerCase().includes(normalizedSearch))
       .sort((left, right) => left.name.localeCompare(right.name));
   }, [topics, search]);
+
+  async function loadSubsystems() {
+    setSubsystemDocument((current) => ({ ...current, loading: true, error: null }));
+
+    try {
+      if (!window.powerlib?.readSubsystems) {
+        throw new Error("PowerLib file bridge is not available.");
+      }
+
+      const result = await window.powerlib.readSubsystems();
+      setSubsystemDocument({
+        loading: false,
+        exists: result.exists,
+        path: result.path,
+        subsystems: result.subsystems as GeneratedSubsystem[],
+        error: result.error ?? null
+      });
+    } catch (caught) {
+      setSubsystemDocument((current) => ({
+        ...current,
+        loading: false,
+        error: caught instanceof Error ? caught.message : "Could not load generated subsystems."
+      }));
+    }
+  }
+
+  useEffect(() => {
+    if (activeView === "subsystems" && !subsystemDocument.loading && !subsystemDocument.path) {
+      void loadSubsystems();
+    }
+  }, [activeView, subsystemDocument.loading, subsystemDocument.path]);
 
   function upsertTopic(snapshot: NtTopicSnapshot) {
     setTopics((current) => {
@@ -179,28 +284,47 @@ export function App() {
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "grey.100" }}>
       <AppBar position="static" color="inherit" elevation={0} sx={{ borderBottom: 1, borderColor: "divider" }}>
-        <Toolbar sx={{ gap: 2 }}>
-          <HubIcon color="primary" />
-          <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 800 }}>
-              Team 9410
-            </Typography>
-            <Typography variant="h5" sx={{ fontWeight: 800 }}>
-              PowerLib Dashboard
-            </Typography>
-          </Box>
-          <Chip
-            label={status}
-            color={status === "connected" ? "success" : status === "connecting" ? "warning" : "default"}
-            variant={status === "idle" ? "outlined" : "filled"}
-          />
-        </Toolbar>
+        <Container maxWidth={false}>
+          <Toolbar disableGutters sx={{ gap: 2 }}>
+            <HubIcon color="primary" />
+            <Box sx={{ flexGrow: 1 }}>
+              <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 800 }}>
+                Team 9410
+              </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 800 }}>
+                PowerLib Dashboard
+              </Typography>
+            </Box>
+            <Chip
+              label={status}
+              color={status === "connected" ? "success" : status === "connecting" ? "warning" : "default"}
+              variant={status === "idle" ? "outlined" : "filled"}
+            />
+          </Toolbar>
+          <Tabs value={activeView} onChange={(_, value) => setActiveView(value)} sx={{ minHeight: 44 }}>
+            <Tab
+              icon={<DashboardIcon />}
+              iconPosition="start"
+              label="NetworkTables"
+              value="networktables"
+              sx={{ minHeight: 44 }}
+            />
+            <Tab
+              icon={<ConstructionIcon />}
+              iconPosition="start"
+              label="Generated Subsystems"
+              value="subsystems"
+              sx={{ minHeight: 44 }}
+            />
+          </Tabs>
+        </Container>
       </AppBar>
 
       <Container maxWidth={false} sx={{ py: 2 }}>
         <Stack spacing={2}>
           {error && <Alert severity="error">{error}</Alert>}
 
+          {activeView === "networktables" && (
           <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "360px 1fr" } }}>
             <Stack spacing={2}>
               <Card variant="outlined">
@@ -406,6 +530,118 @@ export function App() {
               </CardContent>
             </Card>
           </Box>
+          )}
+
+          {activeView === "subsystems" && (
+            <Card variant="outlined">
+              <CardContent>
+                <Stack spacing={2}>
+                  <Stack
+                    direction={{ xs: "column", md: "row" }}
+                    spacing={2}
+                    sx={{ alignItems: { md: "center" } }}
+                  >
+                    <Box sx={{ flexGrow: 1 }}>
+                      <Typography variant="h6">Generated Subsystems</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {subsystemDocument.exists
+                          ? subsystemDocument.path
+                          : `Looking for ${subsystemDocument.path || "powerlib-subsystems.json"}`}
+                      </Typography>
+                    </Box>
+                    <Button
+                      startIcon={subsystemDocument.loading ? <CircularProgress size={18} /> : <RefreshIcon />}
+                      variant="outlined"
+                      onClick={loadSubsystems}
+                      disabled={subsystemDocument.loading}
+                    >
+                      Refresh
+                    </Button>
+                  </Stack>
+
+                  {subsystemDocument.error && <Alert severity="error">{subsystemDocument.error}</Alert>}
+
+                  {!subsystemDocument.error && !subsystemDocument.exists && !subsystemDocument.loading && (
+                    <Alert severity="info" variant="outlined">
+                      No generated subsystem document was found. Run the PowerLib subsystem generator in this robot
+                      project to create `powerlib-subsystems.json`.
+                    </Alert>
+                  )}
+
+                  {subsystemDocument.exists && (
+                    <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
+                      <Chip label={`${subsystemDocument.subsystems.length} subsystem${subsystemDocument.subsystems.length === 1 ? "" : "s"}`} color="primary" />
+                      {[...new Set(subsystemDocument.subsystems.map((subsystem) => subsystem.type).filter(Boolean))].map((type) => (
+                        <Chip key={type} label={type} variant="outlined" />
+                      ))}
+                    </Stack>
+                  )}
+
+                  <TableContainer component={Paper} elevation={0} sx={{ border: 1, borderColor: "divider" }}>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Name</TableCell>
+                          <TableCell sx={{ width: 120 }}>Type</TableCell>
+                          <TableCell sx={{ width: 220 }}>Motors</TableCell>
+                          <TableCell sx={{ width: 260 }}>PID</TableCell>
+                          <TableCell sx={{ width: 180 }}>Ratios</TableCell>
+                          <TableCell sx={{ width: 180 }}>Extra</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {subsystemDocument.subsystems.map((subsystem, index) => (
+                          <TableRow key={subsystem.id ?? `${subsystem.name}-${index}`} hover>
+                            <TableCell>
+                              <Stack spacing={0.25}>
+                                <Typography sx={{ fontWeight: 700 }}>{subsystem.name ?? "-"}</Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "monospace" }}>
+                                  {subsystem.id ?? "-"}
+                                </Typography>
+                              </Stack>
+                            </TableCell>
+                            <TableCell>
+                              <Chip label={subsystem.type ?? "-"} size="small" variant="outlined" />
+                            </TableCell>
+                            <TableCell sx={{ fontFamily: "monospace" }}>{getMotorSummary(subsystem)}</TableCell>
+                            <TableCell sx={{ fontFamily: "monospace" }}>{getPidSummary(subsystem)}</TableCell>
+                            <TableCell sx={{ fontFamily: "monospace" }}>
+                              sensor {stringifyOptional(subsystem.ratios?.sensorToMechanism)}
+                              <br />
+                              rotor {stringifyOptional(subsystem.ratios?.rotorToSensor)}
+                            </TableCell>
+                            <TableCell sx={{ fontFamily: "monospace" }}>
+                              {subsystem.type === "position"
+                                ? `CANcoder ${stringifyOptional(subsystem.cancoder?.id)}`
+                                : `accel ${stringifyOptional(subsystem.motionMagic?.acceleration)}`}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {subsystemDocument.exists && subsystemDocument.subsystems.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={6}>
+                              <Typography color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
+                                The subsystem JSON exists, but it does not contain any generated subsystems yet.
+                              </Typography>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        {!subsystemDocument.exists && (
+                          <TableRow>
+                            <TableCell colSpan={6}>
+                              <Typography color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
+                                No generated subsystems to display.
+                              </Typography>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Stack>
+              </CardContent>
+            </Card>
+          )}
         </Stack>
       </Container>
     </Box>

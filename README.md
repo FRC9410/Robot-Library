@@ -75,6 +75,8 @@ To update only part of an installed project, turn off the sections you do not wa
 .\gradlew.bat -I .robot-library-install.gradle robotLibraryInstall -PpowerlibInstallLib=false -PpowerlibInstallScripts=false
 ```
 
+When run from an interactive terminal, the installer asks at the beginning whether to install each section, including the dashboard.
+
 ## macOS / Linux
 
 From the root of the new robot project:
@@ -103,6 +105,8 @@ To update only part of an installed project, turn off the sections you do not wa
 ./gradlew -I .robot-library-install.gradle robotLibraryInstall -PpowerlibInstallLib=false -PpowerlibInstallScripts=false
 ```
 
+When run from an interactive terminal, the installer asks at the beginning whether to install each section, including the dashboard.
+
 ## Install Sections
 
 These flags control which sections the installer updates. They all default to `true`.
@@ -112,9 +116,19 @@ These flags control which sections the installer updates. They all default to `t
 -PpowerlibInstallScripts=true
 -PpowerlibInstallVendordeps=true
 -PpowerlibInstallTools=true
+-PpowerlibInstallDashboard=true
 ```
 
-The tools section installs `powerlib-build-dashboard.ps1`. During an interactive install, it also asks whether to download the PowerLib Dashboard source and install npm dependencies.
+At the beginning of an interactive install, the installer asks whether to install:
+
+```text
+PowerLib Java/starter files
+helper scripts
+vendor dependencies
+PowerLib Dashboard source and npm dependencies
+```
+
+The tools section installs `powerlib-build-dashboard.ps1`. The dashboard option uses that script to download the PowerLib Dashboard source and run `npm install`.
 
 To skip dashboard tools during install or update:
 
@@ -122,10 +136,10 @@ To skip dashboard tools during install or update:
 -PpowerlibInstallTools=false
 ```
 
-For non-interactive installs, pass this flag when you want the installer to download the dashboard source and run `npm install`:
+To install tools but skip the dashboard download/npm install:
 
 ```powershell
--PpowerlibInstallDashboard=true
+-PpowerlibInstallDashboard=false
 ```
 
 Installed robot projects get `powerlib-build-dashboard.ps1`. From the robot project root, it downloads the dashboard source from GitHub, runs `npm install`, writes `powerlib-dashboard/`, creates launcher scripts, and deletes the temporary downloaded archive:

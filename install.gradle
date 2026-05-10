@@ -182,6 +182,7 @@ def installLibPropertyName = 'powerlibInstallLib'
 def installScriptsPropertyName = 'powerlibInstallScripts'
 def installVendordepsPropertyName = 'powerlibInstallVendordeps'
 def installToolsPropertyName = 'powerlibInstallTools'
+def installDashboardPropertyName = 'powerlibInstallDashboard'
 
 def findBooleanProperty = { Project project, String propertyName, boolean defaultValue ->
     if (!project.hasProperty(propertyName)) {
@@ -189,6 +190,28 @@ def findBooleanProperty = { Project project, String propertyName, boolean defaul
     }
 
     return project.findProperty(propertyName).toString().toBoolean()
+}
+
+def promptBoolean = { String prompt, boolean defaultValue ->
+    String suffix = defaultValue ? '[Y/n]' : '[y/N]'
+    String answer = System.console().readLine("${prompt} ${suffix}: ")
+    if (answer == null || answer.trim().isEmpty()) {
+        return defaultValue
+    }
+
+    return answer.trim().equalsIgnoreCase('y') || answer.trim().equalsIgnoreCase('yes')
+}
+
+def findInstallChoice = { Project project, String propertyName, String prompt, boolean defaultValue ->
+    if (project.hasProperty(propertyName)) {
+        return project.findProperty(propertyName).toString().toBoolean()
+    }
+
+    if (System.console() != null) {
+        return promptBoolean(prompt, defaultValue)
+    }
+
+    return defaultValue
 }
 
 def findLocalInstallerRoot = {
@@ -355,17 +378,6 @@ powershell -ExecutionPolicy Bypass -File "%~dp0.robot-library-generate-subsystem
 
 def installDashboardTools = { Project project ->
     try {
-        if (System.console() != null) {
-            String answer = System.console().readLine('Install PowerLib Dashboard source and npm dependencies? [y/N]: ')
-            if (answer == null || !answer.trim().equalsIgnoreCase('y')) {
-                logger.lifecycle('Skipped PowerLib Dashboard by user choice')
-                return
-            }
-        } else if (!findBooleanProperty(project, 'powerlibInstallDashboard', false)) {
-            logger.lifecycle('Skipped PowerLib Dashboard. Run with -PpowerlibInstallDashboard=true to install it in non-interactive mode.')
-            return
-        }
-
         File dashboardBuildScript = project.file('powerlib-build-dashboard.ps1')
         if (!dashboardBuildScript.exists()) {
             throw new GradleException('Missing powerlib-build-dashboard.ps1. Install scripts first.')
@@ -446,10 +458,17 @@ gradle.projectsLoaded {
                 List<File> backups = []
                 boolean keepBackups = findBooleanProperty(project, keepBackupsPropertyName, false)
                 boolean useLatestVendordeps = findBooleanProperty(project, latestVendordepsPropertyName, false)
-                boolean installLib = findBooleanProperty(project, installLibPropertyName, true)
-                boolean installScripts = findBooleanProperty(project, installScriptsPropertyName, true)
-                boolean installVendordeps = findBooleanProperty(project, installVendordepsPropertyName, true)
+                boolean installLib = findInstallChoice(project, installLibPropertyName, 'Install PowerLib Java/starter files?', true)
+                boolean installScripts = findInstallChoice(project, installScriptsPropertyName, 'Install helper scripts?', true)
+                boolean installVendordeps = findInstallChoice(project, installVendordepsPropertyName, 'Install vendor dependencies?', true)
                 boolean installTools = findBooleanProperty(project, installToolsPropertyName, true)
+                boolean installDashboard = installTools && findInstallChoice(project, installDashboardPropertyName, 'Download PowerLib Dashboard source and run npm install?', true)
+
+                logger.lifecycle('PowerLib install selections:')
+                logger.lifecycle("  Java/starter files: ${installLib}")
+                logger.lifecycle("  Helper scripts: ${installScripts}")
+                logger.lifecycle("  Vendor dependencies: ${installVendordeps}")
+                logger.lifecycle("  PowerLib Dashboard: ${installDashboard}")
 
                 if (installLib) {
                     templateFiles.each { template ->
@@ -476,10 +495,22 @@ gradle.projectsLoaded {
                     logger.lifecycle('Skipped helper scripts')
                 }
 
-                if (installTools) {
+                if (installDashboard && !installScripts) {
+                    logger.lifecycle('Installing dashboard build script because dashboard install was selected')
+                    File dashboardBuildScript = project.file('powerlib-build-dashboard.ps1')
+                    File localInstallerRoot = findLocalInstallerRoot()
+                    File localDashboardBuildScript = localInstallerRoot == null ? null : new File(localInstallerRoot, 'build-dashboard-install.ps1')
+                    if (localDashboardBuildScript != null && localDashboardBuildScript.exists()) {
+                        Files.copy(localDashboardBuildScript.toPath(), dashboardBuildScript.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                    } else {
+                        dashboardBuildScript.text = new URL(dashboardBuildScriptUrl).getText('UTF-8')
+                    }
+                }
+
+                if (installDashboard) {
                     installDashboardTools(project)
                 } else {
-                    logger.lifecycle('Skipped PowerLib tools')
+                    logger.lifecycle(installTools ? 'Skipped PowerLib Dashboard' : 'Skipped PowerLib tools')
                 }
 
                 if (installVendordeps && !useLatestVendordeps) {
