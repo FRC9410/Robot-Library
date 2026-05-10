@@ -189,6 +189,8 @@ Generated subsystem constants files include a protected custom block:
 ```
 
 Add hand-written constants between those markers. Updates preserve that block while regenerating the subsystem config from `powerlib-subsystems.json`.
+
+Each JSON subsystem has a stable `id`. To rename a subsystem, change its `name` but keep its `id` the same. The update flow uses that id to carry custom constants from the old generated constants file to the renamed one.
 ## Build Check
 
 By default, the installer runs the robot project's `build` task after installing files and vendordeps. To skip that build check, add this flag:

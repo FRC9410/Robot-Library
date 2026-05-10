@@ -578,6 +578,44 @@ function Get-PreservedCustomConstantsBlock {
     return $content.Substring($start, $end - $start).Trim("`r", "`n")
 }
 
+function Get-SubsystemIdFromGeneratedContent {
+    param([Parameter(Mandatory = $true)][string]$Content)
+
+    foreach ($line in ($Content -split "`r?`n")) {
+        if ($line.StartsWith($SubsystemIdMarkerPrefix)) {
+            return $line.Substring($SubsystemIdMarkerPrefix.Length).Trim()
+        }
+    }
+
+    return $null
+}
+
+function Get-CustomConstantsBySubsystemId {
+    param([Parameter(Mandatory = $true)][string]$ConstantsDir)
+
+    $customBlocks = @{}
+    if (-not (Test-Path $ConstantsDir)) {
+        return $customBlocks
+    }
+
+    Get-ChildItem -Path $ConstantsDir -Filter "*Constants.java" -File | ForEach-Object {
+        $content = Get-Content -Path $_.FullName -Raw
+        if (-not $content.Contains($GeneratedFileMarker)) {
+            return
+        }
+
+        $id = Get-SubsystemIdFromGeneratedContent $content
+        if (-not [string]::IsNullOrWhiteSpace($id)) {
+            $customBlock = Get-PreservedCustomConstantsBlock $_.FullName
+            if (-not [string]::IsNullOrWhiteSpace($customBlock)) {
+                $customBlocks[$id] = $customBlock
+            }
+        }
+    }
+
+    return $customBlocks
+}
+
 function Set-CustomConstantsBlock {
     param(
         [Parameter(Mandatory = $true)][string]$Content,
@@ -600,14 +638,19 @@ function Set-CustomConstantsBlock {
 function Write-ConstantsFile {
     param(
         [Parameter(Mandatory = $true)]$Subsystem,
-        [Parameter(Mandatory = $true)]$Metadata
+        [Parameter(Mandatory = $true)]$Metadata,
+        [Parameter(Mandatory = $true)]$CustomBlocksById
     )
 
     $constantsDir = Join-Path (Get-Location) "src/main/java/frc/robot/constants"
     New-Item -ItemType Directory -Force -Path $constantsDir | Out-Null
 
     $outputFile = Join-Path $constantsDir "$($Metadata.PascalName)Constants.java"
-    $customContent = Get-PreservedCustomConstantsBlock $outputFile
+    $customContent = if ($CustomBlocksById.ContainsKey($Metadata.Id)) {
+        $CustomBlocksById[$Metadata.Id]
+    } else {
+        Get-PreservedCustomConstantsBlock $outputFile
+    }
     $content = if ($Metadata.Type -eq "velocity") {
         New-VelocityConstantsContent $Subsystem $Metadata
     } else {
@@ -659,14 +702,17 @@ function Update-SubsystemsFromJson {
     }
 
     $written = @()
+    $constantsDir = Join-Path (Get-Location) "src/main/java/frc/robot/constants"
+    $customBlocksById = Get-CustomConstantsBySubsystemId $constantsDir
     foreach ($subsystem in $subsystems) {
         $metadata = Get-SubsystemMetadata $subsystem
-        $written += Write-ConstantsFile $subsystem $metadata
+        $written += Write-ConstantsFile $subsystem $metadata $customBlocksById
     }
 
     Rewrite-ConstantsBlock $constantsBarrel $subsystems
     Rewrite-StateMachineBlock $stateMachineFile $subsystems
     Remove-DeletedGeneratedFiles $subsystems
+    Save-SubsystemDocument $JsonPath $document
 
     foreach ($file in $written) {
         Write-Host "Generated $file"
