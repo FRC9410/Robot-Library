@@ -502,12 +502,30 @@ gradle.projectsLoaded {
                 boolean installVendordeps = findInstallChoice(project, installVendordepsPropertyName, 'Install vendor dependencies?', true)
                 boolean installTools = findBooleanProperty(project, installToolsPropertyName, true)
                 boolean installDashboard = installTools && findInstallChoice(project, installDashboardPropertyName, 'Download Power Tool source and run npm install?', true)
+                boolean vendordepsOnly = installVendordeps && !installLib && !installDashboard && !installScripts
 
                 logger.lifecycle('PowerLib install selections:')
                 logger.lifecycle("  Java/starter files: ${installLib}")
                 logger.lifecycle("  Helper scripts: ${installScripts}")
                 logger.lifecycle("  Vendor dependencies: ${installVendordeps}")
                 logger.lifecycle("  Power Tool: ${installDashboard}")
+
+                if (installVendordeps) {
+                    vendorDependencies.each { dependency ->
+                        installVendorDependency(project, dependency, false)
+                    }
+                    if (!useLatestVendordeps) {
+                        vendorDependencies.findAll { dependency -> dependency.pinnedSource != null }.each { dependency ->
+                            installVendorDependency(project, dependency, true)
+                        }
+                    }
+                    if (vendordepsOnly) {
+                        logger.lifecycle('Vendor dependency install complete. Waiting 5 seconds...')
+                        Thread.sleep(5000)
+                    }
+                } else {
+                    logger.lifecycle('Skipped vendordeps')
+                }
 
                 if (installLib) {
                     templateFiles.each { template ->
@@ -518,14 +536,6 @@ gradle.projectsLoaded {
                     }
                 } else {
                     logger.lifecycle('Skipped PowerLib files')
-                }
-
-                if (installVendordeps) {
-                    vendorDependencies.each { dependency ->
-                        installVendorDependency(project, dependency, false)
-                    }
-                } else {
-                    logger.lifecycle('Skipped vendordeps')
                 }
 
                 if (installDashboard) {
@@ -539,12 +549,6 @@ gradle.projectsLoaded {
                     installGeneratorScript(project)
                 } else {
                     logger.lifecycle('Skipped helper scripts')
-                }
-
-                if (installVendordeps && !useLatestVendordeps) {
-                    vendorDependencies.findAll { dependency -> dependency.pinnedSource != null }.each { dependency ->
-                        installVendorDependency(project, dependency, true)
-                    }
                 }
 
                 if (keepBackups) {
