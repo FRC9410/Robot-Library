@@ -53,6 +53,19 @@ To keep replacement backups after a successful install, add this flag:
 .\gradlew.bat -I .robot-library-install.gradle robotLibraryInstall -PpowerlibKeepBackups=true
 ```
 
+To update only part of an installed project, turn off the sections you do not want. By default, all sections are installed.
+
+```powershell
+# Update helper scripts and vendordeps, but leave Java library/starter files alone.
+.\gradlew.bat -I .robot-library-install.gradle robotLibraryInstall -PpowerlibInstallLib=false
+
+# Update Java library/starter files and helper scripts, but leave vendordeps alone.
+.\gradlew.bat -I .robot-library-install.gradle robotLibraryInstall -PpowerlibInstallVendordeps=false
+
+# Update only vendordeps.
+.\gradlew.bat -I .robot-library-install.gradle robotLibraryInstall -PpowerlibInstallLib=false -PpowerlibInstallScripts=false
+```
+
 ## macOS / Linux
 
 From the root of the new robot project:
@@ -66,6 +79,29 @@ To keep replacement backups after a successful install, add this flag:
 
 ```bash
 ./gradlew -I .robot-library-install.gradle robotLibraryInstall -PpowerlibKeepBackups=true
+```
+
+To update only part of an installed project, turn off the sections you do not want. By default, all sections are installed.
+
+```bash
+# Update helper scripts and vendordeps, but leave Java library/starter files alone.
+./gradlew -I .robot-library-install.gradle robotLibraryInstall -PpowerlibInstallLib=false
+
+# Update Java library/starter files and helper scripts, but leave vendordeps alone.
+./gradlew -I .robot-library-install.gradle robotLibraryInstall -PpowerlibInstallVendordeps=false
+
+# Update only vendordeps.
+./gradlew -I .robot-library-install.gradle robotLibraryInstall -PpowerlibInstallLib=false -PpowerlibInstallScripts=false
+```
+
+## Install Sections
+
+These flags control which sections the installer updates. They all default to `true`.
+
+```text
+-PpowerlibInstallLib=true
+-PpowerlibInstallScripts=true
+-PpowerlibInstallVendordeps=true
 ```
 
 

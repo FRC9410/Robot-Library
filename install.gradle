@@ -176,6 +176,17 @@ def generatorScriptUrl = 'https://raw.githubusercontent.com/FRC9410/Robot-Librar
 def keepBackupsPropertyName = 'powerlibKeepBackups'
 def latestVendordepsPropertyName = 'powerlibLatestVendordeps'
 def skipBuildPropertyName = 'powerlibSkipBuild'
+def installLibPropertyName = 'powerlibInstallLib'
+def installScriptsPropertyName = 'powerlibInstallScripts'
+def installVendordepsPropertyName = 'powerlibInstallVendordeps'
+
+def findBooleanProperty = { Project project, String propertyName, boolean defaultValue ->
+    if (!project.hasProperty(propertyName)) {
+        return defaultValue
+    }
+
+    return project.findProperty(propertyName).toString().toBoolean()
+}
 
 def findLocalTemplateRoot = {
     File initScript = gradle.startParameter.allInitScripts.find { script ->
@@ -287,7 +298,7 @@ def installVendorDependency = { Project project, VendorDependency dependency, bo
 gradle.projectsLoaded {
     rootProject {
         tasks.register('robotLibraryInstall') {
-            if (!findProperty(skipBuildPropertyName).toString().toBoolean()) {
+            if (!findBooleanProperty(project, skipBuildPropertyName, false)) {
                 finalizedBy('build')
             }
             group = 'robot library'
@@ -295,23 +306,38 @@ gradle.projectsLoaded {
 
             doLast {
                 List<File> backups = []
-                boolean keepBackups = project.findProperty(keepBackupsPropertyName).toString().toBoolean()
-                boolean useLatestVendordeps = project.findProperty(latestVendordepsPropertyName).toString().toBoolean()
+                boolean keepBackups = findBooleanProperty(project, keepBackupsPropertyName, false)
+                boolean useLatestVendordeps = findBooleanProperty(project, latestVendordepsPropertyName, false)
+                boolean installLib = findBooleanProperty(project, installLibPropertyName, true)
+                boolean installScripts = findBooleanProperty(project, installScriptsPropertyName, true)
+                boolean installVendordeps = findBooleanProperty(project, installVendordepsPropertyName, true)
 
-                templateFiles.each { template ->
-                    File backup = copyTemplateFile(project, template)
-                    if (backup != null) {
-                        backups.add(backup)
+                if (installLib) {
+                    templateFiles.each { template ->
+                        File backup = copyTemplateFile(project, template)
+                        if (backup != null) {
+                            backups.add(backup)
+                        }
                     }
+                } else {
+                    logger.lifecycle('Skipped PowerLib files')
                 }
 
-                vendorDependencies.each { dependency ->
-                    installVendorDependency(project, dependency, false)
+                if (installVendordeps) {
+                    vendorDependencies.each { dependency ->
+                        installVendorDependency(project, dependency, false)
+                    }
+                } else {
+                    logger.lifecycle('Skipped vendordeps')
                 }
 
-                installGeneratorScript(project)
+                if (installScripts) {
+                    installGeneratorScript(project)
+                } else {
+                    logger.lifecycle('Skipped helper scripts')
+                }
 
-                if (!useLatestVendordeps) {
+                if (installVendordeps && !useLatestVendordeps) {
                     vendorDependencies.findAll { dependency -> dependency.pinnedSource != null }.each { dependency ->
                         installVendorDependency(project, dependency, true)
                     }
@@ -330,7 +356,8 @@ gradle.projectsLoaded {
                 }
 
 
-                logger.lifecycle('PowerLib install complete')            }
+                logger.lifecycle('PowerLib install complete')
+            }
         }
     }
 }
