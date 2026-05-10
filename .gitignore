@@ -24,6 +24,8 @@ powerlib-dashboard/out/
 powerlib-dashboard/release/
 PowerLibDashboard.exe
 PowerLibDashboard.exe.blockmap
+PowerTool.exe
+PowerTool.exe.blockmap
 
 win-unpacked/
 builder-debug.yml
@@ -40,5 +42,11 @@ build/
 .robot-library-generate-subsystem.ps1
 powerlib-generate-subsystem.cmd
 powerlib-update-subsystems.cmd
+powerlib-dashboard/scripts/generate-subsystem.ps1
+powerlib-dashboard/scripts/powerlib-generate-subsystem.cmd
+powerlib-dashboard/scripts/powerlib-update-subsystems.cmd
+powerlib-dashboard/scripts/powerlib-dashboard.ps1
+power-tool/
+power-tool.cmd
 *.powerlib.bak
 *.powerlib.bak.*

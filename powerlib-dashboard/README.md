@@ -1,6 +1,6 @@
-# PowerLib Dashboard
+# Power Tool
 
-Electron React dashboard shell for Team 9410 PowerLib tools and FRC NT4 NetworkTables.
+Electron React app for Team 9410 PowerLib tools and FRC NT4 NetworkTables.
 
 ## Setup
 
@@ -40,26 +40,26 @@ Rows appear as matching topic values arrive from NetworkTables.
 npm run dev      Start Vite and Electron for local development.
 npm run build    Type-check and build the renderer and Electron main process.
 npm run package:app
-                 Build a local Windows app under ../PowerLibDashboard-local.
+                 Build a local Windows app under ../PowerTool-local.
 npm run package:publish
-                 Build the publish app under ../PowerLibDashboard.
+                 Build the publish app under ../PowerTool.
 npm start        Run the built Electron app.
 ```
 
 ## Publish The App
 
-The GitHub installer downloads this dashboard source into the robot project and runs `npm install`. It does not ship the compiled app because the packaged output is too large for normal repository pushes.
+The GitHub installer downloads this source into the robot project and runs `npm install`. It does not ship the compiled app because the packaged output is too large for normal repository pushes.
 
-From an installed robot project, start the dashboard with:
+From an installed robot project, start Power Tool with:
 
 ```powershell
-.\powerlib-dashboard.cmd
+.\power-tool.cmd
 ```
 
 Or:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\powerlib-dashboard.ps1
+powershell -ExecutionPolicy Bypass -File .\power-tool\scripts\power-tool.ps1
 ```
 
 For a local app rebuild from this library repo, run:
@@ -69,7 +69,7 @@ cd E:\code\projects\Robot-Library
 .\build-dashboard.ps1
 ```
 
-That writes to `E:\code\projects\Robot-Library\PowerLibDashboard-local\`.
+That writes to `E:\code\projects\Robot-Library\PowerTool-local\`.
 
 To make a compiled dashboard app locally:
 

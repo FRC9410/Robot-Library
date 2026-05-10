@@ -6,12 +6,16 @@ param(
 $ErrorActionPreference = "Stop"
 
 $installRoot = (Get-Location).Path
-$tempRoot = Join-Path $installRoot "build\powerlib-dashboard-source"
+$tempRoot = Join-Path $installRoot "build\power-tool-source"
 $archivePath = Join-Path $tempRoot "Robot-Library.zip"
 $extractRoot = Join-Path $tempRoot "extract"
-$dashboardOutput = Join-Path $installRoot "powerlib-dashboard"
-$windowsLauncherPath = Join-Path $installRoot "powerlib-dashboard.cmd"
-$powershellLauncherPath = Join-Path $installRoot "powerlib-dashboard.ps1"
+$dashboardOutput = Join-Path $installRoot "power-tool"
+$windowsLauncherPath = Join-Path $installRoot "power-tool.cmd"
+$dashboardScriptsPath = Join-Path $dashboardOutput "scripts"
+$powershellLauncherPath = Join-Path $dashboardScriptsPath "power-tool.ps1"
+$legacyDashboardOutput = Join-Path $installRoot "powerlib-dashboard"
+$legacyWindowsLauncherPath = Join-Path $installRoot "powerlib-dashboard.cmd"
+$legacyPowershellLauncherPath = Join-Path $installRoot "powerlib-dashboard.ps1"
 
 function Remove-DirectoryIfExists {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -25,10 +29,10 @@ Remove-DirectoryIfExists $tempRoot
 New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
 
 try {
-    Write-Host "Downloading PowerLib Dashboard source..."
+    Write-Host "Downloading Power Tool source..."
     Invoke-WebRequest -Uri $RepositoryArchiveUrl -OutFile $archivePath
 
-    Write-Host "Extracting dashboard source..."
+    Write-Host "Extracting Power Tool source..."
     Expand-Archive -Path $archivePath -DestinationPath $extractRoot -Force
 
     $dashboardSource = Get-ChildItem -Path $extractRoot -Directory |
@@ -41,6 +45,9 @@ try {
     }
 
     Remove-DirectoryIfExists $dashboardOutput
+    Remove-DirectoryIfExists $legacyDashboardOutput
+    Remove-Item -LiteralPath $legacyWindowsLauncherPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $legacyPowershellLauncherPath -Force -ErrorAction SilentlyContinue
     Copy-Item -Path $dashboardSource -Destination $dashboardOutput -Recurse
 
     Push-Location $dashboardOutput
@@ -56,17 +63,19 @@ try {
         Pop-Location
     }
 
+    New-Item -ItemType Directory -Force -Path $dashboardScriptsPath | Out-Null
+
     Set-Content -Path $windowsLauncherPath -Encoding ascii -Value '@echo off
-cd /d "%~dp0powerlib-dashboard"
+cd /d "%~dp0power-tool"
 npm run dev
 '
 
-    Set-Content -Path $powershellLauncherPath -Encoding ascii -Value 'Set-Location -Path (Join-Path $PSScriptRoot "powerlib-dashboard")
+    Set-Content -Path $powershellLauncherPath -Encoding ascii -Value 'Set-Location -Path (Split-Path -Parent $PSScriptRoot)
 npm run dev
 '
 
-    Write-Host "PowerLib Dashboard source written to $dashboardOutput"
-    Write-Host "Dashboard launchers written to $windowsLauncherPath and $powershellLauncherPath"
+    Write-Host "Power Tool source written to $dashboardOutput"
+    Write-Host "Power Tool launchers written to $windowsLauncherPath and $powershellLauncherPath"
 } finally {
     Remove-DirectoryIfExists $tempRoot
 }

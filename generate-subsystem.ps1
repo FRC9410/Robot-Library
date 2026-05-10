@@ -728,7 +728,7 @@ function Invoke-BuildIfNeeded {
     $isWindowsHost = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
     $gradlew = if ($isWindowsHost) { ".\gradlew.bat" } else { "./gradlew" }
     if (Test-Path $gradlew) {
-        & $gradlew build
+        & $gradlew --no-daemon --console=plain build
         if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
         }

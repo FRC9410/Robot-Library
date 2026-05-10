@@ -1,8 +1,8 @@
 {
-  "name": "powerlib-dashboard",
+  "name": "power-tool",
   "version": "0.1.0",
   "private": true,
-  "description": "Electron React dashboard for Team 9410 PowerLib and FRC NT4 NetworkTables.",
+  "description": "Electron React power tool for Team 9410 PowerLib and FRC NT4 NetworkTables.",
   "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {
@@ -17,10 +17,10 @@
     "start": "electron ."
   },
   "build": {
-    "appId": "org.team9410.powerlib.dashboard",
-    "productName": "PowerLib Dashboard",
+    "appId": "org.team9410.powerlib.powertool",
+    "productName": "Power Tool",
     "directories": {
-      "output": "../PowerLibDashboard-local"
+      "output": "../PowerTool-local"
     },
     "files": [
       "dist-electron/**/*",
@@ -36,7 +36,7 @@
           ]
         }
       ],
-      "artifactName": "PowerLibDashboard.${ext}"
+      "artifactName": "PowerTool.${ext}"
     },
     "mac": {
       "target": [

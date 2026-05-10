@@ -184,7 +184,7 @@ def installVendordepsPropertyName = 'powerlibInstallVendordeps'
 def installToolsPropertyName = 'powerlibInstallTools'
 def installDashboardPropertyName = 'powerlibInstallDashboard'
 def interactiveInstallPropertyName = 'powerlibInteractive'
-def dashboardInstallScriptName = 'powerlib-dashboard-install.ps1'
+def dashboardInstallScriptName = 'power-tool-install.ps1'
 
 def findBooleanProperty = { Project project, String propertyName, boolean defaultValue ->
     if (!project.hasProperty(propertyName)) {
@@ -352,7 +352,10 @@ def copyTemplateFile = { Project project, TemplateFile template ->
 
 
 def installGeneratorScript = { Project project ->
-    File generatorScript = project.file('.robot-library-generate-subsystem.ps1')
+    File scriptsDirectory = project.file('power-tool/scripts')
+    scriptsDirectory.mkdirs()
+
+    File generatorScript = new File(scriptsDirectory, 'generate-subsystem.ps1')
     File localInstallerRoot = findLocalInstallerRoot()
     File localGeneratorScript = localInstallerRoot == null ? null : new File(localInstallerRoot, 'generate-subsystem.ps1')
     if (localGeneratorScript != null && localGeneratorScript.exists()) {
@@ -361,24 +364,36 @@ def installGeneratorScript = { Project project ->
         generatorScript.text = new URL(generatorScriptUrl).getText('UTF-8')
     }
 
-    File generateCommand = project.file('powerlib-generate-subsystem.cmd')
+    File generateCommand = new File(scriptsDirectory, 'powerlib-generate-subsystem.cmd')
     generateCommand.text = '''@echo off
-powershell -ExecutionPolicy Bypass -File "%~dp0.robot-library-generate-subsystem.ps1" %*
+powershell -ExecutionPolicy Bypass -File "%~dp0generate-subsystem.ps1" %*
 '''
 
-    File updateCommand = project.file('powerlib-update-subsystems.cmd')
+    File updateCommand = new File(scriptsDirectory, 'powerlib-update-subsystems.cmd')
     updateCommand.text = '''@echo off
-powershell -ExecutionPolicy Bypass -File "%~dp0.robot-library-generate-subsystem.ps1" -UpdateSubsystems %*
+powershell -ExecutionPolicy Bypass -File "%~dp0generate-subsystem.ps1" -UpdateSubsystems %*
 '''
 
     File oldGeneratorScript = project.file('.robot-library-generate-subsystem.gradle')
     if (oldGeneratorScript.exists() && !oldGeneratorScript.delete()) {
         logger.warn("Could not remove old subsystem generator script: ${oldGeneratorScript.name}")
     }
+    [
+        project.file('.robot-library-generate-subsystem.ps1'),
+        project.file('powerlib-generate-subsystem.cmd'),
+        project.file('powerlib-update-subsystems.cmd'),
+        project.file('powerlib-dashboard.ps1'),
+        project.file('power-tool.ps1'),
+        project.file('powerlib-dashboard.cmd')
+    ].each { oldScript ->
+        if (oldScript.exists() && !oldScript.delete()) {
+            logger.warn("Could not remove old helper script: ${oldScript.name}")
+        }
+    }
 
-    logger.lifecycle("Installed subsystem generator script: ${generatorScript.name}")
-    logger.lifecycle("Installed subsystem generator command: ${generateCommand.name}")
-    logger.lifecycle("Installed subsystem update command: ${updateCommand.name}")
+    logger.lifecycle("Installed subsystem generator script: ${project.relativePath(generatorScript)}")
+    logger.lifecycle("Installed subsystem generator command: ${project.relativePath(generateCommand)}")
+    logger.lifecycle("Installed subsystem update command: ${project.relativePath(updateCommand)}")
 }
 
 def deleteOldDashboardBuildScript = { Project project ->
@@ -409,7 +424,7 @@ def installDashboardTools = { Project project ->
             dashboardInstallScript.absolutePath
         ])
     } catch (Exception exception) {
-        logger.warn("Skipped PowerLib Dashboard install: ${exception.message}")
+        logger.warn("Skipped Power Tool install: ${exception.message}")
     } finally {
         if (dashboardInstallScript.exists() && !dashboardInstallScript.delete()) {
             dashboardInstallScript.deleteOnExit()
@@ -486,13 +501,13 @@ gradle.projectsLoaded {
                 boolean installScripts = findInstallChoice(project, installScriptsPropertyName, 'Install helper scripts?', true)
                 boolean installVendordeps = findInstallChoice(project, installVendordepsPropertyName, 'Install vendor dependencies?', true)
                 boolean installTools = findBooleanProperty(project, installToolsPropertyName, true)
-                boolean installDashboard = installTools && findInstallChoice(project, installDashboardPropertyName, 'Download PowerLib Dashboard source and run npm install?', true)
+                boolean installDashboard = installTools && findInstallChoice(project, installDashboardPropertyName, 'Download Power Tool source and run npm install?', true)
 
                 logger.lifecycle('PowerLib install selections:')
                 logger.lifecycle("  Java/starter files: ${installLib}")
                 logger.lifecycle("  Helper scripts: ${installScripts}")
                 logger.lifecycle("  Vendor dependencies: ${installVendordeps}")
-                logger.lifecycle("  PowerLib Dashboard: ${installDashboard}")
+                logger.lifecycle("  Power Tool: ${installDashboard}")
 
                 if (installLib) {
                     templateFiles.each { template ->
@@ -513,17 +528,17 @@ gradle.projectsLoaded {
                     logger.lifecycle('Skipped vendordeps')
                 }
 
+                if (installDashboard) {
+                    installDashboardTools(project)
+                } else {
+                    logger.lifecycle(installTools ? 'Skipped Power Tool' : 'Skipped PowerLib tools')
+                    deleteOldDashboardBuildScript(project)
+                }
+
                 if (installScripts) {
                     installGeneratorScript(project)
                 } else {
                     logger.lifecycle('Skipped helper scripts')
-                }
-
-                if (installDashboard) {
-                    installDashboardTools(project)
-                } else {
-                    logger.lifecycle(installTools ? 'Skipped PowerLib Dashboard' : 'Skipped PowerLib tools')
-                    deleteOldDashboardBuildScript(project)
                 }
 
                 if (installVendordeps && !useLatestVendordeps) {

@@ -34,12 +34,15 @@ vendordeps/Phoenix6-replay-<latest>.json
 vendordeps/Phoenix5-replay-<latest>.json
 ```
 
-PowerLib tools:
+Power Tool:
 
 ```text
-powerlib-dashboard/
-powerlib-dashboard.cmd
-powerlib-dashboard.ps1
+power-tool/
+power-tool.cmd
+power-tool/scripts/power-tool.ps1
+power-tool/scripts/generate-subsystem.ps1
+power-tool/scripts/powerlib-generate-subsystem.cmd
+power-tool/scripts/powerlib-update-subsystems.cmd
 ```
 
 Before replacing a stock file, the installer creates a temporary backup. If the install succeeds, that backup is deleted during cleanup unless you pass `-PpowerlibKeepBackups=true`. If the install fails halfway through, the backup is left in place next to the original file.
@@ -74,7 +77,7 @@ powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -Ppowerlib
 powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -PpowerlibInstallLib=false -PpowerlibInstallScripts=false
 ```
 
-When run from an interactive terminal, the installer asks at the beginning whether to install each section, including the dashboard.
+When run from an interactive terminal, the installer asks at the beginning whether to install each section, including Power Tool.
 
 The downloaded `.robot-library-install.ps1` deletes itself after the run. Add `-KeepInstaller` if you want to reuse it for repeated update tests.
 
@@ -106,7 +109,7 @@ pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1 -PpowerlibInstal
 pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1 -PpowerlibInstallLib=false -PpowerlibInstallScripts=false
 ```
 
-When run from an interactive terminal, the installer asks at the beginning whether to install each section, including the dashboard.
+When run from an interactive terminal, the installer asks at the beginning whether to install each section, including Power Tool.
 
 ## Install Sections
 
@@ -127,38 +130,38 @@ At the beginning of an interactive install, the installer asks whether to instal
 PowerLib Java/starter files
 helper scripts
 vendor dependencies
-PowerLib Dashboard source and npm dependencies
+Power Tool source and npm dependencies
 ```
 
-The dashboard option downloads the PowerLib Dashboard source, runs `npm install`, and writes the dashboard run scripts.
+The Power Tool option downloads the app source, runs `npm install`, and writes the run scripts.
 
 Set `-PpowerlibInteractive=false` to skip prompts and use the flag/default values directly.
 
-To skip dashboard tools during install or update:
+To skip Power Tool during install or update:
 
 ```powershell
 -PpowerlibInstallTools=false
 ```
 
-To install tools but skip the dashboard download/npm install:
+To install tools but skip the Power Tool download/npm install:
 
 ```powershell
 -PpowerlibInstallDashboard=false
 ```
 
-To start the dashboard after it is installed:
+To start Power Tool after it is installed:
 
 ```powershell
-.\powerlib-dashboard.cmd
+.\power-tool.cmd
 ```
 
 Or:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\powerlib-dashboard.ps1
+powershell -ExecutionPolicy Bypass -File .\power-tool\scripts\power-tool.ps1
 ```
 
-The dashboard source stays in the robot project so it can be run or edited locally. Its `node_modules` folder is created by `npm install` and should not be committed.
+The Power Tool source stays in the robot project so it can be run or edited locally. Its `node_modules` folder is created by `npm install` and should not be committed.
 
 To build the dashboard locally from this library repo:
 
@@ -209,12 +212,12 @@ powershell -ExecutionPolicy Bypass -File E:\code\projects\Robot-Library\install.
 
 ## Generate Subsystems
 
-After running the installer, you can generate subsystem configs and initialize predefined PowerLib subsystem types in `StateMachine`. The installer downloads `.robot-library-generate-subsystem.ps1` and creates short Windows command wrappers in the robot project.
+After running the installer, you can generate subsystem configs and initialize predefined PowerLib subsystem types in `StateMachine`. The installer downloads the generator into `power-tool/scripts` and creates short Windows command wrappers there.
 
 Windows:
 
 ```powershell
-.\powerlib-generate-subsystem.cmd
+.\power-tool\scripts\powerlib-generate-subsystem.cmd
 ```
 
 If `powerlib-subsystems.json` already exists, the command first asks whether to update the generated code from that JSON. Answer no to add subsystems interactively instead.
@@ -222,7 +225,7 @@ If `powerlib-subsystems.json` already exists, the command first asks whether to 
 To skip the build check after generation:
 
 ```powershell
-.\powerlib-generate-subsystem.cmd -SkipBuild
+.\power-tool\scripts\powerlib-generate-subsystem.cmd -SkipBuild
 ```
 
 Local test from a robot project:
@@ -249,13 +252,13 @@ By default, interactive generation skips PID/feedforward tuning and writes zero 
 You can edit `powerlib-subsystems.json` directly, then run the generator and answer yes when it asks to update from JSON:
 
 ```powershell
-.\powerlib-generate-subsystem.cmd
+.\power-tool\scripts\powerlib-generate-subsystem.cmd
 ```
 
 To reconcile without running the build check:
 
 ```powershell
-.\powerlib-generate-subsystem.cmd -SkipBuild
+.\power-tool\scripts\powerlib-generate-subsystem.cmd -SkipBuild
 ```
 
 The update flow changes generated constants, adds new subsystems, removes generated subsystem constants that are no longer in the JSON, and rewrites the generated block in `StateMachine.java`.

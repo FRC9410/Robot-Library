@@ -96,12 +96,27 @@ ipcMain.handle("powerlib:update-subsystem-code", async () => {
   }
 
   const robotRoot = getRobotRoot(targetPath);
-  const scriptPath = path.join(robotRoot, ".robot-library-generate-subsystem.ps1");
+  const scriptCandidates = [
+    path.join(robotRoot, "power-tool", "scripts", "generate-subsystem.ps1"),
+    path.join(robotRoot, "powerlib-dashboard", "scripts", "generate-subsystem.ps1"),
+    path.join(robotRoot, ".robot-library-generate-subsystem.ps1")
+  ];
+  let scriptPath = scriptCandidates[0];
+
+  for (const candidate of scriptCandidates) {
+    try {
+      await fs.access(candidate);
+      scriptPath = candidate;
+      break;
+    } catch {
+      // Keep looking for legacy installs.
+    }
+  }
 
   try {
     await fs.access(scriptPath);
   } catch {
-    throw new Error(`Missing ${scriptPath}. Install PowerLib helper scripts first.`);
+    throw new Error(`Missing ${scriptCandidates[0]}. Install PowerLib helper scripts first.`);
   }
 
   const { stdout, stderr } = await execFileAsync(
@@ -126,7 +141,7 @@ function createWindow() {
     height: 780,
     minWidth: 960,
     minHeight: 640,
-    title: "PowerLib Dashboard",
+    title: "Power Tool",
     backgroundColor: "#f4f5f7",
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),

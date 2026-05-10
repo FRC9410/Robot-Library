@@ -549,7 +549,7 @@ export function App() {
                 Team 9410
               </Typography>
               <Typography variant="h5" sx={{ fontWeight: 800 }}>
-                PowerLib Dashboard
+                Power Tool
               </Typography>
             </Box>
             <Chip

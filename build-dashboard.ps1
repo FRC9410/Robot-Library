@@ -11,7 +11,7 @@ $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dashboardRoot = Join-Path $repoRoot "powerlib-dashboard"
 
 if (-not (Test-Path $dashboardRoot)) {
-    throw "Could not find dashboard project at $dashboardRoot"
+    throw "Could not find Power Tool project at $dashboardRoot"
 }
 
 Push-Location $dashboardRoot
@@ -28,7 +28,7 @@ try {
         exit $LASTEXITCODE
     }
 
-    $outputName = if ($Publish) { "PowerLibDashboard" } else { "PowerLibDashboard-local" }
+    $outputName = if ($Publish) { "PowerTool" } else { "PowerTool-local" }
     $outputRoot = Join-Path $repoRoot $outputName
 
     if (Test-Path $outputRoot) {
@@ -47,7 +47,7 @@ try {
         exit $LASTEXITCODE
     }
 
-    Write-Host "PowerLib Dashboard app written to $outputRoot"
+    Write-Host "Power Tool app written to $outputRoot"
 } finally {
     Pop-Location
 }
