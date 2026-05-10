@@ -1,6 +1,7 @@
 import groovy.json.JsonSlurper
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.zip.ZipInputStream
 
 class TemplateFile {
     String source
@@ -179,6 +180,7 @@ def skipBuildPropertyName = 'powerlibSkipBuild'
 def installLibPropertyName = 'powerlibInstallLib'
 def installScriptsPropertyName = 'powerlibInstallScripts'
 def installVendordepsPropertyName = 'powerlibInstallVendordeps'
+def installToolsPropertyName = 'powerlibInstallTools'
 
 def findBooleanProperty = { Project project, String propertyName, boolean defaultValue ->
     if (!project.hasProperty(propertyName)) {
@@ -188,7 +190,7 @@ def findBooleanProperty = { Project project, String propertyName, boolean defaul
     return project.findProperty(propertyName).toString().toBoolean()
 }
 
-def findLocalTemplateRoot = {
+def findLocalInstallerRoot = {
     File initScript = gradle.startParameter.allInitScripts.find { script ->
         script.name == 'install.gradle' || script.name == '.robot-library-install.gradle'
     }
@@ -197,9 +199,67 @@ def findLocalTemplateRoot = {
         return null
     }
 
-    File templateRoot = new File(initScript.parentFile, 'templates')
+    return initScript.parentFile
+}
+
+def findLocalTemplateRoot = {
+    File installerRoot = findLocalInstallerRoot()
+    if (installerRoot == null) {
+        return null
+    }
+
+    File templateRoot = new File(installerRoot, 'templates')
     return templateRoot.exists() ? templateRoot : null
 }
+
+def deleteDirectory = { File directory ->
+    if (!directory.exists()) {
+        return
+    }
+
+    Files.walk(directory.toPath())
+        .sorted(Comparator.reverseOrder())
+        .forEach { path -> Files.deleteIfExists(path) }
+}
+
+def copyDirectory = { File source, File destination ->
+    deleteDirectory(destination)
+    Files.walk(source.toPath()).forEach { sourcePath ->
+        File target = destination.toPath().resolve(source.toPath().relativize(sourcePath)).toFile()
+        if (Files.isDirectory(sourcePath)) {
+            target.mkdirs()
+        } else {
+            target.parentFile.mkdirs()
+            Files.copy(sourcePath, target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES)
+        }
+    }
+}
+
+def unzip = { File zipFile, File destination ->
+    deleteDirectory(destination)
+    destination.mkdirs()
+
+    zipFile.withInputStream { input ->
+        ZipInputStream zip = new ZipInputStream(input)
+        def entry
+        while ((entry = zip.nextEntry) != null) {
+            File target = new File(destination, entry.name)
+            if (!target.canonicalPath.startsWith(destination.canonicalPath + File.separator)) {
+                throw new GradleException("Refusing to unzip suspicious entry ${entry.name}")
+            }
+
+            if (entry.directory) {
+                target.mkdirs()
+            } else {
+                target.parentFile.mkdirs()
+                target.withOutputStream { output -> output << zip }
+            }
+            zip.closeEntry()
+        }
+        zip.close()
+    }
+}
+
 
 def backupExistingFile = { File destination ->
     if (!destination.exists()) {
@@ -242,7 +302,13 @@ def copyTemplateFile = { Project project, TemplateFile template ->
 
 def installGeneratorScript = { Project project ->
     File generatorScript = project.file('.robot-library-generate-subsystem.ps1')
-    generatorScript.text = new URL(generatorScriptUrl).getText('UTF-8')
+    File localInstallerRoot = findLocalInstallerRoot()
+    File localGeneratorScript = localInstallerRoot == null ? null : new File(localInstallerRoot, 'generate-subsystem.ps1')
+    if (localGeneratorScript != null && localGeneratorScript.exists()) {
+        Files.copy(localGeneratorScript.toPath(), generatorScript.toPath(), StandardCopyOption.REPLACE_EXISTING)
+    } else {
+        generatorScript.text = new URL(generatorScriptUrl).getText('UTF-8')
+    }
 
     File generateCommand = project.file('powerlib-generate-subsystem.cmd')
     generateCommand.text = '''@echo off
@@ -262,6 +328,30 @@ powershell -ExecutionPolicy Bypass -File "%~dp0.robot-library-generate-subsystem
     logger.lifecycle("Installed subsystem generator command: ${generateCommand.name}")
     logger.lifecycle("Installed subsystem update command: ${updateCommand.name}")
 }
+
+def installDashboardTools = { Project project ->
+    try {
+        File localInstallerRoot = findLocalInstallerRoot()
+        File localDashboard = localInstallerRoot == null ? null : new File(localInstallerRoot, 'PowerLibDashboard')
+        File dashboardDestination = project.file('PowerLibDashboard')
+        File launcher = project.file('PowerLibDashboard.cmd')
+
+        if (localDashboard == null || !localDashboard.exists()) {
+            logger.lifecycle('Skipped PowerLib Dashboard app because no local packaged app was found. Run build-dashboard.ps1, then run the installer locally to copy it.')
+            return
+        }
+
+        copyDirectory(localDashboard, dashboardDestination)
+        launcher.text = '''@echo off
+start "" "%~dp0PowerLibDashboard\\win-unpacked\\PowerLib Dashboard.exe" %*
+'''
+        logger.lifecycle("Installed PowerLib Dashboard app: ${dashboardDestination.name}")
+        logger.lifecycle("Installed PowerLib Dashboard launcher: ${launcher.name}")
+    } catch (Exception exception) {
+        logger.warn("Skipped PowerLib Dashboard install: ${exception.message}")
+    }
+}
+
 def parseJsonFile = { File file ->
     try {
         return new JsonSlurper().parse(file)
@@ -328,6 +418,7 @@ gradle.projectsLoaded {
                 boolean installLib = findBooleanProperty(project, installLibPropertyName, true)
                 boolean installScripts = findBooleanProperty(project, installScriptsPropertyName, true)
                 boolean installVendordeps = findBooleanProperty(project, installVendordepsPropertyName, true)
+                boolean installTools = findBooleanProperty(project, installToolsPropertyName, true)
 
                 if (installLib) {
                     templateFiles.each { template ->
@@ -352,6 +443,12 @@ gradle.projectsLoaded {
                     installGeneratorScript(project)
                 } else {
                     logger.lifecycle('Skipped helper scripts')
+                }
+
+                if (installTools) {
+                    installDashboardTools(project)
+                } else {
+                    logger.lifecycle('Skipped PowerLib tools')
                 }
 
                 if (installVendordeps && !useLatestVendordeps) {

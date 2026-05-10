@@ -34,6 +34,13 @@ vendordeps/Phoenix6-replay-<latest>.json
 vendordeps/Phoenix5-replay-<latest>.json
 ```
 
+PowerLib tools:
+
+```text
+PowerLibDashboard/
+PowerLibDashboard.cmd
+```
+
 Before replacing a stock file, the installer creates a temporary backup. If the install succeeds, that backup is deleted during cleanup unless you pass `-PpowerlibKeepBackups=true`. If the install fails halfway through, the backup is left in place next to the original file.
 
 When installing vendordeps, the installer first downloads the official latest JSONs for all five packages. By default, it then applies pinned overrides for any packages we know need pinning, currently MapleSim `0.4.0-beta`. Pass `-PpowerlibLatestVendordeps=true` to keep the latest vendordeps instead of applying pinned overrides. The installer saves each JSON using its `fileName`, and removes older vendordep JSONs with the same vendor `name` or `uuid`.
@@ -102,7 +109,38 @@ These flags control which sections the installer updates. They all default to `t
 -PpowerlibInstallLib=true
 -PpowerlibInstallScripts=true
 -PpowerlibInstallVendordeps=true
+-PpowerlibInstallTools=true
 ```
+
+The tools section installs PowerLib Dashboard by default during local installs when `PowerLibDashboard/` exists next to `install.gradle`. To skip dashboard tools during install or update:
+
+```powershell
+-PpowerlibInstallTools=false
+```
+
+To publish a new dashboard build for future installs:
+
+```powershell
+cd E:\code\projects\Robot-Library
+.\build-dashboard.ps1 -Publish
+```
+
+That refreshes `PowerLibDashboard/` for local installs. The packaged app is intentionally ignored by Git because it is too large for normal repository pushes.
+
+For a local dashboard rebuild only:
+
+```powershell
+.\build-dashboard.ps1
+```
+To target another platform explicitly:
+
+```powershell
+.\build-dashboard.ps1 -Platform win
+.\build-dashboard.ps1 -Platform mac
+.\build-dashboard.ps1 -Platform linux
+```
+
+Local rebuilds write to `PowerLibDashboard-local/`. Publish builds write to `PowerLibDashboard/`.
 
 
 ## Latest Vendordeps

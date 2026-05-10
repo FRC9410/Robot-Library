@@ -1,0 +1,86 @@
+{
+  "name": "powerlib-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron React dashboard for Team 9410 PowerLib and FRC NT4 NetworkTables.",
+  "main": "dist-electron/main.js",
+  "type": "module",
+  "scripts": {
+    "build:electron": "rimraf dist-electron && tsc -p tsconfig.electron.json",
+    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "predev": "npm run build:electron",
+    "build": "tsc && vite build && npm run build:electron",
+    "package:app": "powershell -NoProfile -ExecutionPolicy Bypass -File ../build-dashboard.ps1 -SkipInstall",
+    "package:publish": "powershell -NoProfile -ExecutionPolicy Bypass -File ../build-dashboard.ps1 -Publish -SkipInstall",
+    "package:win": "npm run package:publish",
+    "preview": "vite preview",
+    "start": "electron ."
+  },
+  "build": {
+    "appId": "org.team9410.powerlib.dashboard",
+    "productName": "PowerLib Dashboard",
+    "directories": {
+      "output": "../PowerLibDashboard-local"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "dist-renderer/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "PowerLibDashboard.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^9.0.1",
+    "@mui/material": "^9.0.1",
+    "@vitejs/plugin-react": "^5.1.1",
+    "ntcore-ts-client": "^3.1.3",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "vite": "^7.2.7"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.2",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^39.2.6",
+    "electron-builder": "^26.8.1",
+    "rimraf": "^6.1.2",
+    "typescript": "^5.9.3",
+    "wait-on": "^9.0.3"
+  }
+}

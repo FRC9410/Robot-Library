@@ -1,0 +1,44 @@
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Node/Electron dashboard
+node_modules/
+powerlib-dashboard/node_modules/
+powerlib-dashboard/dist-renderer/
+powerlib-dashboard/dist-electron/
+powerlib-dashboard/.vite/
+powerlib-dashboard/.turbo/
+powerlib-dashboard/out/
+powerlib-dashboard/release/
+PowerLibDashboard.exe
+PowerLibDashboard.exe.blockmap
+
+win-unpacked/
+builder-debug.yml
+builder-effective-config.yaml
+!PowerLibDashboard.cmd
+
+# Gradle/local build output
+.gradle/
+build/
+
+# Local installer artifacts
+.robot-library-install.gradle
+.robot-library-generate-subsystem.gradle
+.robot-library-generate-subsystem.ps1
+powerlib-generate-subsystem.cmd
+powerlib-update-subsystems.cmd
+*.powerlib.bak
+*.powerlib.bak.*
