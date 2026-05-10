@@ -174,6 +174,7 @@ def vendorDependencies = [
 
 def rawBaseUrl = 'https://raw.githubusercontent.com/FRC9410/Robot-Library/main/templates'
 def generatorScriptUrl = 'https://raw.githubusercontent.com/FRC9410/Robot-Library/main/generate-subsystem.ps1'
+def dashboardBuildScriptUrl = 'https://raw.githubusercontent.com/FRC9410/Robot-Library/main/build-dashboard-install.ps1'
 def keepBackupsPropertyName = 'powerlibKeepBackups'
 def latestVendordepsPropertyName = 'powerlibLatestVendordeps'
 def skipBuildPropertyName = 'powerlibSkipBuild'
@@ -324,9 +325,19 @@ powershell -ExecutionPolicy Bypass -File "%~dp0.robot-library-generate-subsystem
     if (oldGeneratorScript.exists() && !oldGeneratorScript.delete()) {
         logger.warn("Could not remove old subsystem generator script: ${oldGeneratorScript.name}")
     }
+
+    File dashboardBuildScript = project.file('powerlib-build-dashboard.ps1')
+    File localDashboardBuildScript = localInstallerRoot == null ? null : new File(localInstallerRoot, 'build-dashboard-install.ps1')
+    if (localDashboardBuildScript != null && localDashboardBuildScript.exists()) {
+        Files.copy(localDashboardBuildScript.toPath(), dashboardBuildScript.toPath(), StandardCopyOption.REPLACE_EXISTING)
+    } else {
+        dashboardBuildScript.text = new URL(dashboardBuildScriptUrl).getText('UTF-8')
+    }
+
     logger.lifecycle("Installed subsystem generator script: ${generatorScript.name}")
     logger.lifecycle("Installed subsystem generator command: ${generateCommand.name}")
     logger.lifecycle("Installed subsystem update command: ${updateCommand.name}")
+    logger.lifecycle("Installed dashboard build script: ${dashboardBuildScript.name}")
 }
 
 def installDashboardTools = { Project project ->

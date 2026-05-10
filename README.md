@@ -39,6 +39,7 @@ PowerLib tools:
 ```text
 PowerLibDashboard/
 PowerLibDashboard.cmd
+powerlib-build-dashboard.ps1
 ```
 
 Before replacing a stock file, the installer creates a temporary backup. If the install succeeds, that backup is deleted during cleanup unless you pass `-PpowerlibKeepBackups=true`. If the install fails halfway through, the backup is left in place next to the original file.
@@ -141,6 +142,12 @@ To target another platform explicitly:
 ```
 
 Local rebuilds write to `PowerLibDashboard-local/`. Publish builds write to `PowerLibDashboard/`.
+
+Installed robot projects also get `powerlib-build-dashboard.ps1`. From the robot project root, it downloads the dashboard source, builds the app, writes `PowerLibDashboard/`, creates `PowerLibDashboard.cmd` on Windows, and deletes the temporary source:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\powerlib-build-dashboard.ps1
+```
 
 
 ## Latest Vendordeps
