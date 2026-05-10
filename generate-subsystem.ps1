@@ -633,7 +633,7 @@ if ($UpdateSubsystems) {
 Write-Host "PowerLib subsystem generator starting. Answer the prompts below."
 Write-Host "Enum prompts show accepted values before the default."
 
-if ((Test-Path $SubsystemsJson) -and (Prompt-Boolean "Update subsystems from $SubsystemsJson?" $true)) {
+if ((Test-Path $SubsystemsJson) -and (Prompt-Boolean "Update subsystems from ${SubsystemsJson}?" $true)) {
     Update-SubsystemsFromJson $SubsystemsJson
     Invoke-BuildIfNeeded
     exit 0
