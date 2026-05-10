@@ -10,6 +10,9 @@ PowerLib files:
 
 ```text
 src/main/java/frc/powerlib/PowerRobotContainer.java
+src/main/java/frc/powerlib/configs/*.java
+src/main/java/frc/powerlib/math/*.java
+src/main/java/frc/powerlib/subsystems/*.java
 ```
 
 Replacement starter files:
@@ -103,6 +106,7 @@ Files that intentionally replace stock robot project files belong under:
 ```text
 templates/replacements/
 ```
+
 
 
 

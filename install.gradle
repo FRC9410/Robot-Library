@@ -16,8 +16,58 @@ class VendorDependency {
 
 def templateFiles = [
     new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/configs/CancoderConfig.java',
+        destination: 'src/main/java/frc/powerlib/configs/CancoderConfig.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/configs/LeadMotorConfig.java',
+        destination: 'src/main/java/frc/powerlib/configs/LeadMotorConfig.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/configs/MotionMagicConfig.java',
+        destination: 'src/main/java/frc/powerlib/configs/MotionMagicConfig.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/configs/MotorConfig.java',
+        destination: 'src/main/java/frc/powerlib/configs/MotorConfig.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/configs/PositionSubsystemConfig.java',
+        destination: 'src/main/java/frc/powerlib/configs/PositionSubsystemConfig.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/configs/VelocitySubsystemConfig.java',
+        destination: 'src/main/java/frc/powerlib/configs/VelocitySubsystemConfig.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/math/LinearInterpolator.java',
+        destination: 'src/main/java/frc/powerlib/math/LinearInterpolator.java',
+        replacement: false
+    ),
+    new TemplateFile(
         source: 'powerlib/src/main/java/frc/powerlib/PowerRobotContainer.java',
         destination: 'src/main/java/frc/powerlib/PowerRobotContainer.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/subsystems/PositionSubsystem.java',
+        destination: 'src/main/java/frc/powerlib/subsystems/PositionSubsystem.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/subsystems/PowerSubsystem.java',
+        destination: 'src/main/java/frc/powerlib/subsystems/PowerSubsystem.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/subsystems/VelocitySubsystem.java',
+        destination: 'src/main/java/frc/powerlib/subsystems/VelocitySubsystem.java',
         replacement: false
     ),
     new TemplateFile(
@@ -26,13 +76,13 @@ def templateFiles = [
         replacement: true
     ),
     new TemplateFile(
-        source: 'replacements/src/main/java/frc/robot/subsystems/StateMachine.java',
-        destination: 'src/main/java/frc/robot/subsystems/StateMachine.java',
+        source: 'replacements/src/main/java/frc/robot/subsystems/LED.java',
+        destination: 'src/main/java/frc/robot/subsystems/LED.java',
         replacement: true
     ),
     new TemplateFile(
-        source: 'replacements/src/main/java/frc/robot/subsystems/LED.java',
-        destination: 'src/main/java/frc/robot/subsystems/LED.java',
+        source: 'replacements/src/main/java/frc/robot/subsystems/StateMachine.java',
+        destination: 'src/main/java/frc/robot/subsystems/StateMachine.java',
         replacement: true
     )
 ]
@@ -234,5 +284,7 @@ gradle.buildFinished {
         ['sh', '-c', "sleep 2; rm -f '${downloadedInstaller.absolutePath.replace("'", "'\\''")}'"].execute()
     }
 }
+
+
 
 
