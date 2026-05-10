@@ -13,6 +13,7 @@ $dashboardOutput = Join-Path $installRoot "power-tool"
 $windowsLauncherPath = Join-Path $installRoot "power-tool.cmd"
 $dashboardScriptsPath = Join-Path $dashboardOutput "scripts"
 $powershellLauncherPath = Join-Path $dashboardScriptsPath "power-tool.ps1"
+$updaterPath = Join-Path $dashboardScriptsPath "update-power-tool.ps1"
 $legacyDashboardOutput = Join-Path $installRoot "powerlib-dashboard"
 $legacyWindowsLauncherPath = Join-Path $installRoot "powerlib-dashboard.cmd"
 $legacyPowershellLauncherPath = Join-Path $installRoot "powerlib-dashboard.ps1"
@@ -53,11 +54,17 @@ try {
     Push-Location $dashboardOutput
     try {
         if (-not $SkipNpmInstall) {
-            Write-Host "Installing dashboard npm dependencies..."
+            Write-Host "Installing Power Tool npm dependencies..."
             npm install
             if ($LASTEXITCODE -ne 0) {
                 throw "npm install failed with exit code $LASTEXITCODE."
             }
+        }
+
+        Write-Host "Building Power Tool..."
+        npm run build
+        if ($LASTEXITCODE -ne 0) {
+            throw "npm run build failed with exit code $LASTEXITCODE."
         }
     } finally {
         Pop-Location
@@ -65,14 +72,21 @@ try {
 
     New-Item -ItemType Directory -Force -Path $dashboardScriptsPath | Out-Null
 
-    Set-Content -Path $windowsLauncherPath -Encoding ascii -Value '@echo off
+Set-Content -Path $windowsLauncherPath -Encoding ascii -Value '@echo off
 cd /d "%~dp0power-tool"
-npm run dev
+npm start
 '
 
     Set-Content -Path $powershellLauncherPath -Encoding ascii -Value 'Set-Location -Path (Split-Path -Parent $PSScriptRoot)
-npm run dev
+npm start
 '
+
+    $localUpdater = Join-Path $PSScriptRoot "update-power-tool.ps1"
+    if (Test-Path $localUpdater) {
+        Copy-Item -Path $localUpdater -Destination $updaterPath -Force
+    } else {
+        Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FRC9410/Robot-Library/main/update-power-tool.ps1" -OutFile $updaterPath
+    }
 
     Write-Host "Power Tool source written to $dashboardOutput"
     Write-Host "Power Tool launchers written to $windowsLauncherPath and $powershellLauncherPath"

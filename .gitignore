@@ -48,5 +48,6 @@ powerlib-dashboard/scripts/powerlib-update-subsystems.cmd
 powerlib-dashboard/scripts/powerlib-dashboard.ps1
 power-tool/
 power-tool.cmd
+power-tool-update.ps1
 *.powerlib.bak
 *.powerlib.bak.*

@@ -41,6 +41,7 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import SaveIcon from "@mui/icons-material/Save";
 import SendIcon from "@mui/icons-material/Send";
 import TerminalIcon from "@mui/icons-material/Terminal";
+import SystemUpdateAltIcon from "@mui/icons-material/SystemUpdateAlt";
 import {
   NtPrimitive,
   NtTopicSnapshot,
@@ -318,6 +319,7 @@ export function App() {
   const [subsystemActionMessage, setSubsystemActionMessage] = useState<string | null>(null);
   const [subsystemSaving, setSubsystemSaving] = useState(false);
   const [subsystemUpdatingCode, setSubsystemUpdatingCode] = useState(false);
+  const [powerToolUpdating, setPowerToolUpdating] = useState(false);
 
   const sortedTopics = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -454,6 +456,22 @@ export function App() {
     }
   }
 
+  async function updatePowerTool() {
+    setPowerToolUpdating(true);
+    setError(null);
+
+    try {
+      if (!window.powerlib?.updatePowerTool) {
+        throw new Error("Power Tool updater is not available.");
+      }
+
+      await window.powerlib.updatePowerTool();
+    } catch (caught) {
+      setPowerToolUpdating(false);
+      setError(caught instanceof Error ? caught.message : "Could not start Power Tool update.");
+    }
+  }
+
   useEffect(() => {
     if (activeView === "subsystems" && !subsystemDocument.loading && !subsystemDocument.path) {
       void loadSubsystems();
@@ -557,6 +575,15 @@ export function App() {
               color={status === "connected" ? "success" : status === "connecting" ? "warning" : "default"}
               variant={status === "idle" ? "outlined" : "filled"}
             />
+            <Button
+              startIcon={powerToolUpdating ? <CircularProgress size={18} /> : <SystemUpdateAltIcon />}
+              variant="outlined"
+              size="small"
+              onClick={updatePowerTool}
+              disabled={powerToolUpdating}
+            >
+              Update Power Tool
+            </Button>
           </Toolbar>
           <Tabs value={activeView} onChange={(_, value) => setActiveView(value)} sx={{ minHeight: 44 }}>
             <Tab

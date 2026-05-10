@@ -62,6 +62,8 @@ Or:
 powershell -ExecutionPolicy Bypass -File .\power-tool\scripts\power-tool.ps1
 ```
 
+Installed launchers run `npm start`, so Power Tool opens from the built app instead of starting the Vite dev server.
+
 For a local app rebuild from this library repo, run:
 
 ```powershell

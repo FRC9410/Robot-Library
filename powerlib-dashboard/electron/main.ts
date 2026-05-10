@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -133,6 +133,50 @@ ipcMain.handle("powerlib:update-subsystem-code", async () => {
     stdout,
     stderr
   };
+});
+
+ipcMain.handle("powerlib:update-power-tool", async () => {
+  const robotRoot = path.resolve(process.cwd(), "..");
+  const updaterCandidates = [
+    path.join(robotRoot, "power-tool", "scripts", "update-power-tool.ps1"),
+    path.join(process.cwd(), "scripts", "update-power-tool.ps1")
+  ];
+  let updaterPath = updaterCandidates[0];
+
+  for (const candidate of updaterCandidates) {
+    try {
+      await fs.access(candidate);
+      updaterPath = candidate;
+      break;
+    } catch {
+      // Keep looking.
+    }
+  }
+
+  try {
+    await fs.access(updaterPath);
+  } catch {
+    throw new Error(`Missing ${updaterCandidates[0]}. Reinstall Power Tool to add the updater.`);
+  }
+
+  const tempUpdaterPath = path.join(robotRoot, "build", "power-tool-update.ps1");
+  await fs.mkdir(path.dirname(tempUpdaterPath), { recursive: true });
+  await fs.copyFile(updaterPath, tempUpdaterPath);
+
+  const child = spawn(
+    "powershell",
+    ["-ExecutionPolicy", "Bypass", "-File", tempUpdaterPath, "-ParentPid", String(process.pid)],
+    {
+      cwd: robotRoot,
+      detached: true,
+      stdio: "ignore",
+      windowsHide: false
+    }
+  );
+  child.unref();
+
+  app.quit();
+  return { started: true };
 });
 
 function createWindow() {

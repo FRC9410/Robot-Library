@@ -133,7 +133,7 @@ vendor dependencies
 Power Tool source and npm dependencies
 ```
 
-The Power Tool option downloads the app source, runs `npm install`, and writes the run scripts.
+The Power Tool option downloads the app source, runs `npm install`, builds the app, and writes the run scripts.
 
 Set `-PpowerlibInteractive=false` to skip prompts and use the flag/default values directly.
 
@@ -161,7 +161,9 @@ Or:
 powershell -ExecutionPolicy Bypass -File .\power-tool\scripts\power-tool.ps1
 ```
 
-The Power Tool source stays in the robot project so it can be run or edited locally. Its `node_modules` folder is created by `npm install` and should not be committed.
+The Power Tool source stays in the robot project so it can be run or edited locally. The installer builds the app once, then the launchers run the built Electron app with `npm start`. Its `node_modules` folder is created by `npm install` and should not be committed.
+
+Use `Update Power Tool` inside the app to download the latest Power Tool source, reinstall npm dependencies, and restart the app.
 
 To build the dashboard locally from this library repo:
 

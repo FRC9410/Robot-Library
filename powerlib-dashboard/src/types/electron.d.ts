@@ -19,6 +19,9 @@ declare global {
         stdout: string;
         stderr: string;
       }>;
+      updatePowerTool: () => Promise<{
+        started: boolean;
+      }>;
     };
   }
 }
