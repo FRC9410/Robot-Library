@@ -1,0 +1,350 @@
+import java.util.Locale
+
+class GeneratedSubsystem {
+    String rawName
+    String pascalName
+    String camelName
+    String constantPrefix
+    String type
+    String configClassName
+    String subsystemClassName
+    String configConstantName
+}
+
+def skipBuildPropertyName = 'powerlibSkipBuild'
+def stateMachineStartMarker = '  // POWERLIB GENERATED SUBSYSTEMS START - DO NOT DELETE'
+def stateMachineEndMarker = '  // POWERLIB GENERATED SUBSYSTEMS END - DO NOT DELETE'
+
+def reader = new BufferedReader(new InputStreamReader(System.in))
+
+def prompt = { String message, String defaultValue = null ->
+    String suffix = defaultValue == null || defaultValue.isEmpty() ? '' : " [${defaultValue}]"
+    print("${message}${suffix}: ")
+    String value = reader.readLine()
+    if (value == null || value.trim().isEmpty()) {
+        return defaultValue
+    }
+    return value.trim()
+}
+
+def promptRequired = { String message ->
+    String value = null
+    while (value == null || value.trim().isEmpty()) {
+        value = prompt(message)
+    }
+    return value.trim()
+}
+
+def promptBoolean = { String message, boolean defaultValue = false ->
+    String defaultText = defaultValue ? 'y' : 'n'
+    String value = prompt(message, defaultText).toLowerCase(Locale.ROOT)
+    return value == 'y' || value == 'yes' || value == 'true'
+}
+
+def promptInt = { String message, Integer defaultValue = null ->
+    while (true) {
+        String value = prompt(message, defaultValue == null ? null : defaultValue.toString())
+        try {
+            return Integer.parseInt(value)
+        } catch (Exception ignored) {
+            println('Please enter a whole number.')
+        }
+    }
+}
+
+def promptDouble = { String message, Double defaultValue = null ->
+    while (true) {
+        String value = prompt(message, defaultValue == null ? null : defaultValue.toString())
+        try {
+            return Double.parseDouble(value)
+        } catch (Exception ignored) {
+            println('Please enter a number.')
+        }
+    }
+}
+
+def optionalDoubleExpression = { String label ->
+    String value = prompt("${label} (blank for Optional.empty)", '')
+    if (value == null || value.trim().isEmpty()) {
+        return 'Optional.empty()'
+    }
+    Double.parseDouble(value)
+    return "Optional.of(${value})"
+}
+
+def javaIdentifierParts = { String value ->
+    return value
+        .replaceAll(/([a-z])([A-Z])/, '$1 $2')
+        .split(/[^A-Za-z0-9]+/)
+        .findAll { part -> !part.isEmpty() }
+}
+
+def toPascalCase = { String value ->
+    def parts = javaIdentifierParts(value)
+    if (parts.isEmpty()) {
+        throw new GradleException('Subsystem name must contain at least one letter or number.')
+    }
+    return parts.collect { part -> part.substring(0, 1).toUpperCase(Locale.ROOT) + part.substring(1) }.join('')
+}
+
+def toCamelCase = { String pascal ->
+    return pascal.substring(0, 1).toLowerCase(Locale.ROOT) + pascal.substring(1)
+}
+
+def toConstantPrefix = { String rawName ->
+    return javaIdentifierParts(rawName).collect { part -> part.toUpperCase(Locale.ROOT) }.join('_')
+}
+
+def neutralModeExpression = { String value ->
+    String normalized = value?.trim()?.toLowerCase(Locale.ROOT)
+    return normalized == 'coast' ? 'NeutralModeValue.Coast' : 'NeutralModeValue.Brake'
+}
+
+def motorConfigExpression = {
+    int leaderId = promptInt('Leader motor CAN ID')
+    String neutral = prompt('Leader neutral mode: Brake or Coast', 'Brake')
+    boolean leaderReversed = promptBoolean('Leader reversed?', false)
+    def lines = []
+    lines.add("MotorConfig.leader(${leaderId}, ${neutralModeExpression(neutral)}, ${leaderReversed})")
+
+    String followerIds = prompt('Follower motor CAN IDs, comma-separated (blank for none)', '')
+    followerIds.split(',')
+        .collect { it.trim() }
+        .findAll { !it.isEmpty() }
+        .each { idText ->
+            int followerId = Integer.parseInt(idText)
+            boolean reversed = promptBoolean("Follower ${followerId} reversed?", false)
+            lines.add("MotorConfig.follower(${followerId}, ${reversed})")
+        }
+
+    return lines
+}
+
+def indentedList = { List<String> expressions, String indent ->
+    return expressions.collect { expression -> "${indent}${expression}" }.join(',\n')
+}
+
+def generateVelocityConstants = { GeneratedSubsystem subsystem ->
+    def motors = motorConfigExpression()
+    double kP = promptDouble('kP', 0.0d)
+    double kI = promptDouble('kI', 0.0d)
+    double kD = promptDouble('kD', 0.0d)
+    double kG = promptDouble('kG', 0.0d)
+    String kS = optionalDoubleExpression('kS')
+    String kV = optionalDoubleExpression('kV')
+    String kA = optionalDoubleExpression('kA')
+    double sensorToMechanismRatio = promptDouble('Sensor-to-mechanism ratio', 1.0d)
+    double rotorToSensorRatio = promptDouble('Rotor-to-sensor ratio', 1.0d)
+    double acceleration = promptDouble('Motion Magic acceleration', 0.0d)
+
+    return """package frc.robot.constants;
+
+import com.ctre.phoenix6.signals.NeutralModeValue;
+import frc.powerlib.configs.LeadMotorConfig;
+import frc.powerlib.configs.MotionMagicConfig;
+import frc.powerlib.configs.MotorConfig;
+import frc.powerlib.configs.VelocitySubsystemConfig;
+import java.util.List;
+import java.util.Optional;
+
+public class ${subsystem.pascalName}Constants {
+  public static final VelocitySubsystemConfig ${subsystem.configConstantName} =
+      new VelocitySubsystemConfig(
+          List.of(
+${indentedList(motors, '              ')}),
+          new LeadMotorConfig(
+              ${kP},
+              ${kI},
+              ${kD},
+              ${kG},
+              ${kS},
+              ${kV},
+              ${kA},
+              ${sensorToMechanismRatio},
+              ${rotorToSensorRatio}),
+          MotionMagicConfig.forVelocity(${acceleration}),
+          "${subsystem.pascalName}");
+}
+"""
+}
+
+def generatePositionConstants = { GeneratedSubsystem subsystem ->
+    def motors = motorConfigExpression()
+    double kP = promptDouble('kP', 0.0d)
+    double kI = promptDouble('kI', 0.0d)
+    double kD = promptDouble('kD', 0.0d)
+    double kG = promptDouble('kG', 0.0d)
+    String kS = optionalDoubleExpression('kS')
+    String kV = optionalDoubleExpression('kV')
+    String kA = optionalDoubleExpression('kA')
+    double sensorToMechanismRatio = promptDouble('Sensor-to-mechanism ratio', 1.0d)
+    double rotorToSensorRatio = promptDouble('Rotor-to-sensor ratio', 1.0d)
+    int cancoderId = promptInt('CANcoder CAN ID')
+    double magnetOffset = promptDouble('CANcoder magnet offset rotations', 0.0d)
+    double discontinuity = promptDouble('CANcoder discontinuity point rotations', 0.5d)
+    double cruiseVelocity = promptDouble('Motion Magic cruise velocity', 0.0d)
+    double acceleration = promptDouble('Motion Magic acceleration', 0.0d)
+    String units = prompt('Position units', 'rotations')
+    String defaultPosition = optionalDoubleExpression('Default position')
+
+    return """package frc.robot.constants;
+
+import com.ctre.phoenix6.signals.NeutralModeValue;
+import frc.powerlib.configs.CancoderConfig;
+import frc.powerlib.configs.LeadMotorConfig;
+import frc.powerlib.configs.MotionMagicConfig;
+import frc.powerlib.configs.MotorConfig;
+import frc.powerlib.configs.PositionSubsystemConfig;
+import java.util.List;
+import java.util.Optional;
+
+public class ${subsystem.pascalName}Constants {
+  public static final PositionSubsystemConfig ${subsystem.configConstantName} =
+      new PositionSubsystemConfig(
+          List.of(
+${indentedList(motors, '              ')}),
+          new LeadMotorConfig(
+              ${kP},
+              ${kI},
+              ${kD},
+              ${kG},
+              ${kS},
+              ${kV},
+              ${kA},
+              ${sensorToMechanismRatio},
+              ${rotorToSensorRatio}),
+          new CancoderConfig(${cancoderId}, ${magnetOffset}, ${discontinuity}),
+          new MotionMagicConfig(${cruiseVelocity}, ${acceleration}),
+          "${subsystem.pascalName}",
+          "${units}",
+          ${defaultPosition});
+}
+"""
+}
+
+def insertBeforeLastBrace = { String content, String insertion ->
+    int index = content.lastIndexOf('}')
+    if (index < 0) {
+        throw new GradleException('Could not find closing brace in Constants.java')
+    }
+    return content.substring(0, index).trim() + "\n  ${insertion}\n}" + System.lineSeparator()
+}
+
+def addConstantsBarrel = { File constantsFile, GeneratedSubsystem subsystem ->
+    String content = constantsFile.text
+    String entry = "public static final class ${subsystem.pascalName} extends frc.robot.constants.${subsystem.pascalName}Constants {}"
+    if (!content.contains(entry)) {
+        constantsFile.text = insertBeforeLastBrace(content, entry)
+    }
+}
+
+def addStateMachineField = { File stateMachineFile, GeneratedSubsystem subsystem ->
+    String content = stateMachineFile.text
+    if (!content.contains(stateMachineStartMarker) || !content.contains(stateMachineEndMarker)) {
+        throw new GradleException('Could not find POWERLIB GENERATED SUBSYSTEMS markers in StateMachine.java. Re-run the installer or add the DO NOT DELETE markers manually.')
+    }
+
+    String fieldLine = "  public final ${subsystem.subsystemClassName} ${subsystem.camelName} = new ${subsystem.subsystemClassName}(Constants.${subsystem.pascalName}.${subsystem.configConstantName});"
+    if (content.contains(fieldLine)) {
+        return
+    }
+
+    int start = content.indexOf(stateMachineStartMarker) + stateMachineStartMarker.length()
+    int end = content.indexOf(stateMachineEndMarker)
+    String existing = content.substring(start, end).trim()
+    String generated = existing.isEmpty() ? fieldLine : existing + System.lineSeparator() + fieldLine
+    stateMachineFile.text = content.substring(0, start) + System.lineSeparator() + generated + System.lineSeparator() + content.substring(end)
+}
+
+def createSubsystemModel = {
+    String rawName = promptRequired('Subsystem name, example shooter')
+    String type = prompt('Subsystem type: velocity or position', 'velocity').toLowerCase(Locale.ROOT)
+    if (type != 'velocity' && type != 'position') {
+        throw new GradleException("Unsupported subsystem type '${type}'. Use velocity or position.")
+    }
+
+    String pascal = toPascalCase(rawName)
+    String constantPrefix = toConstantPrefix(rawName)
+    return new GeneratedSubsystem(
+        rawName: rawName,
+        pascalName: pascal,
+        camelName: toCamelCase(pascal),
+        constantPrefix: constantPrefix,
+        type: type,
+        configClassName: type == 'velocity' ? 'VelocitySubsystemConfig' : 'PositionSubsystemConfig',
+        subsystemClassName: type == 'velocity' ? 'VelocitySubsystem' : 'PositionSubsystem',
+        configConstantName: "${constantPrefix}_CONFIG"
+    )
+}
+
+def writeConstantsFile = { Project project, GeneratedSubsystem subsystem ->
+    File constantsDir = project.file('src/main/java/frc/robot/constants')
+    constantsDir.mkdirs()
+    File outputFile = new File(constantsDir, "${subsystem.pascalName}Constants.java")
+
+    if (outputFile.exists() && !promptBoolean("${outputFile.name} already exists. Overwrite?", false)) {
+        throw new GradleException('Generation cancelled.')
+    }
+
+    outputFile.text = subsystem.type == 'velocity'
+        ? generateVelocityConstants(subsystem)
+        : generatePositionConstants(subsystem)
+    return outputFile
+}
+
+gradle.projectsLoaded {
+    rootProject {
+        tasks.register('powerlibGenerateSubsystem') {
+            if (!project.findProperty(skipBuildPropertyName).toString().toBoolean()) {
+                finalizedBy('build')
+            }
+
+            group = 'robot library'
+            description = 'Interactively generates PowerLib subsystem constants and StateMachine initialization.'
+
+            doLast {
+                GeneratedSubsystem subsystem = createSubsystemModel()
+                File constantsFile = writeConstantsFile(project, subsystem)
+
+                File constantsBarrel = project.file('src/main/java/frc/robot/Constants.java')
+                if (!constantsBarrel.exists()) {
+                    throw new GradleException('Missing src/main/java/frc/robot/Constants.java. Run robotLibraryInstall first.')
+                }
+                addConstantsBarrel(constantsBarrel, subsystem)
+
+                File stateMachineFile = project.file('src/main/java/frc/robot/subsystems/StateMachine.java')
+                if (!stateMachineFile.exists()) {
+                    throw new GradleException('Missing src/main/java/frc/robot/subsystems/StateMachine.java. Run robotLibraryInstall first.')
+                }
+                addStateMachineField(stateMachineFile, subsystem)
+
+                logger.lifecycle("Generated ${constantsFile}")
+                logger.lifecycle("Initialized ${subsystem.camelName} in StateMachine")
+            }
+        }
+    }
+}
+
+gradle.buildFinished {
+    File downloadedGenerator = gradle.rootProject.file('.robot-library-generate-subsystem.gradle')
+    if (!downloadedGenerator.exists()) {
+        return
+    }
+
+    if (downloadedGenerator.delete()) {
+        return
+    }
+
+    downloadedGenerator.deleteOnExit()
+
+    if (System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows')) {
+        [
+            'cmd', '/c',
+            'start', '', '/min', 'cmd', '/c',
+            "ping 127.0.0.1 -n 3 > nul && del /f /q \"${downloadedGenerator.absolutePath}\""
+        ].execute()
+    } else {
+        ['sh', '-c', "sleep 2; rm -f '${downloadedGenerator.absolutePath.replace("'", "'\\''")}'"].execute()
+    }
+}
+

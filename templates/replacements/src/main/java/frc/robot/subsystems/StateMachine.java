@@ -5,6 +5,8 @@
 package frc.robot.subsystems;
 
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import frc.powerlib.subsystems.PositionSubsystem;
+import frc.powerlib.subsystems.VelocitySubsystem;
 import frc.robot.Constants;
 
 public class StateMachine extends SubsystemBase {
@@ -15,6 +17,9 @@ public class StateMachine extends SubsystemBase {
   public final LED led = new LED();
   public final Vision vision = new Vision();
   public final Swerve drivetrain = Constants.Tuner.createDrivetrain();
+
+  // POWERLIB GENERATED SUBSYSTEMS START - DO NOT DELETE
+  // POWERLIB GENERATED SUBSYSTEMS END - DO NOT DELETE
 
   private RobotState wantedState = RobotState.IDLE;
 
@@ -29,5 +34,3 @@ public class StateMachine extends SubsystemBase {
   @Override
   public void periodic() {}
 }
-
-

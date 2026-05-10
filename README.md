@@ -91,6 +91,34 @@ From the root of a test robot project, run the installer directly from a local c
 ```
 
 
+
+## Generate Subsystems
+
+After running the installer, you can generate subsystem configs and initialize predefined PowerLib subsystem types in `StateMachine`.
+
+Windows:
+
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FRC9410/Robot-Library/main/generate-subsystem.gradle" -OutFile ".robot-library-generate-subsystem.gradle"
+.\gradlew.bat -I .robot-library-generate-subsystem.gradle powerlibGenerateSubsystem
+```
+
+macOS / Linux:
+
+```bash
+curl -fsSL "https://raw.githubusercontent.com/FRC9410/Robot-Library/main/generate-subsystem.gradle" -o ".robot-library-generate-subsystem.gradle"
+./gradlew -I .robot-library-generate-subsystem.gradle powerlibGenerateSubsystem
+```
+
+Local test from a robot project:
+
+```powershell
+.\gradlew.bat -I E:\code\projects\Robot-Library\generate-subsystem.gradle powerlibGenerateSubsystem
+```
+
+The generator currently supports `velocity` and `position` subsystem types. It creates a constants file, adds the constants barrel entry in `Constants.java`, and inserts the initialized subsystem between the `POWERLIB GENERATED SUBSYSTEMS` markers in `StateMachine.java`.
+
+By default, generation finalizes with the robot project's `build` task. Add `-PpowerlibSkipBuild=true` to skip the build check.
 ## Build Check
 
 By default, the installer runs the robot project's `build` task after installing files and vendordeps. To skip that build check, add this flag:
@@ -115,6 +143,7 @@ Files that intentionally replace stock robot project files belong under:
 ```text
 templates/replacements/
 ```
+
 
 
 
