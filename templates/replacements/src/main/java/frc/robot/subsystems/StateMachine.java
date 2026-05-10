@@ -5,6 +5,7 @@
 package frc.robot.subsystems;
 
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import frc.robot.Constants;
 
 public class StateMachine extends SubsystemBase {
   public enum RobotState {
@@ -12,6 +13,8 @@ public class StateMachine extends SubsystemBase {
   }
 
   public final LED led = new LED();
+  public final Vision vision = new Vision();
+  public final Swerve drivetrain = Constants.Tuner.createDrivetrain();
 
   private RobotState wantedState = RobotState.IDLE;
 
@@ -26,3 +29,5 @@ public class StateMachine extends SubsystemBase {
   @Override
   public void periodic() {}
 }
+
+

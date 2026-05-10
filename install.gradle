@@ -71,6 +71,46 @@ def templateFiles = [
         replacement: false
     ),
     new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/commands/SwerveDriveCommand.java',
+        destination: 'src/main/java/frc/robot/commands/SwerveDriveCommand.java',
+        replacement: true
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/Constants.java',
+        destination: 'src/main/java/frc/robot/Constants.java',
+        replacement: true
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/constants/CanBusConstants.java',
+        destination: 'src/main/java/frc/robot/constants/CanBusConstants.java',
+        replacement: true
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/constants/LEDConstants.java',
+        destination: 'src/main/java/frc/robot/constants/LEDConstants.java',
+        replacement: true
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/constants/LocationConstants.java',
+        destination: 'src/main/java/frc/robot/constants/LocationConstants.java',
+        replacement: true
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/constants/OIConstants.java',
+        destination: 'src/main/java/frc/robot/constants/OIConstants.java',
+        replacement: true
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/constants/TunerConstants.java',
+        destination: 'src/main/java/frc/robot/constants/TunerConstants.java',
+        replacement: true
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/constants/VisionConstants.java',
+        destination: 'src/main/java/frc/robot/constants/VisionConstants.java',
+        replacement: true
+    ),
+    new TemplateFile(
         source: 'replacements/src/main/java/frc/robot/RobotContainer.java',
         destination: 'src/main/java/frc/robot/RobotContainer.java',
         replacement: true
@@ -83,6 +123,26 @@ def templateFiles = [
     new TemplateFile(
         source: 'replacements/src/main/java/frc/robot/subsystems/StateMachine.java',
         destination: 'src/main/java/frc/robot/subsystems/StateMachine.java',
+        replacement: true
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/subsystems/Swerve.java',
+        destination: 'src/main/java/frc/robot/subsystems/Swerve.java',
+        replacement: true
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/subsystems/Vision.java',
+        destination: 'src/main/java/frc/robot/subsystems/Vision.java',
+        replacement: true
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/utils/DriveUtil.java',
+        destination: 'src/main/java/frc/robot/utils/DriveUtil.java',
+        replacement: true
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/utils/FieldUtils.java',
+        destination: 'src/main/java/frc/robot/utils/FieldUtils.java',
         replacement: true
     )
 ]
@@ -284,6 +344,11 @@ gradle.buildFinished {
         ['sh', '-c', "sleep 2; rm -f '${downloadedInstaller.absolutePath.replace("'", "'\\''")}'"].execute()
     }
 }
+
+
+
+
+
 
 
 

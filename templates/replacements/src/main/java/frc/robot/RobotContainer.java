@@ -6,14 +6,21 @@ package frc.robot;
 
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
+import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import frc.powerlib.PowerRobotContainer;
+import frc.robot.commands.SwerveDriveCommand;
+import frc.robot.Constants;
 import frc.robot.subsystems.StateMachine;
 
 public class RobotContainer implements PowerRobotContainer {
   private final StateMachine stateMachine = new StateMachine();
+  private final CommandXboxController driverController =
+      new CommandXboxController(Constants.OI.DRIVER_CONTROLLER_PORT);
 
   public RobotContainer() {
     configureBindings();
+    stateMachine.drivetrain.setDefaultCommand(
+        new SwerveDriveCommand(stateMachine.drivetrain, driverController, false));
   }
 
   private void configureBindings() {}
@@ -26,3 +33,5 @@ public class RobotContainer implements PowerRobotContainer {
     return stateMachine;
   }
 }
+
+

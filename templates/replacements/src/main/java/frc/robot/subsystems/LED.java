@@ -11,17 +11,13 @@ import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import frc.powerlib.PowerRobotContainer;
+import frc.robot.Constants;
 
 /** Subsystem for controlling LEDs via a CTRE CANdle. */
 public class LED extends SubsystemBase {
-  private static final int CANDLE_CAN_ID = 0;
-  private static final String CAN_BUS = "rio";
-  private static final int STRIP_START_INDEX = 8;
-  private static final int STRIP_LENGTH = 60;
-
-  private final CANdle candle = new CANdle(CANDLE_CAN_ID, CAN_BUS);
-  private final int ledStartIndex = STRIP_START_INDEX;
-  private final int ledEndIndex = STRIP_START_INDEX + STRIP_LENGTH - 1;
+  private final CANdle candle = new CANdle(Constants.LED.CANDLE_CAN_ID, Constants.LED.CANDLE_CAN_BUS);
+  private final int ledStartIndex = Constants.LED.STRIP_START_INDEX;
+  private final int ledEndIndex = Constants.LED.STRIP_START_INDEX + Constants.LED.STRIP_LENGTH - 1;
   private LEDMode mode = LEDMode.OFF;
 
   public LED() {
@@ -94,3 +90,4 @@ public class LED extends SubsystemBase {
     ALLIANCE
   }
 }
+
