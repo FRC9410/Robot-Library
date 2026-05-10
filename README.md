@@ -89,6 +89,14 @@ From the root of a test robot project, run the installer directly from a local c
 .\gradlew.bat -I E:\code\projects\Robot-Library\install.gradle robotLibraryInstall
 ```
 
+
+## Build Check
+
+By default, the installer runs the robot project's `build` task after installing files and vendordeps. To skip that build check, add this flag:
+
+```powershell
+-PpowerlibSkipBuild=true
+```
 ## After Install
 
 The `.robot-library-install.gradle` file is only needed for the install run. The installer deletes it automatically after a successful run.
@@ -106,6 +114,7 @@ Files that intentionally replace stock robot project files belong under:
 ```text
 templates/replacements/
 ```
+
 
 
 
