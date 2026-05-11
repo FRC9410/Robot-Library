@@ -35,13 +35,10 @@ import CableIcon from "@mui/icons-material/Cable";
 import ConstructionIcon from "@mui/icons-material/Construction";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import DeleteIcon from "@mui/icons-material/Delete";
-import EditIcon from "@mui/icons-material/Edit";
 import HubIcon from "@mui/icons-material/Hub";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SaveIcon from "@mui/icons-material/Save";
 import SendIcon from "@mui/icons-material/Send";
-import TerminalIcon from "@mui/icons-material/Terminal";
-import SystemUpdateAltIcon from "@mui/icons-material/SystemUpdateAlt";
 import {
   NtPrimitive,
   NtTopicSnapshot,
@@ -320,6 +317,8 @@ export function App() {
   const [subsystemSaving, setSubsystemSaving] = useState(false);
   const [subsystemUpdatingCode, setSubsystemUpdatingCode] = useState(false);
   const [powerToolUpdating, setPowerToolUpdating] = useState(false);
+  const updateSubsystemCodeRef = useRef<() => Promise<void>>(async () => {});
+  const updatePowerToolRef = useRef<() => Promise<void>>(async () => {});
 
   const sortedTopics = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -433,6 +432,10 @@ export function App() {
   }
 
   async function updateSubsystemCode() {
+    if (subsystemUpdatingCode) {
+      return;
+    }
+
     setSubsystemUpdatingCode(true);
     setSubsystemActionMessage(null);
     setSubsystemDocument((current) => ({ ...current, error: null }));
@@ -457,6 +460,10 @@ export function App() {
   }
 
   async function updatePowerTool() {
+    if (powerToolUpdating) {
+      return;
+    }
+
     setPowerToolUpdating(true);
     setError(null);
 
@@ -471,6 +478,23 @@ export function App() {
       setError(caught instanceof Error ? caught.message : "Could not start Power Tool update.");
     }
   }
+
+  updateSubsystemCodeRef.current = updateSubsystemCode;
+  updatePowerToolRef.current = updatePowerTool;
+
+  useEffect(() => {
+    const removeUpdateSubsystemCode = window.powerlib?.onMenuUpdateSubsystemCode?.(() => {
+      void updateSubsystemCodeRef.current();
+    });
+    const removeUpdatePowerTool = window.powerlib?.onMenuUpdatePowerTool?.(() => {
+      void updatePowerToolRef.current();
+    });
+
+    return () => {
+      removeUpdateSubsystemCode?.();
+      removeUpdatePowerTool?.();
+    };
+  }, []);
 
   useEffect(() => {
     if (activeView === "subsystems" && !subsystemDocument.loading && !subsystemDocument.path) {
@@ -557,7 +581,7 @@ export function App() {
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "grey.100" }}>
+    <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
       <AppBar position="static" color="inherit" elevation={0} sx={{ borderBottom: 1, borderColor: "divider" }}>
         <Container maxWidth={false}>
           <Toolbar disableGutters sx={{ gap: 2 }}>
@@ -575,15 +599,6 @@ export function App() {
               color={status === "connected" ? "success" : status === "connecting" ? "warning" : "default"}
               variant={status === "idle" ? "outlined" : "filled"}
             />
-            <Button
-              startIcon={powerToolUpdating ? <CircularProgress size={18} /> : <SystemUpdateAltIcon />}
-              variant="outlined"
-              size="small"
-              onClick={updatePowerTool}
-              disabled={powerToolUpdating}
-            >
-              Update Power Tool
-            </Button>
           </Toolbar>
           <Tabs value={activeView} onChange={(_, value) => setActiveView(value)} sx={{ minHeight: 44 }}>
             <Tab
@@ -841,21 +856,6 @@ export function App() {
                     >
                       Refresh
                     </Button>
-                    <Button
-                      startIcon={<AddIcon />}
-                      variant="contained"
-                      onClick={() => setSubsystemForm(createEmptySubsystemForm())}
-                    >
-                      Create Subsystem
-                    </Button>
-                    <Button
-                      startIcon={subsystemUpdatingCode ? <CircularProgress size={18} /> : <TerminalIcon />}
-                      variant="outlined"
-                      onClick={updateSubsystemCode}
-                      disabled={subsystemUpdatingCode}
-                    >
-                      Update Code
-                    </Button>
                   </Stack>
 
                   {subsystemDocument.error && <Alert severity="error">{subsystemDocument.error}</Alert>}
@@ -872,300 +872,299 @@ export function App() {
                     </Alert>
                   )}
 
-                  {subsystemDocument.exists && (
-                    <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
-                      <Chip label={`${subsystemDocument.subsystems.length} subsystem${subsystemDocument.subsystems.length === 1 ? "" : "s"}`} color="primary" />
-                      {[...new Set(subsystemDocument.subsystems.map((subsystem) => subsystem.type).filter(Boolean))].map((type) => (
-                        <Chip key={type} label={type} variant="outlined" />
-                      ))}
-                    </Stack>
-                  )}
-
-                  {subsystemForm && (
-                    <Card variant="outlined" sx={{ bgcolor: "grey.50" }}>
+                  <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "320px 1fr" } }}>
+                    <Card variant="outlined" sx={{ alignSelf: "start" }}>
                       <CardContent>
                         <Stack spacing={2}>
-                          <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                            <TextField
-                              label="Subsystem name"
-                              size="small"
-                              value={subsystemForm.name}
-                              onChange={(event) =>
-                                setSubsystemForm((current) =>
-                                  current
-                                    ? {
-                                        ...current,
-                                        name: event.target.value,
-                                        id: current.mode === "create" ? toCamelCase(event.target.value) : current.id
-                                      }
-                                    : current
-                                )
-                              }
-                              sx={{ flexGrow: 1 }}
-                            />
-                            <TextField
-                              label="Stable ID"
-                              size="small"
-                              value={subsystemForm.id}
-                              onChange={(event) =>
-                                setSubsystemForm((current) => (current ? { ...current, id: event.target.value } : current))
-                              }
-                              sx={{ minWidth: 220 }}
-                            />
-                            <FormControl size="small" sx={{ minWidth: 160 }}>
-                              <InputLabel id="subsystem-type-label">Type</InputLabel>
-                              <Select
-                                labelId="subsystem-type-label"
-                                label="Type"
-                                value={subsystemForm.type}
-                                onChange={(event) =>
-                                  setSubsystemForm((current) =>
-                                    current ? { ...current, type: event.target.value as "velocity" | "position" } : current
-                                  )
-                                }
-                              >
-                                <MenuItem value="velocity">velocity</MenuItem>
-                                <MenuItem value="position">position</MenuItem>
-                              </Select>
-                            </FormControl>
-                          </Stack>
+                          <Button
+                            fullWidth
+                            startIcon={<AddIcon />}
+                            variant="contained"
+                            onClick={() => setSubsystemForm(createEmptySubsystemForm())}
+                          >
+                            Create Subsystem
+                          </Button>
 
-                          <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                            <TextField
-                              label="Leader CAN ID"
-                              size="small"
-                              type="number"
-                              value={subsystemForm.leaderId}
-                              onChange={(event) =>
-                                setSubsystemForm((current) => (current ? { ...current, leaderId: event.target.value } : current))
-                              }
-                            />
-                            <FormControl size="small" sx={{ minWidth: 160 }}>
-                              <InputLabel id="neutral-mode-label">Neutral mode</InputLabel>
-                              <Select
-                                labelId="neutral-mode-label"
-                                label="Neutral mode"
-                                value={subsystemForm.leaderNeutralMode}
-                                onChange={(event) =>
-                                  setSubsystemForm((current) =>
-                                    current ? { ...current, leaderNeutralMode: event.target.value as "Brake" | "Coast" } : current
-                                  )
-                                }
-                              >
-                                <MenuItem value="Brake">Brake</MenuItem>
-                                <MenuItem value="Coast">Coast</MenuItem>
-                              </Select>
-                            </FormControl>
-                            <FormControlLabel
-                              control={
-                                <Checkbox
-                                  checked={subsystemForm.leaderReversed}
-                                  onChange={(event) =>
-                                    setSubsystemForm((current) =>
-                                      current ? { ...current, leaderReversed: event.target.checked } : current
-                                    )
-                                  }
-                                />
-                              }
-                              label="Leader reversed"
-                            />
-                            <TextField
-                              label="Acceleration"
-                              size="small"
-                              type="number"
-                              value={subsystemForm.acceleration}
-                              onChange={(event) =>
-                                setSubsystemForm((current) => (current ? { ...current, acceleration: event.target.value } : current))
-                              }
-                            />
-                          </Stack>
+                          <Divider />
 
-                          <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                            <TextField
-                              label="Sensor-to-mechanism ratio"
-                              size="small"
-                              type="number"
-                              value={subsystemForm.sensorToMechanism}
-                              onChange={(event) =>
-                                setSubsystemForm((current) =>
-                                  current ? { ...current, sensorToMechanism: event.target.value } : current
-                                )
-                              }
-                            />
-                            <TextField
-                              label="Rotor-to-sensor ratio"
-                              size="small"
-                              type="number"
-                              value={subsystemForm.rotorToSensor}
-                              onChange={(event) =>
-                                setSubsystemForm((current) => (current ? { ...current, rotorToSensor: event.target.value } : current))
-                              }
-                            />
-                            {subsystemForm.type === "position" && (
-                              <>
-                                <TextField
-                                  label="CANcoder CAN ID"
-                                  size="small"
-                                  type="number"
-                                  value={subsystemForm.cancoderId}
-                                  onChange={(event) =>
-                                    setSubsystemForm((current) =>
-                                      current ? { ...current, cancoderId: event.target.value } : current
-                                    )
-                                  }
-                                />
-                                <TextField
-                                  label="Position units"
-                                  size="small"
-                                  value={subsystemForm.positionUnits}
-                                  onChange={(event) =>
-                                    setSubsystemForm((current) =>
-                                      current ? { ...current, positionUnits: event.target.value } : current
-                                    )
-                                  }
-                                />
-                              </>
+                          <Stack spacing={1}>
+                            <Typography variant="subtitle2" color="text.secondary">
+                              Subsystem Configs
+                            </Typography>
+                            {subsystemDocument.subsystems.map((subsystem, index) => {
+                              const selected = subsystemForm?.mode === "edit" && subsystemForm.index === index;
+                              return (
+                                <Button
+                                  key={subsystem.id ?? `${subsystem.name}-${index}`}
+                                  variant={selected ? "contained" : "outlined"}
+                                  color={selected ? "primary" : "inherit"}
+                                  onClick={() => setSubsystemForm(subsystemToForm(subsystem, index))}
+                                  sx={{
+                                    justifyContent: "flex-start",
+                                    minHeight: 64,
+                                    textAlign: "left",
+                                    textTransform: "none"
+                                  }}
+                                >
+                                  <Stack spacing={0.25} sx={{ minWidth: 0 }}>
+                                    <Typography sx={{ fontWeight: 700 }}>{subsystem.name ?? "-"}</Typography>
+                                    <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                                      <Chip label={subsystem.type ?? "-"} size="small" variant={selected ? "filled" : "outlined"} />
+                                      <Typography variant="caption" sx={{ fontFamily: "monospace" }} noWrap>
+                                        {subsystem.id ?? "-"}
+                                      </Typography>
+                                    </Stack>
+                                  </Stack>
+                                </Button>
+                              );
+                            })}
+
+                            {subsystemDocument.subsystems.length === 0 && (
+                              <Typography color="text.secondary" sx={{ py: 3, textAlign: "center" }}>
+                                No subsystem configs yet.
+                              </Typography>
                             )}
-                          </Stack>
-
-                          {subsystemForm.type === "position" && (
-                            <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                              <TextField
-                                label="CANcoder magnet offset"
-                                size="small"
-                                type="number"
-                                value={subsystemForm.cancoderMagnetOffset}
-                                onChange={(event) =>
-                                  setSubsystemForm((current) =>
-                                    current ? { ...current, cancoderMagnetOffset: event.target.value } : current
-                                  )
-                                }
-                              />
-                              <TextField
-                                label="CANcoder discontinuity point"
-                                size="small"
-                                type="number"
-                                value={subsystemForm.cancoderDiscontinuityPoint}
-                                onChange={(event) =>
-                                  setSubsystemForm((current) =>
-                                    current ? { ...current, cancoderDiscontinuityPoint: event.target.value } : current
-                                  )
-                                }
-                              />
-                              <TextField
-                                label="Default position"
-                                size="small"
-                                type="number"
-                                value={subsystemForm.defaultPosition}
-                                onChange={(event) =>
-                                  setSubsystemForm((current) =>
-                                    current ? { ...current, defaultPosition: event.target.value } : current
-                                  )
-                                }
-                              />
-                            </Stack>
-                          )}
-
-                          <Stack direction="row" spacing={1}>
-                            <Button
-                              startIcon={subsystemSaving ? <CircularProgress size={18} /> : <SaveIcon />}
-                              variant="contained"
-                              onClick={saveSubsystemForm}
-                              disabled={subsystemSaving}
-                            >
-                              Save Subsystem
-                            </Button>
-                            <Button variant="outlined" onClick={() => setSubsystemForm(null)}>
-                              Cancel
-                            </Button>
                           </Stack>
                         </Stack>
                       </CardContent>
                     </Card>
-                  )}
 
-                  <TableContainer component={Paper} elevation={0} sx={{ border: 1, borderColor: "divider" }}>
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Name</TableCell>
-                          <TableCell sx={{ width: 120 }}>Type</TableCell>
-                          <TableCell sx={{ width: 220 }}>Motors</TableCell>
-                          <TableCell sx={{ width: 260 }}>PID</TableCell>
-                          <TableCell sx={{ width: 180 }}>Ratios</TableCell>
-                          <TableCell sx={{ width: 180 }}>Extra</TableCell>
-                          <TableCell sx={{ width: 150 }}>Actions</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {subsystemDocument.subsystems.map((subsystem, index) => (
-                          <TableRow key={subsystem.id ?? `${subsystem.name}-${index}`} hover>
-                            <TableCell>
-                              <Stack spacing={0.25}>
-                                <Typography sx={{ fontWeight: 700 }}>{subsystem.name ?? "-"}</Typography>
-                                <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "monospace" }}>
-                                  {subsystem.id ?? "-"}
+                    <Card variant="outlined" sx={{ minHeight: 480 }}>
+                      <CardContent>
+                        {subsystemForm ? (
+                          <Stack spacing={2}>
+                            <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ alignItems: { md: "center" } }}>
+                              <Box sx={{ flexGrow: 1 }}>
+                                <Typography variant="h6">
+                                  {subsystemForm.mode === "create" ? "Create Subsystem" : `Edit ${subsystemForm.name || "Subsystem"}`}
                                 </Typography>
-                              </Stack>
-                            </TableCell>
-                            <TableCell>
-                              <Chip label={subsystem.type ?? "-"} size="small" variant="outlined" />
-                            </TableCell>
-                            <TableCell sx={{ fontFamily: "monospace" }}>{getMotorSummary(subsystem)}</TableCell>
-                            <TableCell sx={{ fontFamily: "monospace" }}>{getPidSummary(subsystem)}</TableCell>
-                            <TableCell sx={{ fontFamily: "monospace" }}>
-                              sensor {stringifyOptional(subsystem.ratios?.sensorToMechanism)}
-                              <br />
-                              rotor {stringifyOptional(subsystem.ratios?.rotorToSensor)}
-                            </TableCell>
-                            <TableCell sx={{ fontFamily: "monospace" }}>
-                              {subsystem.type === "position"
-                                ? `CANcoder ${stringifyOptional(subsystem.cancoder?.id)}`
-                                : `accel ${stringifyOptional(subsystem.motionMagic?.acceleration)}`}
-                            </TableCell>
-                            <TableCell>
-                              <Stack direction="row" spacing={1}>
+                                <Typography variant="body2" color="text.secondary">
+                                  Save writes `powerlib-subsystems.json`; Update Code regenerates Java files.
+                                </Typography>
+                              </Box>
+                              {subsystemForm.mode === "edit" && subsystemForm.index !== null && (
                                 <Button
-                                  size="small"
-                                  startIcon={<EditIcon />}
-                                  onClick={() => setSubsystemForm(subsystemToForm(subsystem, index))}
-                                >
-                                  Edit
-                                </Button>
-                                <Button
-                                  size="small"
                                   color="error"
                                   startIcon={<DeleteIcon />}
-                                  onClick={() => void deleteSubsystem(index)}
+                                  onClick={() => void deleteSubsystem(subsystemForm.index ?? 0)}
                                   disabled={subsystemSaving}
                                 >
                                   Delete
                                 </Button>
+                              )}
+                            </Stack>
+
+                            <Divider />
+
+                            <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                              <TextField
+                                label="Subsystem name"
+                                size="small"
+                                value={subsystemForm.name}
+                                onChange={(event) =>
+                                  setSubsystemForm((current) =>
+                                    current
+                                      ? {
+                                          ...current,
+                                          name: event.target.value,
+                                          id: current.mode === "create" ? toCamelCase(event.target.value) : current.id
+                                        }
+                                      : current
+                                  )
+                                }
+                                sx={{ flexGrow: 1 }}
+                              />
+                              <TextField
+                                label="Stable ID"
+                                size="small"
+                                value={subsystemForm.id}
+                                onChange={(event) =>
+                                  setSubsystemForm((current) => (current ? { ...current, id: event.target.value } : current))
+                                }
+                                sx={{ minWidth: 220 }}
+                              />
+                              <FormControl size="small" sx={{ minWidth: 160 }}>
+                                <InputLabel id="subsystem-type-label">Type</InputLabel>
+                                <Select
+                                  labelId="subsystem-type-label"
+                                  label="Type"
+                                  value={subsystemForm.type}
+                                  onChange={(event) =>
+                                    setSubsystemForm((current) =>
+                                      current ? { ...current, type: event.target.value as "velocity" | "position" } : current
+                                    )
+                                  }
+                                >
+                                  <MenuItem value="velocity">velocity</MenuItem>
+                                  <MenuItem value="position">position</MenuItem>
+                                </Select>
+                              </FormControl>
+                            </Stack>
+
+                            <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                              <TextField
+                                label="Leader CAN ID"
+                                size="small"
+                                type="number"
+                                value={subsystemForm.leaderId}
+                                onChange={(event) =>
+                                  setSubsystemForm((current) => (current ? { ...current, leaderId: event.target.value } : current))
+                                }
+                              />
+                              <FormControl size="small" sx={{ minWidth: 160 }}>
+                                <InputLabel id="neutral-mode-label">Neutral mode</InputLabel>
+                                <Select
+                                  labelId="neutral-mode-label"
+                                  label="Neutral mode"
+                                  value={subsystemForm.leaderNeutralMode}
+                                  onChange={(event) =>
+                                    setSubsystemForm((current) =>
+                                      current ? { ...current, leaderNeutralMode: event.target.value as "Brake" | "Coast" } : current
+                                    )
+                                  }
+                                >
+                                  <MenuItem value="Brake">Brake</MenuItem>
+                                  <MenuItem value="Coast">Coast</MenuItem>
+                                </Select>
+                              </FormControl>
+                              <FormControlLabel
+                                control={
+                                  <Checkbox
+                                    checked={subsystemForm.leaderReversed}
+                                    onChange={(event) =>
+                                      setSubsystemForm((current) =>
+                                        current ? { ...current, leaderReversed: event.target.checked } : current
+                                      )
+                                    }
+                                  />
+                                }
+                                label="Leader reversed"
+                              />
+                              <TextField
+                                label="Acceleration"
+                                size="small"
+                                type="number"
+                                value={subsystemForm.acceleration}
+                                onChange={(event) =>
+                                  setSubsystemForm((current) => (current ? { ...current, acceleration: event.target.value } : current))
+                                }
+                              />
+                            </Stack>
+
+                            <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                              <TextField
+                                label="Sensor-to-mechanism ratio"
+                                size="small"
+                                type="number"
+                                value={subsystemForm.sensorToMechanism}
+                                onChange={(event) =>
+                                  setSubsystemForm((current) =>
+                                    current ? { ...current, sensorToMechanism: event.target.value } : current
+                                  )
+                                }
+                              />
+                              <TextField
+                                label="Rotor-to-sensor ratio"
+                                size="small"
+                                type="number"
+                                value={subsystemForm.rotorToSensor}
+                                onChange={(event) =>
+                                  setSubsystemForm((current) => (current ? { ...current, rotorToSensor: event.target.value } : current))
+                                }
+                              />
+                              {subsystemForm.type === "position" && (
+                                <>
+                                  <TextField
+                                    label="CANcoder CAN ID"
+                                    size="small"
+                                    type="number"
+                                    value={subsystemForm.cancoderId}
+                                    onChange={(event) =>
+                                      setSubsystemForm((current) =>
+                                        current ? { ...current, cancoderId: event.target.value } : current
+                                      )
+                                    }
+                                  />
+                                  <TextField
+                                    label="Position units"
+                                    size="small"
+                                    value={subsystemForm.positionUnits}
+                                    onChange={(event) =>
+                                      setSubsystemForm((current) =>
+                                        current ? { ...current, positionUnits: event.target.value } : current
+                                      )
+                                    }
+                                  />
+                                </>
+                              )}
+                            </Stack>
+
+                            {subsystemForm.type === "position" && (
+                              <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                                <TextField
+                                  label="CANcoder magnet offset"
+                                  size="small"
+                                  type="number"
+                                  value={subsystemForm.cancoderMagnetOffset}
+                                  onChange={(event) =>
+                                    setSubsystemForm((current) =>
+                                      current ? { ...current, cancoderMagnetOffset: event.target.value } : current
+                                    )
+                                  }
+                                />
+                                <TextField
+                                  label="CANcoder discontinuity point"
+                                  size="small"
+                                  type="number"
+                                  value={subsystemForm.cancoderDiscontinuityPoint}
+                                  onChange={(event) =>
+                                    setSubsystemForm((current) =>
+                                      current ? { ...current, cancoderDiscontinuityPoint: event.target.value } : current
+                                    )
+                                  }
+                                />
+                                <TextField
+                                  label="Default position"
+                                  size="small"
+                                  type="number"
+                                  value={subsystemForm.defaultPosition}
+                                  onChange={(event) =>
+                                    setSubsystemForm((current) =>
+                                      current ? { ...current, defaultPosition: event.target.value } : current
+                                    )
+                                  }
+                                />
                               </Stack>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                        {subsystemDocument.exists && subsystemDocument.subsystems.length === 0 && (
-                          <TableRow>
-                            <TableCell colSpan={7}>
-                              <Typography color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
-                                The subsystem JSON exists, but it does not contain any generated subsystems yet.
+                            )}
+
+                            <Stack direction="row" spacing={1}>
+                              <Button
+                                startIcon={subsystemSaving ? <CircularProgress size={18} /> : <SaveIcon />}
+                                variant="contained"
+                                onClick={saveSubsystemForm}
+                                disabled={subsystemSaving}
+                              >
+                                Save Subsystem
+                              </Button>
+                              <Button variant="outlined" onClick={() => setSubsystemForm(null)}>
+                                Cancel
+                              </Button>
+                            </Stack>
+                          </Stack>
+                        ) : (
+                          <Stack spacing={2} sx={{ alignItems: "center", justifyContent: "center", minHeight: 420, textAlign: "center" }}>
+                            <ConstructionIcon color="primary" sx={{ fontSize: 48 }} />
+                            <Box>
+                              <Typography variant="h6">Select a subsystem config</Typography>
+                              <Typography color="text.secondary">
+                                Choose a config from the sidebar or create a new subsystem.
                               </Typography>
-                            </TableCell>
-                          </TableRow>
+                            </Box>
+                          </Stack>
                         )}
-                        {!subsystemDocument.exists && (
-                          <TableRow>
-                            <TableCell colSpan={7}>
-                              <Typography color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
-                                No generated subsystems to display.
-                              </Typography>
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
+                      </CardContent>
+                    </Card>
+                  </Box>
                 </Stack>
               </CardContent>
             </Card>

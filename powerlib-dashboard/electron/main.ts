@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, shell } from "electron";
 import { execFile, spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -10,6 +10,60 @@ const __dirname = path.dirname(__filename);
 const execFileAsync = promisify(execFile);
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
+
+function createAppMenu(window: BrowserWindow) {
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(process.platform === "darwin"
+      ? [
+          {
+            label: app.name,
+            submenu: [{ role: "about" as const }, { type: "separator" as const }, { role: "quit" as const }]
+          }
+        ]
+      : []),
+    {
+      label: "File",
+      submenu: [
+        {
+          label: "Update Code",
+          click: () => window.webContents.send("powerlib:menu-update-subsystem-code")
+        },
+        {
+          label: "Update Power Tool",
+          click: () => window.webContents.send("powerlib:menu-update-power-tool")
+        },
+        { type: "separator" },
+        process.platform === "darwin" ? { role: "close" } : { role: "quit" }
+      ]
+    },
+    {
+      label: "Edit",
+      submenu: [
+        { role: "undo" },
+        { role: "redo" },
+        { type: "separator" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+        { role: "selectAll" }
+      ]
+    },
+    {
+      label: "View",
+      submenu: [{ role: "reload" }, { role: "forceReload" }, { role: "toggleDevTools" }, { type: "separator" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }]
+    },
+    {
+      label: "Window",
+      submenu: [{ role: "minimize" }, { role: "zoom" }]
+    },
+    {
+      label: "Help",
+      submenu: []
+    }
+  ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
 
 function getSubsystemJsonCandidates() {
   return Array.from(
@@ -219,7 +273,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 640,
     title: "Power Tool",
-    backgroundColor: "#f4f5f7",
+    backgroundColor: "#0f141b",
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -231,6 +285,8 @@ function createWindow() {
     shell.openExternal(url);
     return { action: "deny" };
   });
+
+  createAppMenu(window);
 
   if (isDev && process.env.VITE_DEV_SERVER_URL) {
     window.loadURL(process.env.VITE_DEV_SERVER_URL);

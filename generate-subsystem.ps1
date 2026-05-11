@@ -253,6 +253,57 @@ function Convert-MotorsToExpressions {
     return $lines
 }
 
+function Get-LeaderMotor {
+    param([Parameter(Mandatory = $true)]$Subsystem)
+
+    $motors = @($Subsystem.motors)
+    if ($motors.Count -eq 0) {
+        throw "Subsystem '$($Subsystem.name)' must have at least one motor."
+    }
+
+    $leader = $motors | Where-Object { $_.role -eq "leader" } | Select-Object -First 1
+    if ($null -eq $leader) {
+        throw "Subsystem '$($Subsystem.name)' must have one leader motor."
+    }
+
+    return $leader
+}
+
+function Convert-MotorsToConstantDeclarations {
+    param([Parameter(Mandatory = $true)]$Subsystem)
+
+    $leader = Get-LeaderMotor $Subsystem
+    $lines = @(
+        "  public static final int LEADER_MOTOR_ID = $($leader.id);",
+        "  public static final NeutralModeValue LEADER_NEUTRAL_MODE = $(Get-NeutralModeExpression $leader.neutralMode);",
+        "  public static final boolean LEADER_REVERSED = $($leader.reversed.ToString().ToLowerInvariant());"
+    )
+
+    $index = 1
+    foreach ($follower in (@($Subsystem.motors) | Where-Object { $_.role -eq "follower" })) {
+        $lines += "  public static final int FOLLOWER_${index}_MOTOR_ID = $($follower.id);"
+        $lines += "  public static final boolean FOLLOWER_${index}_REVERSED = $($follower.reversed.ToString().ToLowerInvariant());"
+        $index++
+    }
+
+    return $lines -join "`n"
+}
+
+function Convert-MotorsToConstantExpressions {
+    param([Parameter(Mandatory = $true)]$Subsystem)
+
+    $null = Get-LeaderMotor $Subsystem
+    $lines = @("MotorConfig.leader(LEADER_MOTOR_ID, LEADER_NEUTRAL_MODE, LEADER_REVERSED)")
+
+    $index = 1
+    foreach ($follower in (@($Subsystem.motors) | Where-Object { $_.role -eq "follower" })) {
+        $lines += "MotorConfig.follower(FOLLOWER_${index}_MOTOR_ID, FOLLOWER_${index}_REVERSED)"
+        $index++
+    }
+
+    return $lines
+}
+
 function New-InteractiveMotors {
     $leaderId = Prompt-Int "Leader motor CAN ID"
     $neutral = Prompt-Enum "Leader neutral mode" @("Brake", "Coast") "Brake"
@@ -389,7 +440,8 @@ function New-VelocityConstantsContent {
         [Parameter(Mandatory = $true)]$Metadata
     )
 
-    $motorList = Format-IndentedList (Convert-MotorsToExpressions $Subsystem) "              "
+    $motorConstants = Convert-MotorsToConstantDeclarations $Subsystem
+    $motorList = Format-IndentedList (Convert-MotorsToConstantExpressions $Subsystem) "              "
 
     return @"
 package frc.robot.constants;
@@ -406,22 +458,35 @@ import java.util.List;
 import java.util.Optional;
 
 public class $($Metadata.PascalName)Constants {
+$motorConstants
+  public static final double KP = $($Subsystem.pid.kP);
+  public static final double KI = $($Subsystem.pid.kI);
+  public static final double KD = $($Subsystem.pid.kD);
+  public static final double KG = $($Subsystem.pid.kG);
+  public static final Optional<Double> KS = $(Get-OptionalDoubleExpression $Subsystem.pid.kS);
+  public static final Optional<Double> KV = $(Get-OptionalDoubleExpression $Subsystem.pid.kV);
+  public static final Optional<Double> KA = $(Get-OptionalDoubleExpression $Subsystem.pid.kA);
+  public static final double SENSOR_TO_MECHANISM_RATIO = $($Subsystem.ratios.sensorToMechanism);
+  public static final double ROTOR_TO_SENSOR_RATIO = $($Subsystem.ratios.rotorToSensor);
+  public static final double MOTION_MAGIC_ACCELERATION = $($Subsystem.motionMagic.acceleration);
+  public static final String NAME = "$($Metadata.PascalName)";
+
   public static final VelocitySubsystemConfig $($Metadata.ConfigConstantName) =
       new VelocitySubsystemConfig(
           List.of(
 $motorList),
           new LeadMotorConfig(
-              $($Subsystem.pid.kP),
-              $($Subsystem.pid.kI),
-              $($Subsystem.pid.kD),
-              $($Subsystem.pid.kG),
-              $(Get-OptionalDoubleExpression $Subsystem.pid.kS),
-              $(Get-OptionalDoubleExpression $Subsystem.pid.kV),
-              $(Get-OptionalDoubleExpression $Subsystem.pid.kA),
-              $($Subsystem.ratios.sensorToMechanism),
-              $($Subsystem.ratios.rotorToSensor)),
-          MotionMagicConfig.forVelocity($($Subsystem.motionMagic.acceleration)),
-          "$($Metadata.PascalName)");
+              KP,
+              KI,
+              KD,
+              KG,
+              KS,
+              KV,
+              KA,
+              SENSOR_TO_MECHANISM_RATIO,
+              ROTOR_TO_SENSOR_RATIO),
+          MotionMagicConfig.forVelocity(MOTION_MAGIC_ACCELERATION),
+          NAME);
 
 $CustomConstantsStartMarker
 $CustomConstantsEndMarker
@@ -435,7 +500,8 @@ function New-PositionConstantsContent {
         [Parameter(Mandatory = $true)]$Metadata
     )
 
-    $motorList = Format-IndentedList (Convert-MotorsToExpressions $Subsystem) "              "
+    $motorConstants = Convert-MotorsToConstantDeclarations $Subsystem
+    $motorList = Format-IndentedList (Convert-MotorsToConstantExpressions $Subsystem) "              "
 
     return @"
 package frc.robot.constants;
@@ -453,25 +519,44 @@ import java.util.List;
 import java.util.Optional;
 
 public class $($Metadata.PascalName)Constants {
+$motorConstants
+  public static final double KP = $($Subsystem.pid.kP);
+  public static final double KI = $($Subsystem.pid.kI);
+  public static final double KD = $($Subsystem.pid.kD);
+  public static final double KG = $($Subsystem.pid.kG);
+  public static final Optional<Double> KS = $(Get-OptionalDoubleExpression $Subsystem.pid.kS);
+  public static final Optional<Double> KV = $(Get-OptionalDoubleExpression $Subsystem.pid.kV);
+  public static final Optional<Double> KA = $(Get-OptionalDoubleExpression $Subsystem.pid.kA);
+  public static final double SENSOR_TO_MECHANISM_RATIO = $($Subsystem.ratios.sensorToMechanism);
+  public static final double ROTOR_TO_SENSOR_RATIO = $($Subsystem.ratios.rotorToSensor);
+  public static final int CANCODER_ID = $($Subsystem.cancoder.id);
+  public static final double CANCODER_MAGNET_OFFSET = $($Subsystem.cancoder.magnetOffset);
+  public static final double CANCODER_DISCONTINUITY_POINT = $($Subsystem.cancoder.discontinuityPoint);
+  public static final double MOTION_MAGIC_CRUISE_VELOCITY = $($Subsystem.motionMagic.cruiseVelocity);
+  public static final double MOTION_MAGIC_ACCELERATION = $($Subsystem.motionMagic.acceleration);
+  public static final String NAME = "$($Metadata.PascalName)";
+  public static final String POSITION_UNITS = "$($Subsystem.position.units)";
+  public static final Optional<Double> DEFAULT_POSITION = $(Get-OptionalDoubleExpression $Subsystem.position.default);
+
   public static final PositionSubsystemConfig $($Metadata.ConfigConstantName) =
       new PositionSubsystemConfig(
           List.of(
 $motorList),
           new LeadMotorConfig(
-              $($Subsystem.pid.kP),
-              $($Subsystem.pid.kI),
-              $($Subsystem.pid.kD),
-              $($Subsystem.pid.kG),
-              $(Get-OptionalDoubleExpression $Subsystem.pid.kS),
-              $(Get-OptionalDoubleExpression $Subsystem.pid.kV),
-              $(Get-OptionalDoubleExpression $Subsystem.pid.kA),
-              $($Subsystem.ratios.sensorToMechanism),
-              $($Subsystem.ratios.rotorToSensor)),
-          new CancoderConfig($($Subsystem.cancoder.id), $($Subsystem.cancoder.magnetOffset), $($Subsystem.cancoder.discontinuityPoint)),
-          new MotionMagicConfig($($Subsystem.motionMagic.cruiseVelocity), $($Subsystem.motionMagic.acceleration)),
-          "$($Metadata.PascalName)",
-          "$($Subsystem.position.units)",
-          $(Get-OptionalDoubleExpression $Subsystem.position.default));
+              KP,
+              KI,
+              KD,
+              KG,
+              KS,
+              KV,
+              KA,
+              SENSOR_TO_MECHANISM_RATIO,
+              ROTOR_TO_SENSOR_RATIO),
+          new CancoderConfig(CANCODER_ID, CANCODER_MAGNET_OFFSET, CANCODER_DISCONTINUITY_POINT),
+          new MotionMagicConfig(MOTION_MAGIC_CRUISE_VELOCITY, MOTION_MAGIC_ACCELERATION),
+          NAME,
+          POSITION_UNITS,
+          DEFAULT_POSITION);
 
 $CustomConstantsStartMarker
 $CustomConstantsEndMarker

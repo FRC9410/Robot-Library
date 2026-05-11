@@ -6,11 +6,21 @@ import "./styles.css";
 
 const theme = createTheme({
   palette: {
+    mode: "dark",
     primary: {
-      main: "#2358c4"
+      main: "#7aa2ff"
+    },
+    secondary: {
+      main: "#7dd3c7"
     },
     background: {
-      default: "#f4f5f7"
+      default: "#0f141b",
+      paper: "#171d26"
+    },
+    divider: "rgba(255, 255, 255, 0.14)",
+    text: {
+      primary: "#edf2f7",
+      secondary: "#aeb8c5"
     }
   },
   shape: {
