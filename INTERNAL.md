@@ -277,7 +277,7 @@ Add hand-written constants between those markers. Updates preserve that block wh
 Each JSON subsystem has a stable `id`. To rename a subsystem, change its `name` but keep its `id` the same. The update flow uses that id to carry custom constants from the old generated constants file to the renamed one.
 ## Build Check
 
-By default, the installer runs the robot project's `build` task after installing files and vendordeps. To skip that build check, add this flag:
+By default, the installer runs the robot project's `build` task in a fresh Gradle process after installing files and vendordeps. This fresh process is important because Gradle configures WPILib vendordeps before installer tasks run. To skip that build check, add this flag:
 
 ```powershell
 -PpowerlibSkipBuild=true

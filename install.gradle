@@ -311,6 +311,23 @@ def runCommand = { File workingDirectory, List<String> command ->
     }
 }
 
+def runRobotBuild = { Project project ->
+    boolean isWindowsHost = System.getProperty('os.name').toLowerCase().contains('windows')
+    File gradleWrapper = project.file(isWindowsHost ? 'gradlew.bat' : 'gradlew')
+    if (!gradleWrapper.exists()) {
+        logger.lifecycle('Skipped build because no Gradle wrapper was found.')
+        return
+    }
+
+    logger.lifecycle('Running fresh robot build after install...')
+    runCommand(project.rootDir, [
+        gradleWrapper.absolutePath,
+        '--no-daemon',
+        '--console=plain',
+        'build'
+    ])
+}
+
 
 def backupExistingFile = { File destination ->
     if (!destination.exists()) {
@@ -487,9 +504,6 @@ def installVendorDependency = { Project project, VendorDependency dependency, bo
 gradle.projectsLoaded {
     rootProject {
         tasks.register('robotLibraryInstall') {
-            if (!findBooleanProperty(project, skipBuildPropertyName, false)) {
-                finalizedBy('build')
-            }
             group = 'robot library'
             description = 'Installs Team 9410 PowerLib starter files into this robot project.'
 
@@ -565,6 +579,10 @@ gradle.projectsLoaded {
 
 
                 logger.lifecycle('PowerLib install complete')
+
+                if (!findBooleanProperty(project, skipBuildPropertyName, false)) {
+                    runRobotBuild(project)
+                }
             }
         }
     }
