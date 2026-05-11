@@ -18,6 +18,8 @@ public class RobotContainer implements PowerRobotContainer {
   private final PowerDashboard powerDashboard = new PowerDashboard(stateMachine);
   private final CommandXboxController driverController =
       new CommandXboxController(Constants.OI.DRIVER_CONTROLLER_PORT);
+  private final CommandXboxController operatorController =
+      new CommandXboxController(Constants.OI.OPERATOR_CONTROLLER_PORT);
 
   public RobotContainer() {
     configureBindings();
@@ -25,7 +27,9 @@ public class RobotContainer implements PowerRobotContainer {
         new SwerveDriveCommand(stateMachine.drivetrain, driverController));
   }
 
-  private void configureBindings() {}
+  private void configureBindings() {
+    PowerButtonBindings.configure(driverController, operatorController, stateMachine);
+  }
 
   public Command getAutonomousCommand() {
     return Commands.print("No autonomous command configured");

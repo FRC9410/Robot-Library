@@ -187,6 +187,11 @@ def templateFiles = [
         replacement: true
     ),
     new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/PowerButtonBindings.java',
+        destination: 'src/main/java/frc/robot/PowerButtonBindings.java',
+        replacement: true
+    ),
+    new TemplateFile(
         source: 'replacements/src/main/java/frc/robot/subsystems/LED.java',
         destination: 'src/main/java/frc/robot/subsystems/LED.java',
         replacement: true

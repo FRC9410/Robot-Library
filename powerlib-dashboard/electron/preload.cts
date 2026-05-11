@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld("powerlib", {
   platform: process.platform,
   readSubsystems: () => ipcRenderer.invoke("powerlib:read-subsystems"),
   saveSubsystems: (subsystems: unknown[]) => ipcRenderer.invoke("powerlib:save-subsystems", subsystems),
+  readBindings: () => ipcRenderer.invoke("powerlib:read-bindings"),
+  saveBindings: (bindings: unknown[]) => ipcRenderer.invoke("powerlib:save-bindings", bindings),
   updateSubsystemCode: () => ipcRenderer.invoke("powerlib:update-subsystem-code"),
   updatePowerTool: () => ipcRenderer.invoke("powerlib:update-power-tool"),
   onMenuConnectionSettings: (callback: () => void) => {

@@ -15,6 +15,17 @@ declare global {
         path: string;
         subsystems: unknown[];
       }>;
+      readBindings: () => Promise<{
+        exists: boolean;
+        path: string;
+        bindings: unknown[];
+        error?: string;
+      }>;
+      saveBindings: (bindings: unknown[]) => Promise<{
+        exists: boolean;
+        path: string;
+        bindings: unknown[];
+      }>;
       updateSubsystemCode: () => Promise<{
         stdout: string;
         stderr: string;

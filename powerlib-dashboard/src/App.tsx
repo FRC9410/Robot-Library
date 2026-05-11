@@ -17,6 +17,7 @@ import CableIcon from "@mui/icons-material/Cable";
 import ConstructionIcon from "@mui/icons-material/Construction";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import ElectricBoltIcon from "@mui/icons-material/ElectricBolt";
+import GamepadIcon from "@mui/icons-material/Gamepad";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import type {
   CharacterizationCommand,
@@ -41,6 +42,7 @@ import { NetworkTablesPanel } from "./features/networktables/NetworkTablesPanel"
 import { NetworkTablesProvider, useNetworkTables } from "./features/networktables/NetworkTablesContext";
 import { ConnectionSettingsDialog } from "./features/networktables/ConnectionSettingsDialog";
 import { RobotPanel } from "./features/robot/RobotPanel";
+import { BindingsPanel } from "./features/bindings/BindingsPanel";
 import type { AppView } from "./types/app";
 
 type ToastState = {
@@ -350,7 +352,11 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    if ((activeView === "robot" || activeView === "subsystems") && !subsystemDocument.loading && !subsystemDocument.path) {
+    if (
+      (activeView === "robot" || activeView === "subsystems" || activeView === "bindings") &&
+      !subsystemDocument.loading &&
+      !subsystemDocument.path
+    ) {
       void loadSubsystems();
     }
   }, [activeView, subsystemDocument.loading, subsystemDocument.path]);
@@ -427,6 +433,13 @@ function AppContent() {
               iconPosition="start"
               label="Subsystems"
               value="subsystems"
+              sx={{ minHeight: 44 }}
+            />
+            <Tab
+              icon={<GamepadIcon />}
+              iconPosition="start"
+              label="Bindings"
+              value="bindings"
               sx={{ minHeight: 44 }}
             />
             <Tab
@@ -525,6 +538,10 @@ function AppContent() {
                   watchCharacterizationPrefix();
                 }}
               />
+          )}
+
+          {activeView === "bindings" && (
+            <BindingsPanel subsystems={subsystemDocument.subsystems} onToast={showToast} />
           )}
         </Stack>
       </Container>
