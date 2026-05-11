@@ -1,0 +1,76 @@
+export type GeneratedMotor = {
+  role?: string;
+  id?: number;
+  motorType?: string;
+  neutralMode?: string;
+  reversed?: boolean;
+};
+
+export type SubsystemFormMotor = {
+  role: "leader" | "follower";
+  id: string;
+  motorType: string;
+  reversed: boolean;
+};
+
+export type GeneratedSubsystem = {
+  id?: string;
+  name?: string;
+  type?: string;
+  motors?: GeneratedMotor[];
+  pid?: Record<string, number | string | null>;
+  ratios?: {
+    sensorToMechanism?: number | string;
+    rotorToSensor?: number | string;
+  };
+  motionMagic?: Record<string, number | string | null>;
+  cancoder?: {
+    id?: number;
+    magnetOffset?: number | string;
+    discontinuityPoint?: number | string;
+  };
+  position?: {
+    units?: string;
+    default?: number | string | null;
+  };
+};
+
+export type SubsystemDocumentState = {
+  loading: boolean;
+  exists: boolean;
+  path: string;
+  subsystems: GeneratedSubsystem[];
+  error: string | null;
+};
+
+export type SubsystemFormState = {
+  mode: "create" | "edit";
+  index: number | null;
+  id: string;
+  name: string;
+  type: "velocity" | "position";
+  neutralMode: "Brake" | "Coast";
+  motors: SubsystemFormMotor[];
+  sensorToMechanism: string;
+  rotorToSensor: string;
+  kP: string;
+  kI: string;
+  kD: string;
+  kG: string;
+  kS: string;
+  kV: string;
+  kA: string;
+  cruiseVelocity: string;
+  acceleration: string;
+  cancoderId: string;
+  cancoderMagnetOffset: string;
+  cancoderDiscontinuityPoint: string;
+  positionUnits: string;
+  defaultPosition: string;
+};
+
+export type CharacterizationCommand = {
+  label: string;
+  baseTopic: string;
+  running: boolean;
+};
