@@ -42,6 +42,7 @@ import DashboardIcon from "@mui/icons-material/Dashboard";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ElectricBoltIcon from "@mui/icons-material/ElectricBolt";
 import InsightsIcon from "@mui/icons-material/Insights";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SaveIcon from "@mui/icons-material/Save";
 import SendIcon from "@mui/icons-material/Send";
@@ -139,6 +140,12 @@ type ToastState = {
   open: boolean;
   message: string;
   severity: "success" | "error" | "info" | "warning";
+};
+
+type CharacterizationCommand = {
+  label: string;
+  baseTopic: string;
+  running: boolean;
 };
 
 const targetPresets: TargetPreset[] = [
@@ -333,6 +340,15 @@ function stringifyOptional(value: unknown) {
   return value === null || value === undefined || value === "" ? "-" : String(value);
 }
 
+function getCharacterizationName(value: string) {
+  return value
+    .trim()
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join("");
+}
+
 function getMotorSummary(subsystem: GeneratedSubsystem) {
   const motors = subsystem.motors ?? [];
   if (motors.length === 0) {
@@ -434,6 +450,29 @@ export function App() {
       .filter((topic) => !normalizedSearch || topic.name.toLowerCase().includes(normalizedSearch))
       .sort((left, right) => left.name.localeCompare(right.name));
   }, [topics, search]);
+
+  const characterizationCommands = useMemo<CharacterizationCommand[]>(() => {
+    if (!subsystemForm?.name) {
+      return [];
+    }
+
+    const characterizationName = getCharacterizationName(subsystemForm.name);
+    const prefix = `/SmartDashboard/PowerLib/Characterization/${characterizationName}/`;
+    return topics
+      .filter((topic) => topic.name.startsWith(prefix) && topic.name.endsWith("/.type") && topic.value === "Command")
+      .map((topic) => {
+        const baseTopic = topic.name.slice(0, -"/.type".length);
+        const label = baseTopic.slice(prefix.length);
+        const runningTopic = topics.find((candidate) => candidate.name === `${baseTopic}/running`);
+
+        return {
+          label,
+          baseTopic,
+          running: runningTopic?.value === true
+        };
+      })
+      .sort((left, right) => left.label.localeCompare(right.label));
+  }, [subsystemForm?.name, topics]);
 
   function showToast(message: string, severity: ToastState["severity"] = "info") {
     setToast({
@@ -675,6 +714,14 @@ export function App() {
     }
   }
 
+  function watchCharacterizationPrefix() {
+    if (!subsystemForm?.name) {
+      return;
+    }
+
+    watchPrefix(`/SmartDashboard/PowerLib/Characterization/${getCharacterizationName(subsystemForm.name)}/`);
+  }
+
   function connect() {
     setError(null);
     setStatus("connecting");
@@ -723,6 +770,18 @@ export function App() {
       upsertTopic({ name: topicName, type: topicType, value });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not publish topic.");
+    }
+  }
+
+  function runCharacterizationCommand(command: CharacterizationCommand) {
+    setError(null);
+
+    try {
+      clientRef.current.publish(`${command.baseTopic}/running`, "boolean", true);
+      upsertTopic({ name: `${command.baseTopic}/running`, type: "boolean", value: true });
+      showToast(`Started ${command.label}.`, "success");
+    } catch (caught) {
+      showToast(caught instanceof Error ? caught.message : "Could not start characterization command.", "error");
     }
   }
 
@@ -812,9 +871,31 @@ export function App() {
         </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
-            <Alert severity="info" variant="outlined">
-              Characterization controls will be added here for this subsystem.
-            </Alert>
+            {status !== "connected" && (
+              <Alert severity="warning" variant="outlined">
+                Connect to NetworkTables to run characterization commands.
+              </Alert>
+            )}
+            {status === "connected" && characterizationCommands.length === 0 && (
+              <Alert severity="info" variant="outlined">
+                No characterization commands found yet. Make sure robot code is running and code was updated after
+                creating this velocity subsystem.
+              </Alert>
+            )}
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ flexWrap: "wrap" }}>
+              {characterizationCommands.map((command) => (
+                <Button
+                  key={command.baseTopic}
+                  startIcon={<PlayArrowIcon />}
+                  variant="contained"
+                  onClick={() => runCharacterizationCommand(command)}
+                  disabled={status !== "connected" || command.running}
+                  sx={{ minWidth: 210 }}
+                >
+                  {command.running ? `${command.label} running` : command.label}
+                </Button>
+              ))}
+            </Stack>
             <Typography variant="body2" color="text.secondary">
               This dialog stays open until you close it.
             </Typography>
@@ -1171,7 +1252,10 @@ export function App() {
                                 <Button
                                   startIcon={<InsightsIcon />}
                                   variant="outlined"
-                                  onClick={() => setCharacterizationOpen(true)}
+                                  onClick={() => {
+                                    setCharacterizationOpen(true);
+                                    watchCharacterizationPrefix();
+                                  }}
                                 >
                                   Characterization
                                 </Button>
