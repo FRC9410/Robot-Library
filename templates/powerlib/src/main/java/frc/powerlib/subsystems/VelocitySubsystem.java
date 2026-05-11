@@ -12,16 +12,22 @@ import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.signals.NeutralModeValue;
 
+import edu.wpi.first.wpilibj.RobotBase;
 import frc.powerlib.PowerRobotContainer;
 import frc.powerlib.configs.LeadMotorConfig;
 import frc.powerlib.configs.MotionMagicConfig;
 import frc.powerlib.configs.VelocitySubsystemConfig;
+import frc.powerlib.subsystems.io.VelocitySubsystemIO;
+import frc.powerlib.subsystems.io.VelocitySubsystemIOReal;
+import frc.powerlib.subsystems.io.VelocitySubsystemIOSim;
 
 
 public class VelocitySubsystem extends PowerSubsystem {
 
   /** Primary velocity-controlled motor; set in subclass after init. */
   protected TalonFX velocityMotor;
+  public final VelocitySubsystemIO.Inputs inputs = new VelocitySubsystemIO.Inputs();
+  private final VelocitySubsystemIO io;
   private String subsystemName;
   private static final NeutralOut brake = new NeutralOut();
   /**
@@ -31,6 +37,10 @@ public class VelocitySubsystem extends PowerSubsystem {
    * @param config single config containing motor configs, lead, motion magic, and name
    */
   public VelocitySubsystem(VelocitySubsystemConfig config) {
+    this(config, null);
+  }
+
+  public VelocitySubsystem(VelocitySubsystemConfig config, VelocitySubsystemIO io) {
     super(config.motorConfigs(), config.subsystemName());
     TalonFX leader = getLeaderMotor();
     if (leader != null) {
@@ -38,10 +48,16 @@ public class VelocitySubsystem extends PowerSubsystem {
       this.velocityMotor = leader;
     }
     this.subsystemName = config.subsystemName();
+    this.io = io == null ? createDefaultIO() : io;
+  }
+
+  private VelocitySubsystemIO createDefaultIO() {
+    return RobotBase.isSimulation() ? new VelocitySubsystemIOSim() : new VelocitySubsystemIOReal(this);
   }
 
   @Override
   public void periodic() {
+    io.updateInputs(inputs);
     SignalLogger.writeDouble(subsystemName + " Velocity", getLeaderMotor().getRotorVelocity().getValueAsDouble(), "rotations per second");
     PowerRobotContainer.setData(subsystemName + "Velocity", getLeaderMotor().getRotorVelocity().getValueAsDouble());
   }

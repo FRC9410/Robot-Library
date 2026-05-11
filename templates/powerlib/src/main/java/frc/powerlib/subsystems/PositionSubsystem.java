@@ -18,11 +18,15 @@ import com.ctre.phoenix6.signals.FeedbackSensorSourceValue;
 import com.ctre.phoenix6.signals.NeutralModeValue;
 import com.ctre.phoenix6.signals.SensorDirectionValue;
 import com.ctre.phoenix6.CANBus;
+import edu.wpi.first.wpilibj.RobotBase;
 import frc.powerlib.PowerRobotContainer;
 import frc.powerlib.configs.CancoderConfig;
 import frc.powerlib.configs.LeadMotorConfig;
 import frc.powerlib.configs.MotionMagicConfig;
 import frc.powerlib.configs.PositionSubsystemConfig;
+import frc.powerlib.subsystems.io.PositionSubsystemIO;
+import frc.powerlib.subsystems.io.PositionSubsystemIOReal;
+import frc.powerlib.subsystems.io.PositionSubsystemIOSim;
 
 import java.util.Optional;
 
@@ -32,6 +36,8 @@ public class PositionSubsystem extends PowerSubsystem {
 
   /** Primary position-controlled motor (with fused CANcoder from config constructor). */
   protected TalonFX positionMotor;
+  public final PositionSubsystemIO.Inputs inputs = new PositionSubsystemIO.Inputs();
+  private final PositionSubsystemIO io;
   private String subsystemName;
   private String units;
 
@@ -45,6 +51,10 @@ public class PositionSubsystem extends PowerSubsystem {
    * @param config single config containing motor configs, lead, CANcoder, motion magic, name, and units
    */
   public PositionSubsystem(PositionSubsystemConfig config) {
+    this(config, null);
+  }
+
+  public PositionSubsystem(PositionSubsystemConfig config, PositionSubsystemIO io) {
     super(config.motorConfigs(), config.subsystemName());
     TalonFX leader = getLeaderMotor();
     if (leader != null) {
@@ -54,10 +64,16 @@ public class PositionSubsystem extends PowerSubsystem {
     this.subsystemName = config.subsystemName();
     this.units = config.units();
     this.setpointRotations = config.defaultPosition().orElseGet(() -> leader != null ? leader.getPosition().getValueAsDouble() : 0.0);
+    this.io = io == null ? createDefaultIO() : io;
+  }
+
+  private PositionSubsystemIO createDefaultIO() {
+    return RobotBase.isSimulation() ? new PositionSubsystemIOSim() : new PositionSubsystemIOReal(this);
   }
 
   @Override
   public void periodic() {
+    io.updateInputs(inputs);
     SignalLogger.writeDouble(subsystemName + " Position", getLeaderMotor().getPosition().getValueAsDouble(), units);
     PowerRobotContainer.setData(subsystemName + "Position", getLeaderMotor().getPosition().getValueAsDouble());
   }

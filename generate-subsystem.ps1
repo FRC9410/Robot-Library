@@ -917,9 +917,6 @@ function Remove-DeletedGeneratedFiles {
     param([Parameter(Mandatory = $true)]$Subsystems)
 
     $constantsDir = Join-Path (Get-Location) "src/main/java/frc/robot/constants"
-    if (-not (Test-Path $constantsDir)) {
-        return
-    }
 
     $wantedFiles = @{}
     foreach ($subsystem in @($Subsystems)) {
@@ -927,11 +924,39 @@ function Remove-DeletedGeneratedFiles {
         $wantedFiles["$($metadata.PascalName)Constants.java"] = $true
     }
 
-    Get-ChildItem -Path $constantsDir -Filter "*Constants.java" -File | ForEach-Object {
-        $content = Get-Content -Path $_.FullName -Raw
-        if ($content.Contains($GeneratedFileMarker) -and -not $wantedFiles.ContainsKey($_.Name)) {
-            Remove-Item -LiteralPath $_.FullName -Force
-            Write-Host "Deleted removed subsystem constants $($_.Name)"
+    if (Test-Path $constantsDir) {
+        Get-ChildItem -Path $constantsDir -Filter "*Constants.java" -File | ForEach-Object {
+            $content = Get-Content -Path $_.FullName -Raw
+            if ($content.Contains($GeneratedFileMarker) -and -not $wantedFiles.ContainsKey($_.Name)) {
+                Remove-Item -LiteralPath $_.FullName -Force
+                Write-Host "Deleted removed subsystem constants $($_.Name)"
+            }
+        }
+    }
+
+    Remove-LegacyGeneratedSubsystemFiles
+}
+
+function Remove-LegacyGeneratedSubsystemFiles {
+    $subsystemsDir = Join-Path (Get-Location) "src/main/java/frc/robot/subsystems"
+    if (Test-Path $subsystemsDir) {
+        Get-ChildItem -Path $subsystemsDir -Filter "*.java" -File | ForEach-Object {
+            $content = Get-Content -Path $_.FullName -Raw
+            if ($content.Contains($GeneratedFileMarker)) {
+                Remove-Item -LiteralPath $_.FullName -Force
+                Write-Host "Deleted legacy generated subsystem $($_.Name)"
+            }
+        }
+    }
+
+    $ioDir = Join-Path $subsystemsDir "io"
+    if (Test-Path $ioDir) {
+        Get-ChildItem -Path $ioDir -Filter "*.java" -File | ForEach-Object {
+            $content = Get-Content -Path $_.FullName -Raw
+            if ($content.Contains($GeneratedFileMarker)) {
+                Remove-Item -LiteralPath $_.FullName -Force
+                Write-Host "Deleted legacy generated subsystem IO $($_.Name)"
+            }
         }
     }
 }
