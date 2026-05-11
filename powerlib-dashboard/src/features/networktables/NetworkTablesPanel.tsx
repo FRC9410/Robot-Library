@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
@@ -6,27 +6,23 @@ import {
   Card,
   CardContent,
   Chip,
+  Collapse,
   Divider,
   FormControl,
+  IconButton,
   InputLabel,
   MenuItem,
-  Paper,
   Select,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Typography
 } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
 import CableIcon from "@mui/icons-material/Cable";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SendIcon from "@mui/icons-material/Send";
-import type { NtPrimitive, NtTopicType } from "../../networktables/nt4Client";
+import type { NtPrimitive, NtTopicSnapshot, NtTopicType } from "../../networktables/nt4Client";
 import { stringifyValue } from "../subsystems/subsystemUtils";
 import { useNetworkTables } from "./NetworkTablesContext";
 
@@ -35,6 +31,13 @@ type TargetPreset = {
   label: string;
   host: string;
   port: number;
+};
+
+type TopicTreeNode = {
+  name: string;
+  path: string;
+  children: TopicTreeNode[];
+  topic?: NtTopicSnapshot;
 };
 
 const targetPresets: TargetPreset[] = [
@@ -52,25 +55,125 @@ const defaultTopics = [
   { name: "/SmartDashboard/PowerLib/Mode", type: "string" as const, value: "idle" }
 ];
 
-const defaultPrefixes = ["/SmartDashboard/", "/Shuffleboard/", "/LiveWindow/", "/FMSInfo/"];
+function createTree(topics: NtTopicSnapshot[], search: string) {
+  const normalizedSearch = search.trim().toLowerCase();
+  const root: TopicTreeNode = { name: "/", path: "/", children: [] };
+
+  [...topics]
+    .filter((topic) => !normalizedSearch || topic.name.toLowerCase().includes(normalizedSearch))
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .forEach((topic) => {
+      const segments = topic.name.split("/").filter(Boolean);
+      let current = root;
+
+      segments.forEach((segment, index) => {
+        const path = `/${segments.slice(0, index + 1).join("/")}`;
+        let child = current.children.find((item) => item.name === segment);
+        if (!child) {
+          child = { name: segment, path, children: [] };
+          current.children.push(child);
+        }
+
+        current = child;
+      });
+
+      current.topic = topic;
+    });
+
+  return root;
+}
+
+function collectDefaultExpanded(node: TopicTreeNode, expanded: Set<string>) {
+  if (node.children.length > 0) {
+    expanded.add(node.path);
+  }
+
+  node.children.forEach((child) => collectDefaultExpanded(child, expanded));
+}
+
+type TopicTreeProps = {
+  node: TopicTreeNode;
+  depth?: number;
+  expandedPaths: Set<string>;
+  onToggle: (path: string) => void;
+};
+
+function TopicTree({ node, depth = 0, expandedPaths, onToggle }: TopicTreeProps) {
+  const hasChildren = node.children.length > 0;
+  const expanded = expandedPaths.has(node.path);
+
+  return (
+    <Box>
+      {node.path !== "/" && (
+        <Box
+          sx={{
+            alignItems: "center",
+            borderBottom: "1px solid",
+            borderColor: "divider",
+            display: "grid",
+            gap: 1,
+            gridTemplateColumns: "32px minmax(180px, 1fr) 120px minmax(180px, 0.8fr)",
+            minHeight: 42,
+            pl: `${depth * 18}px`,
+            pr: 1
+          }}
+        >
+          <Box>
+            {hasChildren && (
+              <IconButton size="small" onClick={() => onToggle(node.path)} aria-label={expanded ? "Collapse" : "Expand"}>
+                {expanded ? <ExpandMoreIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
+              </IconButton>
+            )}
+          </Box>
+          <Typography sx={{ fontFamily: node.topic ? "monospace" : "inherit", fontWeight: hasChildren ? 700 : 500 }}>
+            {node.name}
+          </Typography>
+          <Box>{node.topic && <Chip label={node.topic.type} size="small" variant="outlined" />}</Box>
+          <Typography sx={{ fontFamily: "monospace", overflowWrap: "anywhere" }}>
+            {node.topic ? stringifyValue(node.topic.value) : ""}
+          </Typography>
+        </Box>
+      )}
+
+      {hasChildren && (
+        <Collapse in={node.path === "/" || expanded} timeout="auto" unmountOnExit>
+          {node.children.map((child) => (
+            <TopicTree key={child.path} node={child} depth={depth + 1} expandedPaths={expandedPaths} onToggle={onToggle} />
+          ))}
+        </Collapse>
+      )}
+    </Box>
+  );
+}
 
 export function NetworkTablesPanel() {
   const { clientRef, status, setStatus, topics, setTopics, setError, upsertTopic } = useNetworkTables();
   const [targetId, setTargetId] = useState("sim-localhost");
   const [host, setHost] = useState("localhost");
   const [port, setPort] = useState(5810);
-  const [watchedPrefixes, setWatchedPrefixes] = useState<string[]>(["/SmartDashboard/"]);
-  const [prefixInput, setPrefixInput] = useState("/SmartDashboard/");
   const [search, setSearch] = useState("");
   const [topicName, setTopicName] = useState("/SmartDashboard/PowerLib/TargetRPM");
   const [topicType, setTopicType] = useState<NtTopicType>("double");
   const [topicValue, setTopicValue] = useState("0");
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(["/"]));
 
-  const sortedTopics = useMemo(() => {
+  const topicTree = useMemo(() => {
+    return createTree(topics, search);
+  }, [topics, search]);
+
+  useEffect(() => {
+    if (!search.trim()) {
+      return;
+    }
+
+    const expanded = new Set<string>();
+    collectDefaultExpanded(topicTree, expanded);
+    setExpandedPaths(expanded);
+  }, [search, topicTree]);
+
+  const visibleTopicCount = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
-    return [...topics]
-      .filter((topic) => !normalizedSearch || topic.name.toLowerCase().includes(normalizedSearch))
-      .sort((left, right) => left.name.localeCompare(right.name));
+    return topics.filter((topic) => !normalizedSearch || topic.name.toLowerCase().includes(normalizedSearch)).length;
   }, [topics, search]);
 
   function setPreset(id: string) {
@@ -82,27 +185,18 @@ export function NetworkTablesPanel() {
     }
   }
 
-  function watchPrefix(prefix: string) {
-    const normalized = prefix.endsWith("/") ? prefix : `${prefix}/`;
-    if (!watchedPrefixes.includes(normalized)) {
-      setWatchedPrefixes((current) => [...current, normalized]);
-    }
-
-    if (status === "connected" || status === "connecting") {
-      clientRef.current.watchPrefix(normalized, upsertTopic);
-    }
-  }
-
   function connect() {
     setError(null);
     setStatus("connecting");
+    setTopics([]);
+    setExpandedPaths(new Set(["/"]));
 
     try {
       clientRef.current.connect(host, port, (connected) => {
         setStatus(connected ? "connected" : "disconnected");
       });
 
-      watchedPrefixes.forEach((prefix) => clientRef.current.watchPrefix(prefix, upsertTopic));
+      clientRef.current.watchPrefix("/", upsertTopic);
       defaultTopics.forEach((topic) => {
         clientRef.current.subscribe(topic.name, topic.type, topic.value, upsertTopic);
       });
@@ -116,6 +210,7 @@ export function NetworkTablesPanel() {
     clientRef.current.disconnect();
     setStatus("idle");
     setTopics([]);
+    setExpandedPaths(new Set(["/"]));
   }
 
   function parseValue(): NtPrimitive {
@@ -144,99 +239,65 @@ export function NetworkTablesPanel() {
     }
   }
 
+  function togglePath(path: string) {
+    setExpandedPaths((current) => {
+      const next = new Set(current);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }
+
   return (
     <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "360px 1fr" } }}>
-      <Stack spacing={2}>
-        <Card variant="outlined">
-          <CardContent>
-            <Stack spacing={2}>
-              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                <CableIcon color="primary" />
-                <Typography variant="h6">NetworkTables Target</Typography>
-              </Stack>
-
-              <FormControl fullWidth size="small">
-                <InputLabel id="target-preset-label">Target</InputLabel>
-                <Select
-                  labelId="target-preset-label"
-                  label="Target"
-                  value={targetId}
-                  onChange={(event) => setPreset(event.target.value)}
-                >
-                  {targetPresets.map((preset) => (
-                    <MenuItem key={preset.id} value={preset.id}>
-                      {preset.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-
-              <TextField
-                label="Host"
-                size="small"
-                value={host}
-                onChange={(event) => {
-                  setTargetId("custom");
-                  setHost(event.target.value);
-                }}
-              />
-              <TextField
-                label="NT4 port"
-                size="small"
-                type="number"
-                value={port}
-                onChange={(event) => setPort(Number(event.target.value))}
-              />
-
-              <Stack direction="row" spacing={1}>
-                <Button variant="contained" fullWidth onClick={connect}>
-                  Connect
-                </Button>
-                <Button variant="outlined" fullWidth onClick={disconnect}>
-                  Disconnect
-                </Button>
-              </Stack>
-
-              <Alert severity="info" variant="outlined">
-                For WPILib simulation, use Local simulation or Loopback. Team IP and roboRIO mDNS are for a real robot.
-                The Driver Station is only valid if that laptop is running a NetworkTables server.
-              </Alert>
+      <Card variant="outlined">
+        <CardContent>
+          <Stack spacing={2}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+              <CableIcon color="primary" />
+              <Typography variant="h6">NetworkTables Target</Typography>
             </Stack>
-          </CardContent>
-        </Card>
 
-        <Card variant="outlined">
-          <CardContent>
-            <Stack spacing={2}>
-              <Typography variant="h6">Explore Prefixes</Typography>
-              <FormControl fullWidth size="small">
-                <InputLabel id="prefix-preset-label">Common prefix</InputLabel>
-                <Select
-                  labelId="prefix-preset-label"
-                  label="Common prefix"
-                  value={prefixInput}
-                  onChange={(event) => setPrefixInput(event.target.value)}
-                >
-                  {defaultPrefixes.map((prefix) => (
-                    <MenuItem key={prefix} value={prefix}>
-                      {prefix}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <TextField label="Prefix" size="small" value={prefixInput} onChange={(event) => setPrefixInput(event.target.value)} />
-              <Button variant="outlined" startIcon={<AddIcon />} onClick={() => watchPrefix(prefixInput)}>
-                Watch Prefix
-              </Button>
-              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-                {watchedPrefixes.map((prefix) => (
-                  <Chip key={prefix} label={prefix} size="small" />
+            <FormControl fullWidth size="small">
+              <InputLabel id="target-preset-label">Target</InputLabel>
+              <Select labelId="target-preset-label" label="Target" value={targetId} onChange={(event) => setPreset(event.target.value)}>
+                {targetPresets.map((preset) => (
+                  <MenuItem key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </MenuItem>
                 ))}
-              </Box>
+              </Select>
+            </FormControl>
+
+            <TextField
+              label="Host"
+              size="small"
+              value={host}
+              onChange={(event) => {
+                setTargetId("custom");
+                setHost(event.target.value);
+              }}
+            />
+            <TextField label="NT4 port" size="small" type="number" value={port} onChange={(event) => setPort(Number(event.target.value))} />
+
+            <Stack direction="row" spacing={1}>
+              <Button variant="contained" fullWidth onClick={connect}>
+                Connect
+              </Button>
+              <Button variant="outlined" fullWidth onClick={disconnect}>
+                Disconnect
+              </Button>
             </Stack>
-          </CardContent>
-        </Card>
-      </Stack>
+
+            <Alert severity="info" variant="outlined">
+              Power Tool subscribes to the root NetworkTables prefix and renders discovered topics as a tree.
+            </Alert>
+          </Stack>
+        </CardContent>
+      </Card>
 
       <Card variant="outlined">
         <CardContent sx={{ p: 0 }}>
@@ -244,10 +305,9 @@ export function NetworkTablesPanel() {
             <Box sx={{ p: 2 }}>
               <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ alignItems: { md: "center" } }}>
                 <Box sx={{ flexGrow: 1 }}>
-                  <Typography variant="h6">NetworkTables Explorer</Typography>
+                  <Typography variant="h6">NetworkTables Tree</Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Watching {watchedPrefixes.length} prefix{watchedPrefixes.length === 1 ? "" : "es"} and{" "}
-                    {sortedTopics.length} visible topic{sortedTopics.length === 1 ? "" : "s"}.
+                    Root subscription `/` has {visibleTopicCount} visible topic{visibleTopicCount === 1 ? "" : "s"}.
                   </Typography>
                 </Box>
                 <TextField label="Filter topics" size="small" value={search} onChange={(event) => setSearch(event.target.value)} />
@@ -261,21 +321,10 @@ export function NetworkTablesPanel() {
 
             <Box component="form" onSubmit={publishTopic} sx={{ p: 2 }}>
               <Stack direction={{ xs: "column", lg: "row" }} spacing={1.5}>
-                <TextField
-                  label="Topic"
-                  size="small"
-                  value={topicName}
-                  onChange={(event) => setTopicName(event.target.value)}
-                  sx={{ flexGrow: 1 }}
-                />
+                <TextField label="Topic" size="small" value={topicName} onChange={(event) => setTopicName(event.target.value)} sx={{ flexGrow: 1 }} />
                 <FormControl size="small" sx={{ minWidth: 130 }}>
                   <InputLabel id="publish-type-label">Type</InputLabel>
-                  <Select
-                    labelId="publish-type-label"
-                    label="Type"
-                    value={topicType}
-                    onChange={(event) => setTopicType(event.target.value as NtTopicType)}
-                  >
+                  <Select labelId="publish-type-label" label="Type" value={topicType} onChange={(event) => setTopicType(event.target.value as NtTopicType)}>
                     <MenuItem value="double">double</MenuItem>
                     <MenuItem value="int">int</MenuItem>
                     <MenuItem value="boolean">boolean</MenuItem>
@@ -289,39 +338,42 @@ export function NetworkTablesPanel() {
               </Stack>
             </Box>
 
-            <TableContainer component={Paper} elevation={0} sx={{ maxHeight: "calc(100vh - 320px)" }}>
-              <Table stickyHeader size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Topic</TableCell>
-                    <TableCell sx={{ width: 130 }}>Type</TableCell>
-                    <TableCell sx={{ width: "32%" }}>Value</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {sortedTopics.map((topic) => (
-                    <TableRow key={topic.name} hover>
-                      <TableCell sx={{ fontFamily: "monospace" }}>{topic.name}</TableCell>
-                      <TableCell>
-                        <Chip label={topic.type} size="small" variant="outlined" />
-                      </TableCell>
-                      <TableCell sx={{ fontFamily: "monospace", wordBreak: "break-word" }}>
-                        {stringifyValue(topic.value)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {sortedTopics.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={3}>
-                        <Typography color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
-                          Connect and watch a prefix to discover NetworkTables data.
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
+            <Divider />
+
+            <Box sx={{ maxHeight: "calc(100vh - 320px)", overflow: "auto" }}>
+              <Box
+                sx={{
+                  alignItems: "center",
+                  borderBottom: "1px solid",
+                  borderColor: "divider",
+                  color: "text.secondary",
+                  display: "grid",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  gap: 1,
+                  gridTemplateColumns: "32px minmax(180px, 1fr) 120px minmax(180px, 0.8fr)",
+                  minHeight: 36,
+                  px: 1,
+                  position: "sticky",
+                  top: 0,
+                  zIndex: 1,
+                  bgcolor: "background.paper"
+                }}
+              >
+                <Box />
+                <Box>Topic</Box>
+                <Box>Type</Box>
+                <Box>Value</Box>
+              </Box>
+
+              {visibleTopicCount > 0 ? (
+                <TopicTree node={topicTree} expandedPaths={expandedPaths} onToggle={togglePath} />
+              ) : (
+                <Typography color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
+                  Connect to discover NetworkTables data from `/`.
+                </Typography>
+              )}
+            </Box>
           </Stack>
         </CardContent>
       </Card>
