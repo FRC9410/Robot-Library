@@ -36,6 +36,7 @@ import { SubsystemsPanel } from "./features/subsystems/components/SubsystemsPane
 import { UpdateCodeDialog } from "./features/subsystems/components/UpdateCodeDialog";
 import { NetworkTablesPanel } from "./features/networktables/NetworkTablesPanel";
 import { NetworkTablesProvider, useNetworkTables } from "./features/networktables/NetworkTablesContext";
+import { ConnectionSettingsDialog } from "./features/networktables/ConnectionSettingsDialog";
 import type { AppView } from "./types/app";
 
 type ToastState = {
@@ -53,7 +54,16 @@ export function App() {
 }
 
 function AppContent() {
-  const { clientRef, status, topics, error, setError, upsertTopic } = useNetworkTables();
+  const {
+    clientRef,
+    status,
+    connectionSettings,
+    setConnectionSettings,
+    topics,
+    error,
+    setError,
+    upsertTopic
+  } = useNetworkTables();
   const [activeView, setActiveView] = useState<AppView>("subsystems");
   const [subsystemDocument, setSubsystemDocument] = useState<SubsystemDocumentState>({
     loading: false,
@@ -73,6 +83,7 @@ function AppContent() {
   const [powerToolUpdating, setPowerToolUpdating] = useState(false);
   const [deleteSubsystemIndex, setDeleteSubsystemIndex] = useState<number | null>(null);
   const [characterizationOpen, setCharacterizationOpen] = useState(false);
+  const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(false);
   const updateSubsystemCodeRef = useRef<() => Promise<void>>(async () => {});
   const updatePowerToolRef = useRef<() => Promise<void>>(async () => {});
 
@@ -293,6 +304,9 @@ function AppContent() {
   updatePowerToolRef.current = updatePowerTool;
 
   useEffect(() => {
+    const removeConnectionSettings = window.powerlib?.onMenuConnectionSettings?.(() => {
+      setConnectionSettingsOpen(true);
+    });
     const removeUpdateSubsystemCode = window.powerlib?.onMenuUpdateSubsystemCode?.(() => {
       void updateSubsystemCodeRef.current();
     });
@@ -301,6 +315,7 @@ function AppContent() {
     });
 
     return () => {
+      removeConnectionSettings?.();
       removeUpdateSubsystemCode?.();
       removeUpdatePowerTool?.();
     };
@@ -382,6 +397,16 @@ function AppContent() {
       </AppBar>
 
       <UpdateCodeDialog open={subsystemUpdatingCode} />
+
+      <ConnectionSettingsDialog
+        open={connectionSettingsOpen}
+        settings={connectionSettings}
+        onClose={() => setConnectionSettingsOpen(false)}
+        onSave={(settings) => {
+          setConnectionSettings(settings);
+          showToast("Saved NetworkTables connection settings.", "success");
+        }}
+      />
 
       <DeleteSubsystemDialog
         open={deleteSubsystemIndex !== null}

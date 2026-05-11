@@ -22,6 +22,7 @@ declare global {
       updatePowerTool: () => Promise<{
         started: boolean;
       }>;
+      onMenuConnectionSettings: (callback: () => void) => () => void;
       onMenuUpdateSubsystemCode: (callback: () => void) => () => void;
       onMenuUpdatePowerTool: (callback: () => void) => () => void;
     };

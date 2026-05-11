@@ -26,6 +26,11 @@ function createAppMenu(window: BrowserWindow) {
       label: "File",
       submenu: [
         {
+          label: "Connection Settings",
+          click: () => window.webContents.send("powerlib:menu-connection-settings")
+        },
+        { type: "separator" },
+        {
           label: "Update Code",
           click: () => window.webContents.send("powerlib:menu-update-subsystem-code")
         },
