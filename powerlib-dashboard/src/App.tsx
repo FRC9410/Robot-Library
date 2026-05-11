@@ -11,6 +11,7 @@ import {
   CircularProgress,
   Container,
   Dialog,
+  DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
@@ -156,7 +157,7 @@ const defaultTopics = [
 
 const defaultPrefixes = ["/SmartDashboard/", "/Shuffleboard/", "/LiveWindow/", "/FMSInfo/"];
 
-const motorTypes = ["TalonFX", "SparkMax", "SparkFlex", "VictorSPX"];
+const motorTypes = ["X60", "X44"];
 
 function toCamelCase(value: string) {
   const parts = value
@@ -184,7 +185,7 @@ function generatedMotorToForm(motor: GeneratedMotor | undefined, index: number):
   return {
     role: index === 0 ? "leader" : motor?.role === "leader" ? "leader" : "follower",
     id: toNumberText(motor?.id, ""),
-    motorType: motor?.motorType ?? "TalonFX",
+    motorType: motor?.motorType === "X44" ? "X44" : "X60",
     reversed: Boolean(motor?.reversed)
   };
 }
@@ -193,7 +194,7 @@ function createEmptyMotor(role: "leader" | "follower" = "follower"): SubsystemFo
   return {
     role,
     id: "",
-    motorType: "TalonFX",
+    motorType: "X60",
     reversed: false
   };
 }
@@ -412,6 +413,7 @@ export function App() {
   const [subsystemSaving, setSubsystemSaving] = useState(false);
   const [subsystemUpdatingCode, setSubsystemUpdatingCode] = useState(false);
   const [powerToolUpdating, setPowerToolUpdating] = useState(false);
+  const [deleteSubsystemIndex, setDeleteSubsystemIndex] = useState<number | null>(null);
   const updateSubsystemCodeRef = useRef<() => Promise<void>>(async () => {});
   const updatePowerToolRef = useRef<() => Promise<void>>(async () => {});
 
@@ -557,6 +559,7 @@ export function App() {
     try {
       await saveSubsystems(subsystemDocument.subsystems.filter((_, currentIndex) => currentIndex !== index));
       showToast(`Removed ${subsystem?.name ?? "subsystem"}. Use File > Update Code to reconcile generated Java files.`, "success");
+      setDeleteSubsystemIndex(null);
       if (subsystemForm?.index === index) {
         setSubsystemForm(null);
       }
@@ -764,6 +767,30 @@ export function App() {
             <Typography>Please wait, code is updating.</Typography>
           </Stack>
         </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteSubsystemIndex !== null} onClose={() => setDeleteSubsystemIndex(null)}>
+        <DialogTitle>Delete Subsystem?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Delete {deleteSubsystemIndex !== null ? subsystemDocument.subsystems[deleteSubsystemIndex]?.name ?? "this subsystem" : "this subsystem"}?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteSubsystemIndex(null)}>Cancel</Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={() => {
+              if (deleteSubsystemIndex !== null) {
+                void deleteSubsystem(deleteSubsystemIndex);
+              }
+            }}
+            disabled={subsystemSaving}
+          >
+            Delete
+          </Button>
+        </DialogActions>
       </Dialog>
 
       <Snackbar
@@ -1095,7 +1122,7 @@ export function App() {
                                 <Button
                                   color="error"
                                   startIcon={<DeleteIcon />}
-                                  onClick={() => void deleteSubsystem(subsystemForm.index ?? 0)}
+                                  onClick={() => setDeleteSubsystemIndex(subsystemForm.index ?? 0)}
                                   disabled={subsystemSaving}
                                 >
                                   Delete
@@ -1367,7 +1394,22 @@ export function App() {
                               </Stack>
                             )}
 
-                            <Stack direction="row" spacing={1}>
+                            <Stack
+                              direction="row"
+                              spacing={1}
+                              sx={{
+                                position: "sticky",
+                                bottom: 0,
+                                zIndex: 1,
+                                bgcolor: "background.paper",
+                                borderTop: 1,
+                                borderColor: "divider",
+                                mx: -2,
+                                mb: -2,
+                                px: 2,
+                                py: 1.5
+                              }}
+                            >
                               <Button
                                 startIcon={subsystemSaving ? <CircularProgress size={18} /> : <SaveIcon />}
                                 variant="contained"
