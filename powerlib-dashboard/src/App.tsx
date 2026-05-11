@@ -20,6 +20,7 @@ import {
   MenuItem,
   Paper,
   Select,
+  Snackbar,
   Stack,
   Tab,
   Table,
@@ -115,6 +116,12 @@ type SubsystemFormState = {
   cancoderDiscontinuityPoint: string;
   positionUnits: string;
   defaultPosition: string;
+};
+
+type ToastState = {
+  open: boolean;
+  message: string;
+  severity: "success" | "error" | "info" | "warning";
 };
 
 const targetPresets: TargetPreset[] = [
@@ -340,7 +347,11 @@ export function App() {
     error: null
   });
   const [subsystemForm, setSubsystemForm] = useState<SubsystemFormState | null>(null);
-  const [subsystemActionMessage, setSubsystemActionMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState>({
+    open: false,
+    message: "",
+    severity: "info"
+  });
   const [subsystemSaving, setSubsystemSaving] = useState(false);
   const [subsystemUpdatingCode, setSubsystemUpdatingCode] = useState(false);
   const [powerToolUpdating, setPowerToolUpdating] = useState(false);
@@ -354,7 +365,15 @@ export function App() {
       .sort((left, right) => left.name.localeCompare(right.name));
   }, [topics, search]);
 
-  async function loadSubsystems(clearMessage = true) {
+  function showToast(message: string, severity: ToastState["severity"] = "info") {
+    setToast({
+      open: true,
+      message,
+      severity
+    });
+  }
+
+  async function loadSubsystems() {
     setSubsystemDocument((current) => ({ ...current, loading: true, error: null }));
 
     try {
@@ -370,9 +389,6 @@ export function App() {
         subsystems: result.subsystems as GeneratedSubsystem[],
         error: result.error ?? null
       });
-      if (clearMessage) {
-        setSubsystemActionMessage(null);
-      }
     } catch (caught) {
       setSubsystemDocument((current) => ({
         ...current,
@@ -408,12 +424,12 @@ export function App() {
         : undefined;
     const subsystem = formToSubsystem(subsystemForm, existing);
     if (!subsystem.name || !subsystem.id) {
-      setSubsystemDocument((current) => ({ ...current, error: "Subsystem name is required." }));
+      showToast("Subsystem name is required.", "error");
       return;
     }
 
     if (!subsystem.motors?.[0]?.id) {
-      setSubsystemDocument((current) => ({ ...current, error: "Leader CAN ID is required." }));
+      showToast("Leader CAN ID is required.", "error");
       return;
     }
 
@@ -427,13 +443,10 @@ export function App() {
       }
 
       await saveSubsystems(nextSubsystems);
-      setSubsystemActionMessage(`Saved ${subsystem.name}. Use Update Code when you are ready to regenerate Java files.`);
+      showToast(`Saved ${subsystem.name}. Use File > Update Code when you are ready to regenerate Java files.`, "success");
       setSubsystemForm(null);
     } catch (caught) {
-      setSubsystemDocument((current) => ({
-        ...current,
-        error: caught instanceof Error ? caught.message : "Could not save subsystem JSON."
-      }));
+      showToast(caught instanceof Error ? caught.message : "Could not save subsystem JSON.", "error");
     } finally {
       setSubsystemSaving(false);
     }
@@ -444,15 +457,12 @@ export function App() {
     setSubsystemSaving(true);
     try {
       await saveSubsystems(subsystemDocument.subsystems.filter((_, currentIndex) => currentIndex !== index));
-      setSubsystemActionMessage(`Removed ${subsystem?.name ?? "subsystem"}. Use Update Code to reconcile generated Java files.`);
+      showToast(`Removed ${subsystem?.name ?? "subsystem"}. Use File > Update Code to reconcile generated Java files.`, "success");
       if (subsystemForm?.index === index) {
         setSubsystemForm(null);
       }
     } catch (caught) {
-      setSubsystemDocument((current) => ({
-        ...current,
-        error: caught instanceof Error ? caught.message : "Could not delete subsystem."
-      }));
+      showToast(caught instanceof Error ? caught.message : "Could not delete subsystem.", "error");
     } finally {
       setSubsystemSaving(false);
     }
@@ -464,7 +474,6 @@ export function App() {
     }
 
     setSubsystemUpdatingCode(true);
-    setSubsystemActionMessage(null);
     setSubsystemDocument((current) => ({ ...current, error: null }));
 
     try {
@@ -474,13 +483,10 @@ export function App() {
 
       const result = await window.powerlib.updateSubsystemCode();
       const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
-      setSubsystemActionMessage(output ? summarizeUpdateOutput(output) : "Updated generated subsystem code.");
-      await loadSubsystems(false);
+      showToast(output ? summarizeUpdateOutput(output) : "Updated generated subsystem code.", "success");
+      await loadSubsystems();
     } catch (caught) {
-      setSubsystemDocument((current) => ({
-        ...current,
-        error: caught instanceof Error ? caught.message : "Could not update generated subsystem code."
-      }));
+      showToast(caught instanceof Error ? caught.message : "Could not update generated subsystem code.", "error");
     } finally {
       setSubsystemUpdatingCode(false);
     }
@@ -609,7 +615,12 @@ export function App() {
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
-      <AppBar position="static" color="inherit" elevation={0} sx={{ borderBottom: 1, borderColor: "divider" }}>
+      <AppBar
+        position="sticky"
+        color="inherit"
+        elevation={0}
+        sx={{ borderBottom: 1, borderColor: "divider", top: 0, zIndex: (theme) => theme.zIndex.drawer + 1 }}
+      >
         <Container maxWidth={false}>
           <Toolbar disableGutters sx={{ gap: 2 }}>
             <HubIcon color="primary" />
@@ -638,7 +649,7 @@ export function App() {
             <Tab
               icon={<ConstructionIcon />}
               iconPosition="start"
-              label="Generated Subsystems"
+              label="Subsystems"
               value="subsystems"
               sx={{ minHeight: 44 }}
             />
@@ -655,6 +666,22 @@ export function App() {
           </Stack>
         </DialogContent>
       </Dialog>
+
+      <Snackbar
+        open={toast.open}
+        autoHideDuration={6000}
+        onClose={() => setToast((current) => ({ ...current, open: false }))}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      >
+        <Alert
+          severity={toast.severity}
+          variant="filled"
+          onClose={() => setToast((current) => ({ ...current, open: false }))}
+          sx={{ width: "100%" }}
+        >
+          {toast.message}
+        </Alert>
+      </Snackbar>
 
       <Container maxWidth={false} sx={{ py: 2 }}>
         <Stack spacing={2}>
@@ -869,23 +896,30 @@ export function App() {
           )}
 
           {activeView === "subsystems" && (
-            <Card variant="outlined">
-              <CardContent>
-                <Stack spacing={2}>
-                  <Stack
-                    direction={{ xs: "column", md: "row" }}
-                    spacing={2}
-                    sx={{ alignItems: { md: "center" } }}
-                  >
-                    <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="h6">Generated Subsystems</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {subsystemDocument.exists
-                          ? subsystemDocument.path
-                          : `Looking for ${subsystemDocument.path || "powerlib-subsystems.json"}`}
-                      </Typography>
-                    </Box>
+            <Box
+              sx={{
+                display: "grid",
+                gap: 2,
+                gridTemplateColumns: { xs: "1fr", md: "320px 1fr" },
+                height: { xs: "auto", md: "calc(100vh - 150px)" },
+                minHeight: { md: 520 },
+                overflow: { xs: "visible", md: "hidden" }
+              }}
+            >
+              <Card variant="outlined" sx={{ minHeight: 0, overflow: "hidden" }}>
+                <CardContent sx={{ height: "100%", overflowY: "auto" }}>
+                  <Stack spacing={2}>
                     <Button
+                      fullWidth
+                      startIcon={<AddIcon />}
+                      variant="contained"
+                      onClick={() => setSubsystemForm(createEmptySubsystemForm())}
+                    >
+                      Create Subsystem
+                    </Button>
+
+                    <Button
+                      fullWidth
                       startIcon={subsystemDocument.loading ? <CircularProgress size={18} /> : <RefreshIcon />}
                       variant="outlined"
                       onClick={() => void loadSubsystems()}
@@ -893,81 +927,70 @@ export function App() {
                     >
                       Refresh
                     </Button>
-                  </Stack>
 
-                  {subsystemDocument.error && <Alert severity="error">{subsystemDocument.error}</Alert>}
-                  {subsystemActionMessage && (
-                    <Alert severity="success" variant="outlined" sx={{ whiteSpace: "pre-wrap" }}>
-                      {subsystemActionMessage}
-                    </Alert>
-                  )}
+                    <Divider />
 
-                  {!subsystemDocument.error && !subsystemDocument.exists && !subsystemDocument.loading && (
-                    <Alert severity="info" variant="outlined">
-                      No generated subsystem document was found. Run the PowerLib subsystem generator in this robot
-                      project to create `powerlib-subsystems.json`.
-                    </Alert>
-                  )}
+                    <Stack spacing={0.5}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Subsystem Configs
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "monospace", wordBreak: "break-all" }}>
+                        {subsystemDocument.exists
+                          ? subsystemDocument.path
+                          : `Looking for ${subsystemDocument.path || "powerlib-subsystems.json"}`}
+                      </Typography>
+                    </Stack>
 
-                  <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "320px 1fr" } }}>
-                    <Card variant="outlined" sx={{ alignSelf: "start" }}>
-                      <CardContent>
-                        <Stack spacing={2}>
+                    {subsystemDocument.error && <Alert severity="error">{subsystemDocument.error}</Alert>}
+
+                    {!subsystemDocument.error && !subsystemDocument.exists && !subsystemDocument.loading && (
+                      <Alert severity="info" variant="outlined">
+                        No generated subsystem document was found. Run the PowerLib subsystem generator in this robot
+                        project to create `powerlib-subsystems.json`.
+                      </Alert>
+                    )}
+
+                    <Stack spacing={1}>
+                      {subsystemDocument.subsystems.map((subsystem, index) => {
+                        const selected = subsystemForm?.mode === "edit" && subsystemForm.index === index;
+                        return (
                           <Button
-                            fullWidth
-                            startIcon={<AddIcon />}
-                            variant="contained"
-                            onClick={() => setSubsystemForm(createEmptySubsystemForm())}
+                            key={subsystem.id ?? `${subsystem.name}-${index}`}
+                            variant={selected ? "contained" : "outlined"}
+                            color={selected ? "primary" : "inherit"}
+                            onClick={() => setSubsystemForm(subsystemToForm(subsystem, index))}
+                            sx={{
+                              justifyContent: "flex-start",
+                              minHeight: 64,
+                              textAlign: "left",
+                              textTransform: "none"
+                            }}
                           >
-                            Create Subsystem
+                            <Stack spacing={0.25} sx={{ minWidth: 0 }}>
+                              <Typography sx={{ fontWeight: 700 }}>{subsystem.name ?? "-"}</Typography>
+                              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                                <Chip label={subsystem.type ?? "-"} size="small" variant={selected ? "filled" : "outlined"} />
+                                <Typography variant="caption" sx={{ fontFamily: "monospace" }} noWrap>
+                                  {subsystem.id ?? "-"}
+                                </Typography>
+                              </Stack>
+                            </Stack>
                           </Button>
+                        );
+                      })}
 
-                          <Divider />
+                      {subsystemDocument.subsystems.length === 0 && (
+                        <Typography color="text.secondary" sx={{ py: 3, textAlign: "center" }}>
+                          No subsystem configs yet.
+                        </Typography>
+                      )}
+                    </Stack>
+                  </Stack>
+                </CardContent>
+              </Card>
 
-                          <Stack spacing={1}>
-                            <Typography variant="subtitle2" color="text.secondary">
-                              Subsystem Configs
-                            </Typography>
-                            {subsystemDocument.subsystems.map((subsystem, index) => {
-                              const selected = subsystemForm?.mode === "edit" && subsystemForm.index === index;
-                              return (
-                                <Button
-                                  key={subsystem.id ?? `${subsystem.name}-${index}`}
-                                  variant={selected ? "contained" : "outlined"}
-                                  color={selected ? "primary" : "inherit"}
-                                  onClick={() => setSubsystemForm(subsystemToForm(subsystem, index))}
-                                  sx={{
-                                    justifyContent: "flex-start",
-                                    minHeight: 64,
-                                    textAlign: "left",
-                                    textTransform: "none"
-                                  }}
-                                >
-                                  <Stack spacing={0.25} sx={{ minWidth: 0 }}>
-                                    <Typography sx={{ fontWeight: 700 }}>{subsystem.name ?? "-"}</Typography>
-                                    <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                                      <Chip label={subsystem.type ?? "-"} size="small" variant={selected ? "filled" : "outlined"} />
-                                      <Typography variant="caption" sx={{ fontFamily: "monospace" }} noWrap>
-                                        {subsystem.id ?? "-"}
-                                      </Typography>
-                                    </Stack>
-                                  </Stack>
-                                </Button>
-                              );
-                            })}
-
-                            {subsystemDocument.subsystems.length === 0 && (
-                              <Typography color="text.secondary" sx={{ py: 3, textAlign: "center" }}>
-                                No subsystem configs yet.
-                              </Typography>
-                            )}
-                          </Stack>
-                        </Stack>
-                      </CardContent>
-                    </Card>
-
-                    <Card variant="outlined" sx={{ minHeight: 480 }}>
-                      <CardContent>
+              <Card variant="outlined" sx={{ minHeight: 0, overflow: "hidden" }}>
+                <CardContent sx={{ height: "100%", overflowY: "auto" }}>
                         {subsystemForm ? (
                           <Stack spacing={2}>
                             <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ alignItems: { md: "center" } }}>
@@ -1199,12 +1222,9 @@ export function App() {
                             </Box>
                           </Stack>
                         )}
-                      </CardContent>
-                    </Card>
-                  </Box>
-                </Stack>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </Box>
           )}
         </Stack>
       </Container>
