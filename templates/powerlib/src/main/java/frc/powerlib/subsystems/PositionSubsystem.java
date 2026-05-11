@@ -131,9 +131,7 @@ public class PositionSubsystem extends PowerSubsystem {
    */
   public void setPositionRotations(double rotations) {
     setpointRotations = rotations;
-    if (positionMotor != null) {
-      positionMotor.setControl(new MotionMagicVoltage(0).withPosition(rotations).withSlot(0));
-    }
+    io.setPositionRotations(rotations);
   }
 
   /** Returns the current position setpoint in rotations. */
@@ -151,9 +149,12 @@ public class PositionSubsystem extends PowerSubsystem {
 
   /** Stops the position motor (zero demand). */
   public void stopPosition() {
-    if (positionMotor != null) {
-      positionMotor.set(0);
-    }
+    io.stop();
+  }
+
+  /** Applies the given voltage to the position motor (leader only; followers follow). */
+  public void setVoltage(double volts) {
+    io.setVoltage(volts);
   }
 
   /** Returns position in rotations from the primary position motor (if initialized). */

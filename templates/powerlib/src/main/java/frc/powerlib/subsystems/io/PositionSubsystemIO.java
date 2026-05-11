@@ -10,4 +10,10 @@ public interface PositionSubsystemIO {
   }
 
   default void updateInputs(Inputs inputs) {}
+
+  default void setPositionRotations(double rotations) {}
+
+  default void setVoltage(double volts) {}
+
+  default void stop() {}
 }

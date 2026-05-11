@@ -4,8 +4,6 @@
 
 package frc.powerlib.subsystems;
 
-import com.ctre.phoenix6.controls.MotionMagicVelocityVoltage;
-import com.ctre.phoenix6.controls.NeutralOut;
 import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.configs.MotionMagicConfigs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
@@ -29,7 +27,6 @@ public class VelocitySubsystem extends PowerSubsystem {
   public final VelocitySubsystemIO.Inputs inputs = new VelocitySubsystemIO.Inputs();
   private final VelocitySubsystemIO io;
   private String subsystemName;
-  private static final NeutralOut brake = new NeutralOut();
   /**
    * Constructor that uses the leader motor from the config and configures it with lead and motion
    * magic settings from the same config.
@@ -93,15 +90,12 @@ public class VelocitySubsystem extends PowerSubsystem {
    * directly after {@link #velocityMotor} is set.
    */
   public void setVelocity(double velocityRotationsPerSecond) {
-    if (velocityMotor != null) {
-      velocityMotor.setControl(
-          new MotionMagicVelocityVoltage(0).withVelocity(velocityRotationsPerSecond).withEnableFOC(true).withSlot(0));
-    }
+    io.setVelocity(velocityRotationsPerSecond);
   }
 
   /** Stops the velocity motor. */
   public void stopVelocity() {
-    setVelocity(0);
+    io.stop();
   }
 
   /**
@@ -109,9 +103,7 @@ public class VelocitySubsystem extends PowerSubsystem {
    * Use for SysId characterization. Voltage is in volts.
    */
   public void setVoltage(double volts) {
-    if (velocityMotor != null) {
-      velocityMotor.setVoltage(volts);
-    }
+    io.setVoltage(volts);
   }
 
   /** Returns the primary velocity motor (if initialized). */
@@ -124,6 +116,6 @@ public class VelocitySubsystem extends PowerSubsystem {
   }
   
   public void brake () {
-    velocityMotor.setControl(brake);
+    io.brake();
   }
 }

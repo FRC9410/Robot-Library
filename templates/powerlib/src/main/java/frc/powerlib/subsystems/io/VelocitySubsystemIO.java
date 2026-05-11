@@ -9,4 +9,14 @@ public interface VelocitySubsystemIO {
   }
 
   default void updateInputs(Inputs inputs) {}
+
+  default void setVelocity(double velocityRotationsPerSecond) {}
+
+  default void setVoltage(double volts) {}
+
+  default void stop() {
+    setVelocity(0.0);
+  }
+
+  default void brake() {}
 }
