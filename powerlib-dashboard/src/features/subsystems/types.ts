@@ -58,7 +58,7 @@ export type SubsystemFormState = {
   index: number | null;
   id: string;
   name: string;
-  type: "velocity" | "position" | "absolutePosition";
+  type: "velocity" | "velocityTorque" | "position" | "absolutePosition";
   neutralMode: "Brake" | "Coast";
   motors: SubsystemFormMotor[];
   sensorToMechanism: string;

@@ -90,7 +90,9 @@ export function subsystemToForm(subsystem: GeneratedSubsystem, index: number): S
     type:
       subsystem.type === "position"
         ? "position"
-        : subsystem.type === "absolutePosition"
+        : subsystem.type === "velocityTorque"
+          ? "velocityTorque"
+          : subsystem.type === "absolutePosition"
           ? "absolutePosition"
           : "velocity",
     neutralMode: leader?.neutralMode === "Coast" ? "Coast" : "Brake",

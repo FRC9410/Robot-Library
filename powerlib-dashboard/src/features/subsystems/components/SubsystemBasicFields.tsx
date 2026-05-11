@@ -45,6 +45,7 @@ export function SubsystemBasicFields({ form, setForm, updateField }: SubsystemBa
             onChange={(event) => updateField("type", event.target.value as SubsystemFormState["type"])}
           >
             <MenuItem value="velocity">velocity</MenuItem>
+            <MenuItem value="velocityTorque">velocity torque</MenuItem>
             <MenuItem value="position">position</MenuItem>
             <MenuItem value="absolutePosition">absolute position</MenuItem>
           </Select>

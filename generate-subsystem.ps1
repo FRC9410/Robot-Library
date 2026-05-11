@@ -186,12 +186,13 @@ function Get-SubsystemMetadata {
 
     $pascal = Convert-ToPascalCase $Subsystem.name
     $type = $Subsystem.type.ToString().ToLowerInvariant()
-    if ($type -ne "velocity" -and $type -ne "position" -and $type -ne "absoluteposition") {
-        throw "Unsupported subsystem type '$($Subsystem.type)' for '$($Subsystem.name)'. Accepted values: velocity, position, absolutePosition."
+    if ($type -ne "velocity" -and $type -ne "velocitytorque" -and $type -ne "position" -and $type -ne "absoluteposition") {
+        throw "Unsupported subsystem type '$($Subsystem.type)' for '$($Subsystem.name)'. Accepted values: velocity, velocityTorque, position, absolutePosition."
     }
 
     $subsystemClassName = switch ($type) {
         "velocity" { "VelocitySubsystem" }
+        "velocitytorque" { "VelocityTorqueSubsystem" }
         "position" { "PositionSubsystem" }
         "absoluteposition" { "AbsolutePositionSubsystem" }
     }
@@ -376,7 +377,7 @@ function New-InteractivePidConfig {
 
 function New-InteractiveSubsystem {
     $rawName = Prompt-Required "Subsystem name, example shooter"
-    $type = (Prompt-Enum "Subsystem type" @("velocity", "position", "absolutePosition") "velocity").ToLowerInvariant()
+    $type = (Prompt-Enum "Subsystem type" @("velocity", "velocityTorque", "position", "absolutePosition") "velocity").ToLowerInvariant()
     $stableId = Convert-ToCamelCase (Convert-ToPascalCase $rawName)
 
     $subsystem = [ordered]@{
@@ -852,6 +853,7 @@ function Write-ConstantsFile {
     }
     $content = switch ($Metadata.Type) {
         "velocity" { New-VelocityConstantsContent $Subsystem $Metadata }
+        "velocitytorque" { New-VelocityConstantsContent $Subsystem $Metadata }
         "position" { New-PositionConstantsContent $Subsystem $Metadata }
         "absoluteposition" { New-AbsolutePositionConstantsContent $Subsystem $Metadata }
     }
@@ -951,7 +953,7 @@ function Write-CharacterizationFile {
         [Parameter(Mandatory = $true)]$Metadata
     )
 
-    if ($Metadata.Type -ne "velocity") {
+    if ($Metadata.Type -ne "velocity" -and $Metadata.Type -ne "velocitytorque") {
         return $null
     }
 
@@ -974,7 +976,10 @@ function Rewrite-PowerDashboardCharacterizationBlock {
         throw "Could not find POWERLIB GENERATED CHARACTERIZATION markers in PowerDashboard.java. Re-run the installer or add the DO NOT DELETE markers manually."
     }
 
-    $velocitySubsystems = @($Subsystems | Where-Object { $_.type.ToString().ToLowerInvariant() -eq "velocity" })
+    $velocitySubsystems = @($Subsystems | Where-Object {
+        $type = $_.type.ToString().ToLowerInvariant()
+        $type -eq "velocity" -or $type -eq "velocitytorque"
+    })
     $imports = @($velocitySubsystems | ForEach-Object {
         $metadata = Get-SubsystemMetadata $_
         "import frc.robot.characterization.$($metadata.PascalName)Characterization;"
@@ -1071,7 +1076,7 @@ function Remove-StaleCharacterizationFiles {
     $wantedFiles = @{}
     foreach ($subsystem in @($Subsystems)) {
         $metadata = Get-SubsystemMetadata $subsystem
-        if ($metadata.Type -eq "velocity") {
+        if ($metadata.Type -eq "velocity" -or $metadata.Type -eq "velocitytorque") {
             $wantedFiles["$($metadata.PascalName)Characterization.java"] = $true
         }
     }

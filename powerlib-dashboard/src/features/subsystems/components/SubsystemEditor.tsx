@@ -49,7 +49,7 @@ export function SubsystemEditor({
                     {form.mode === "create" ? "Create Subsystem" : `Edit ${form.name || "Subsystem"}`}
                   </Typography>
                 </Box>
-                {form.type === "velocity" && (
+                {(form.type === "velocity" || form.type === "velocityTorque") && (
                   <Button startIcon={<InsightsIcon />} variant="outlined" onClick={onOpenCharacterization}>
                     Characterization
                   </Button>
