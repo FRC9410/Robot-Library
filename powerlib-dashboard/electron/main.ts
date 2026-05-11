@@ -80,6 +80,18 @@ function getRobotRoot(subsystemsJsonPath: string) {
   return path.dirname(subsystemsJsonPath);
 }
 
+function getPowerToolRootCandidates() {
+  return Array.from(
+    new Set([
+      path.resolve(process.cwd(), "power-tool"),
+      path.resolve(process.cwd()),
+      path.resolve(app.getAppPath()),
+      path.resolve(app.getAppPath(), ".."),
+      path.resolve(__dirname, "..")
+    ])
+  );
+}
+
 ipcMain.handle("powerlib:read-subsystems", async () => {
   for (const candidate of getSubsystemJsonCandidates()) {
     try {
@@ -190,11 +202,9 @@ ipcMain.handle("powerlib:update-subsystem-code", async () => {
 });
 
 ipcMain.handle("powerlib:update-power-tool", async () => {
-  const robotRoot = path.resolve(process.cwd(), "..");
-  const updaterCandidates = [
-    path.join(robotRoot, "power-tool", "scripts", "update-power-tool.ps1"),
-    path.join(process.cwd(), "scripts", "update-power-tool.ps1")
-  ];
+  const updaterCandidates = getPowerToolRootCandidates().map((candidate) =>
+    path.join(candidate, "scripts", "update-power-tool.ps1")
+  );
   let updaterPath = updaterCandidates[0];
 
   for (const candidate of updaterCandidates) {
@@ -213,6 +223,8 @@ ipcMain.handle("powerlib:update-power-tool", async () => {
     throw new Error(`Missing ${updaterCandidates[0]}. Reinstall Power Tool to add the updater.`);
   }
 
+  const toolRoot = path.dirname(path.dirname(updaterPath));
+  const robotRoot = path.dirname(toolRoot);
   const tempUpdaterPath = path.join(robotRoot, "build", "power-tool-update.ps1");
   const tempUpdaterRunnerPath = path.join(robotRoot, "build", "run-power-tool-update.ps1");
   await fs.mkdir(path.dirname(tempUpdaterPath), { recursive: true });
