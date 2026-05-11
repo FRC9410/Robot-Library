@@ -20,6 +20,9 @@ import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
 import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
+import edu.wpi.first.networktables.NetworkTableInstance;
+import edu.wpi.first.networktables.StructArrayPublisher;
+import edu.wpi.first.networktables.StructPublisher;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj.Notifier;
@@ -39,6 +42,12 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
   private static final double kSimLoopPeriod = 0.005; // 5 ms
   private Notifier m_simNotifier = null;
   private double m_lastSimTime;
+  private final StructPublisher<Pose2d> posePublisher =
+      NetworkTableInstance.getDefault().getStructTopic("Robot/Pose", Pose2d.struct).publish();
+  private final StructArrayPublisher<SwerveModuleState> moduleStatePublisher =
+      NetworkTableInstance.getDefault()
+          .getStructArrayTopic("Robot/SwerveStates", SwerveModuleState.struct)
+          .publish();
 
   /* Blue alliance sees forward as 0 degrees (toward red alliance wall) */
   private static final Rotation2d kBlueAlliancePerspectiveRotation = Rotation2d.kZero;
@@ -314,6 +323,9 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
     PowerRobotContainer.setData("Swerve/Speeds/VXMetersPerSecond", speeds.vxMetersPerSecond);
     PowerRobotContainer.setData("Swerve/Speeds/VYMetersPerSecond", speeds.vyMetersPerSecond);
     PowerRobotContainer.setData("Swerve/Speeds/OmegaRadiansPerSecond", speeds.omegaRadiansPerSecond);
+
+    posePublisher.set(pose);
+    moduleStatePublisher.set(state.ModuleStates);
 
     SignalLogger.writeDouble("Swerve Pose X", xMeters, "meters");
     SignalLogger.writeDouble("Swerve Pose Y", yMeters, "meters");
