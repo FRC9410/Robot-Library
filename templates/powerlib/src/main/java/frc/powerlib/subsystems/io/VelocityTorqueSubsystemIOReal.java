@@ -24,6 +24,7 @@ public class VelocityTorqueSubsystemIOReal implements VelocitySubsystemIO {
 
     inputs.positionRotations = motor.getPosition().getValueAsDouble();
     inputs.velocityRotationsPerSecond = motor.getVelocity().getValueAsDouble();
+    inputs.velocitySetpoint = subsystem.getVelocitySetpoint();
     inputs.appliedVolts = motor.getMotorVoltage().getValueAsDouble();
   }
 
@@ -37,7 +38,8 @@ public class VelocityTorqueSubsystemIOReal implements VelocitySubsystemIO {
       }
 
       motor.setControl(
-          new VelocityTorqueCurrentFOC(velocityRotationsPerSecond).withFeedForward(0));
+          new VelocityTorqueCurrentFOC(velocityRotationsPerSecond)
+              .withFeedForward(subsystem.getTorqueFeedForward()));
     }
   }
 

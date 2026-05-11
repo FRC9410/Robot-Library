@@ -28,6 +28,8 @@ public class VelocitySubsystem extends PowerSubsystem {
   private final VelocitySubsystemIO io;
   private String subsystemName;
   private boolean focEnabled;
+  private double torqueFeedForward;
+  private double velocitySetpoint;
   /**
    * Constructor that uses the leader motor from the config and configures it with lead and motion
    * magic settings from the same config.
@@ -47,6 +49,8 @@ public class VelocitySubsystem extends PowerSubsystem {
     }
     this.subsystemName = config.subsystemName();
     this.focEnabled = config.leadConfig().focEnabled();
+    this.torqueFeedForward = config.torqueFeedForward();
+    this.velocitySetpoint = 0.0;
     this.io = io == null ? createDefaultIO() : io;
   }
 
@@ -59,7 +63,7 @@ public class VelocitySubsystem extends PowerSubsystem {
     io.updateInputs(inputs);
     SignalLogger.writeDouble(subsystemName + " Velocity", inputs.velocityRotationsPerSecond, "rotations per second");
     PowerRobotContainer.setData(subsystemName + "/Velocity", inputs.velocityRotationsPerSecond);
-    PowerRobotContainer.setData(subsystemName + "/PositionRotations", inputs.positionRotations);
+    PowerRobotContainer.setData(subsystemName + "/VelocitySetpoint", inputs.velocitySetpoint);
     PowerRobotContainer.setData(subsystemName + "/AppliedVolts", inputs.appliedVolts);
     PowerRobotContainer.setData(subsystemName + "/Connected", inputs.connected);
   }
@@ -95,15 +99,18 @@ public class VelocitySubsystem extends PowerSubsystem {
    * directly after {@link #velocityMotor} is set.
    */
   public void setVelocity(double velocityRotationsPerSecond) {
+    velocitySetpoint = velocityRotationsPerSecond;
     io.setVelocity(velocityRotationsPerSecond);
   }
 
   public void setVelocityWithoutFOC(double velocityRotationsPerSecond) {
+    velocitySetpoint = velocityRotationsPerSecond;
     io.setVelocityWithoutFOC(velocityRotationsPerSecond);
   }
 
   /** Stops the velocity motor. */
   public void stopVelocity() {
+    velocitySetpoint = 0.0;
     io.stop();
   }
 
@@ -122,6 +129,14 @@ public class VelocitySubsystem extends PowerSubsystem {
 
   public boolean isFocEnabled() {
     return focEnabled;
+  }
+
+  public double getTorqueFeedForward() {
+    return torqueFeedForward;
+  }
+
+  public double getVelocitySetpoint() {
+    return velocitySetpoint;
   }
 
   public boolean isRunning () {

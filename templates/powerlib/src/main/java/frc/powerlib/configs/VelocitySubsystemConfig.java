@@ -14,5 +14,14 @@ public record VelocitySubsystemConfig(
     List<MotorConfig> motorConfigs,
     LeadMotorConfig leadConfig,
     MotionMagicConfig motionMagicConfig,
-    String subsystemName) {}
+    String subsystemName,
+    double torqueFeedForward) {
+  public VelocitySubsystemConfig(
+      List<MotorConfig> motorConfigs,
+      LeadMotorConfig leadConfig,
+      MotionMagicConfig motionMagicConfig,
+      String subsystemName) {
+    this(motorConfigs, leadConfig, motionMagicConfig, subsystemName, 0.0);
+  }
+}
 

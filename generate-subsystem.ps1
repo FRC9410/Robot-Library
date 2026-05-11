@@ -247,6 +247,20 @@ function Get-FocEnabledExpression {
     return "true"
 }
 
+function Get-TorqueFeedForwardExpression {
+    param($Subsystem)
+
+    if ($Subsystem.PSObject.Properties.Name -contains "torqueFF" -and $null -ne $Subsystem.torqueFF) {
+        $text = $Subsystem.torqueFF.ToString()
+        if ($text -notmatch '\.' -and $text -notmatch '[eE]') {
+            $text = "$text.0"
+        }
+        return $text
+    }
+
+    return "0.0"
+}
+
 function Format-IndentedList {
     param(
         [Parameter(Mandatory = $true)][string[]]$Expressions,
@@ -397,6 +411,7 @@ function New-InteractiveSubsystem {
         motors = @(New-InteractiveMotors)
         pid = New-InteractivePidConfig
         focEnabled = Prompt-Boolean "Enable FOC?" $true
+        torqueFF = if ($type -eq "velocitytorque") { Prompt-DoubleText "Torque FF" "0.0" } else { "0.0" }
         ratios = [ordered]@{
             sensorToMechanism = Prompt-DoubleText "Sensor-to-mechanism ratio" "1.0"
             rotorToSensor = Prompt-DoubleText "Rotor-to-sensor ratio" "1.0"
@@ -459,6 +474,9 @@ function Read-SubsystemDocument {
         if (-not ($subsystem.PSObject.Properties.Name -contains "focEnabled")) {
             $subsystem | Add-Member -MemberType NoteProperty -Name focEnabled -Value $true -Force
         }
+        if ($subsystem.type.ToString().ToLowerInvariant() -eq "velocitytorque" -and -not ($subsystem.PSObject.Properties.Name -contains "torqueFF")) {
+            $subsystem | Add-Member -MemberType NoteProperty -Name torqueFF -Value "0.0" -Force
+        }
     }
     return $document
 }
@@ -519,6 +537,7 @@ $motorConstants
   public static final double SENSOR_TO_MECHANISM_RATIO = $($Subsystem.ratios.sensorToMechanism);
   public static final double ROTOR_TO_SENSOR_RATIO = $($Subsystem.ratios.rotorToSensor);
   public static final boolean FOC_ENABLED = $(Get-FocEnabledExpression $Subsystem);
+  public static final double TORQUE_FF = $(Get-TorqueFeedForwardExpression $Subsystem);
   public static final double MOTION_MAGIC_CRUISE_VELOCITY = $($Subsystem.motionMagic.cruiseVelocity);
   public static final double MOTION_MAGIC_ACCELERATION = $($Subsystem.motionMagic.acceleration);
   public static final String NAME = "$($Metadata.PascalName)";
@@ -539,7 +558,8 @@ $motorList),
               ROTOR_TO_SENSOR_RATIO,
               FOC_ENABLED),
           new MotionMagicConfig(MOTION_MAGIC_CRUISE_VELOCITY, MOTION_MAGIC_ACCELERATION),
-          NAME);
+          NAME,
+          TORQUE_FF);
 
 $CustomConstantsStartMarker
 $CustomConstantsEndMarker

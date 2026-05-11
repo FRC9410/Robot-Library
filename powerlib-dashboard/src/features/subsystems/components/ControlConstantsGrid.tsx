@@ -39,6 +39,9 @@ export function ControlConstantsGrid({ form, updateField }: ControlConstantsGrid
             <TextField fullWidth label="kS" size="small" type="number" value={form.kS} onChange={(event) => updateField("kS", event.target.value)} />
             <TextField fullWidth label="kV" size="small" type="number" value={form.kV} onChange={(event) => updateField("kV", event.target.value)} />
             <TextField fullWidth label="kA" size="small" type="number" value={form.kA} onChange={(event) => updateField("kA", event.target.value)} />
+            {form.type === "velocityTorque" && (
+              <TextField fullWidth label="Torque FF" size="small" type="number" value={form.torqueFF} onChange={(event) => updateField("torqueFF", event.target.value)} />
+            )}
           </Stack>
         </CardContent>
       </Card>
