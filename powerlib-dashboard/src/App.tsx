@@ -40,7 +40,7 @@ import CableIcon from "@mui/icons-material/Cable";
 import ConstructionIcon from "@mui/icons-material/Construction";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import DeleteIcon from "@mui/icons-material/Delete";
-import HubIcon from "@mui/icons-material/Hub";
+import ElectricBoltIcon from "@mui/icons-material/ElectricBolt";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SaveIcon from "@mui/icons-material/Save";
 import SendIcon from "@mui/icons-material/Send";
@@ -734,14 +734,16 @@ export function App() {
       >
         <Container maxWidth={false}>
           <Toolbar disableGutters sx={{ gap: 2 }}>
-            <HubIcon color="primary" />
+            <ElectricBoltIcon color="primary" sx={{ fontSize: 34 }} />
             <Box sx={{ flexGrow: 1 }}>
-              <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 800 }}>
-                Team 9410
-              </Typography>
-              <Typography variant="h5" sx={{ fontWeight: 800 }}>
-                Power Tool
-              </Typography>
+              <Stack direction="row" spacing={1.25} sx={{ alignItems: "baseline" }}>
+                <Typography variant="h5" sx={{ fontWeight: 800 }}>
+                  Power Tool
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+                  powered by Team 9410
+                </Typography>
+              </Stack>
             </Box>
             <Chip
               label={status}
@@ -751,17 +753,17 @@ export function App() {
           </Toolbar>
           <Tabs value={activeView} onChange={(_, value) => setActiveView(value)} sx={{ minHeight: 44 }}>
             <Tab
-              icon={<DashboardIcon />}
-              iconPosition="start"
-              label="NetworkTables"
-              value="networktables"
-              sx={{ minHeight: 44 }}
-            />
-            <Tab
               icon={<ConstructionIcon />}
               iconPosition="start"
               label="Subsystems"
               value="subsystems"
+              sx={{ minHeight: 44 }}
+            />
+            <Tab
+              icon={<DashboardIcon />}
+              iconPosition="start"
+              label="NetworkTables"
+              value="networktables"
               sx={{ minHeight: 44 }}
             />
           </Tabs>
@@ -1117,26 +1119,17 @@ export function App() {
                 </CardContent>
               </Card>
 
-              <Card variant="outlined" sx={{ minHeight: 0, overflow: "hidden" }}>
-                <CardContent sx={{ height: "100%", overflowY: "auto" }}>
-                        {subsystemForm ? (
-                          <Stack spacing={2}>
+              <Stack sx={{ minHeight: 0 }}>
+                <Card variant="outlined" sx={{ minHeight: 0, overflow: "hidden", flexGrow: 1 }}>
+                  <CardContent sx={{ height: "100%", overflowY: "auto" }}>
+                    {subsystemForm ? (
+                      <Stack spacing={2}>
                             <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ alignItems: { md: "center" } }}>
                               <Box sx={{ flexGrow: 1 }}>
                                 <Typography variant="h6">
                                   {subsystemForm.mode === "create" ? "Create Subsystem" : `Edit ${subsystemForm.name || "Subsystem"}`}
                                 </Typography>
                               </Box>
-                              {subsystemForm.mode === "edit" && subsystemForm.index !== null && (
-                                <Button
-                                  color="error"
-                                  startIcon={<DeleteIcon />}
-                                  onClick={() => setDeleteSubsystemIndex(subsystemForm.index ?? 0)}
-                                  disabled={subsystemSaving}
-                                >
-                                  Delete
-                                </Button>
-                              )}
                             </Stack>
 
                             <Divider />
@@ -1394,34 +1387,6 @@ export function App() {
                               </Card>
                             </Box>
 
-                            <Stack
-                              direction="row"
-                              spacing={1}
-                              sx={{
-                                position: "sticky",
-                                bottom: 0,
-                                zIndex: 1,
-                                bgcolor: "background.paper",
-                                borderTop: 1,
-                                borderColor: "divider",
-                                mx: -2,
-                                mb: -2,
-                                px: 2,
-                                py: 1.5
-                              }}
-                            >
-                              <Button
-                                startIcon={subsystemSaving ? <CircularProgress size={18} /> : <SaveIcon />}
-                                variant="contained"
-                                onClick={saveSubsystemForm}
-                                disabled={subsystemSaving}
-                              >
-                                Save Subsystem
-                              </Button>
-                              <Button variant="outlined" onClick={() => setSubsystemForm(null)}>
-                                Cancel
-                              </Button>
-                            </Stack>
                           </Stack>
                         ) : (
                           <Stack spacing={2} sx={{ alignItems: "center", justifyContent: "center", minHeight: 420, textAlign: "center" }}>
@@ -1434,8 +1399,46 @@ export function App() {
                             </Box>
                           </Stack>
                         )}
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+
+                {subsystemForm && (
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{
+                      alignItems: "center",
+                      borderTop: 1,
+                      borderColor: "divider",
+                      px: 0,
+                      py: 1.5
+                    }}
+                  >
+                    <Button
+                      startIcon={subsystemSaving ? <CircularProgress size={18} /> : <SaveIcon />}
+                      variant="contained"
+                      onClick={saveSubsystemForm}
+                      disabled={subsystemSaving}
+                    >
+                      Save Subsystem
+                    </Button>
+                    <Button variant="outlined" onClick={() => setSubsystemForm(null)}>
+                      Cancel
+                    </Button>
+                    {subsystemForm.mode === "edit" && subsystemForm.index !== null && (
+                      <Button
+                        color="error"
+                        startIcon={<DeleteIcon />}
+                        onClick={() => setDeleteSubsystemIndex(subsystemForm.index ?? 0)}
+                        disabled={subsystemSaving}
+                        sx={{ ml: "auto" }}
+                      >
+                        Delete
+                      </Button>
+                    )}
+                  </Stack>
+                )}
+              </Stack>
             </Box>
           )}
         </Stack>

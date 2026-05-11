@@ -58,7 +58,7 @@ public class MotorConfig {
   }
 
   /**
-   * Creates a follower motor config (no neutral mode/direction applied at config level).
+   * Creates a follower motor config.
    *
    * @param canId CAN ID of the follower motor
    */
@@ -67,12 +67,32 @@ public class MotorConfig {
   }
 
   /**
-   * Creates a follower motor config (no neutral mode/direction applied at config level).
+   * Creates a follower motor config.
    *
    * @param canId CAN ID of the follower motor
    */
   public static MotorConfig follower(int canId, boolean reversed) {
     return new MotorConfig(canId, NeutralModeValue.Brake, true, reversed);
+  }
+
+  /**
+   * Creates a follower motor config.
+   *
+   * @param canId CAN ID of the follower motor
+   * @param neutralMode brake or coast
+   */
+  public static MotorConfig follower(int canId, NeutralModeValue neutralMode) {
+    return new MotorConfig(canId, neutralMode, true, false);
+  }
+
+  /**
+   * Creates a follower motor config.
+   *
+   * @param canId CAN ID of the follower motor
+   * @param neutralMode brake or coast
+   */
+  public static MotorConfig follower(int canId, NeutralModeValue neutralMode, boolean reversed) {
+    return new MotorConfig(canId, neutralMode, true, reversed);
   }
 }
 

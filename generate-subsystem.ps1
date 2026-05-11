@@ -252,7 +252,12 @@ function Convert-MotorsToExpressions {
 
     $lines = @("MotorConfig.leader($($leader.id), $(Get-NeutralModeExpression $leader.neutralMode), $($leader.reversed.ToString().ToLowerInvariant()))")
     foreach ($follower in ($motors | Where-Object { $_.role -eq "follower" })) {
-        $lines += "MotorConfig.follower($($follower.id), $($follower.reversed.ToString().ToLowerInvariant()))"
+        $neutralMode = if ($null -ne $follower.neutralMode -and -not [string]::IsNullOrWhiteSpace($follower.neutralMode.ToString())) {
+            $follower.neutralMode
+        } else {
+            $leader.neutralMode
+        }
+        $lines += "MotorConfig.follower($($follower.id), $(Get-NeutralModeExpression $neutralMode), $($follower.reversed.ToString().ToLowerInvariant()))"
     }
 
     return $lines
@@ -287,6 +292,7 @@ function Convert-MotorsToConstantDeclarations {
     $index = 1
     foreach ($follower in (@($Subsystem.motors) | Where-Object { $_.role -eq "follower" })) {
         $lines += "  public static final int FOLLOWER_${index}_MOTOR_ID = $($follower.id);"
+        $lines += "  public static final NeutralModeValue FOLLOWER_${index}_NEUTRAL_MODE = LEADER_NEUTRAL_MODE;"
         $lines += "  public static final boolean FOLLOWER_${index}_REVERSED = $($follower.reversed.ToString().ToLowerInvariant());"
         $index++
     }
@@ -302,7 +308,7 @@ function Convert-MotorsToConstantExpressions {
 
     $index = 1
     foreach ($follower in (@($Subsystem.motors) | Where-Object { $_.role -eq "follower" })) {
-        $lines += "MotorConfig.follower(FOLLOWER_${index}_MOTOR_ID, FOLLOWER_${index}_REVERSED)"
+        $lines += "MotorConfig.follower(FOLLOWER_${index}_MOTOR_ID, FOLLOWER_${index}_NEUTRAL_MODE, FOLLOWER_${index}_REVERSED)"
         $index++
     }
 

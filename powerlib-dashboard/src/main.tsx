@@ -8,19 +8,23 @@ const theme = createTheme({
   palette: {
     mode: "dark",
     primary: {
-      main: "#7aa2ff"
+      main: "#facc15",
+      dark: "#d4a900",
+      light: "#fde047",
+      contrastText: "#161616"
     },
     secondary: {
-      main: "#7dd3c7"
+      main: "#f5f5f4",
+      contrastText: "#171717"
     },
     background: {
-      default: "#0f141b",
-      paper: "#171d26"
+      default: "#0d0d0d",
+      paper: "#18181b"
     },
-    divider: "rgba(255, 255, 255, 0.14)",
+    divider: "rgba(250, 204, 21, 0.18)",
     text: {
-      primary: "#edf2f7",
-      secondary: "#aeb8c5"
+      primary: "#f8fafc",
+      secondary: "#b8b8aa"
     }
   },
   shape: {

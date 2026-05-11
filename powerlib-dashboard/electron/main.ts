@@ -285,7 +285,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 640,
     title: "Power Tool",
-    backgroundColor: "#0f141b",
+    backgroundColor: "#0d0d0d",
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
