@@ -111,21 +111,24 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
       <Box
         sx={{
           display: "grid",
-          gap: 2,
+          gap: 1.5,
           gridTemplateColumns: {
             xs: "1fr",
-            md: "repeat(2, minmax(0, 1fr))",
-            xl: "repeat(3, minmax(0, 1fr))"
+            sm: "repeat(2, minmax(260px, 1fr))",
+            lg: "repeat(3, minmax(260px, 1fr))",
+            xl: "repeat(4, minmax(260px, 1fr))"
           }
         }}
       >
         {tiles.map((tile) => (
-          <Card key={tile.id} variant="outlined" sx={{ minHeight: 220 }}>
-            <CardContent>
-              <Stack spacing={1.5}>
+          <Card key={tile.id} variant="outlined" sx={{ minHeight: 160 }}>
+            <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
+              <Stack spacing={1.25}>
                 <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
                   <Box sx={{ flexGrow: 1 }}>
-                    <Typography variant="h6">{tile.name}</Typography>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                      {tile.name}
+                    </Typography>
                     <Stack direction="row" spacing={1} sx={{ mt: 0.75 }}>
                       <Chip label={tile.type} size="small" />
                       {tile.connected !== undefined && (
@@ -143,15 +146,15 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
                 <Divider />
 
                 {tile.metrics.length > 0 ? (
-                  <Box sx={{ display: "grid", gap: 1 }}>
+                  <Box sx={{ display: "grid", gap: 0.75 }}>
                     {tile.metrics.map((metric) => (
                       <Box
                         key={`${tile.id}-${metric.label}`}
                         sx={{
                           alignItems: "baseline",
                           display: "grid",
-                          gap: 1,
-                          gridTemplateColumns: "minmax(120px, 0.8fr) minmax(0, 1fr)"
+                          gap: 0.75,
+                          gridTemplateColumns: "minmax(105px, 0.8fr) minmax(0, 1fr)"
                         }}
                       >
                         <Typography variant="body2" color="text.secondary">
