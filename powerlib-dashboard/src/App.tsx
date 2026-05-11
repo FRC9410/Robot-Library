@@ -354,8 +354,17 @@ function getMotorIdsSummary(subsystem: GeneratedSubsystem) {
   const ids = (subsystem.motors ?? [])
     .map((motor) => motor.id)
     .filter((id) => id !== null && id !== undefined && String(id).length > 0);
+  const parts = [];
 
-  return ids.length > 0 ? `CAN ${ids.join(", ")}` : "No CAN IDs";
+  if (ids.length > 0) {
+    parts.push(`Motors ${ids.join(", ")}`);
+  }
+
+  if (subsystem.cancoder?.id !== null && subsystem.cancoder?.id !== undefined) {
+    parts.push(`Sensor ${subsystem.cancoder.id}`);
+  }
+
+  return parts.length > 0 ? parts.join(" | ") : "No CAN IDs";
 }
 
 function summarizeUpdateOutput(output: string) {
@@ -1206,23 +1215,6 @@ export function App() {
                                   <MenuItem value="Coast">Coast</MenuItem>
                                 </Select>
                               </FormControl>
-                              {subsystemForm.type === "position" && (
-                                <>
-                                  <TextField
-                                    label="CANcoder CAN ID"
-                                    size="small"
-                                    type="number"
-                                    value={subsystemForm.cancoderId}
-                                    onChange={(event) => updateSubsystemFormField("cancoderId", event.target.value)}
-                                  />
-                                  <TextField
-                                    label="Position units"
-                                    size="small"
-                                    value={subsystemForm.positionUnits}
-                                    onChange={(event) => updateSubsystemFormField("positionUnits", event.target.value)}
-                                  />
-                                </>
-                              )}
                             </Stack>
 
                             <Stack spacing={1}>
@@ -1308,6 +1300,52 @@ export function App() {
                               </Box>
                             </Stack>
 
+                            {subsystemForm.type === "position" && (
+                              <Stack spacing={1}>
+                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                  CANcoder
+                                </Typography>
+                                <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                                  <TextField
+                                    label="CANcoder CAN ID"
+                                    size="small"
+                                    type="number"
+                                    value={subsystemForm.cancoderId}
+                                    onChange={(event) => updateSubsystemFormField("cancoderId", event.target.value)}
+                                  />
+                                  <TextField
+                                    label="CANcoder magnet offset"
+                                    size="small"
+                                    type="number"
+                                    value={subsystemForm.cancoderMagnetOffset}
+                                    onChange={(event) => updateSubsystemFormField("cancoderMagnetOffset", event.target.value)}
+                                  />
+                                  <TextField
+                                    label="CANcoder discontinuity point"
+                                    size="small"
+                                    type="number"
+                                    value={subsystemForm.cancoderDiscontinuityPoint}
+                                    onChange={(event) =>
+                                      updateSubsystemFormField("cancoderDiscontinuityPoint", event.target.value)
+                                    }
+                                  />
+                                  <TextField
+                                    label="Position units"
+                                    size="small"
+                                    value={subsystemForm.positionUnits}
+                                    onChange={(event) => updateSubsystemFormField("positionUnits", event.target.value)}
+                                  />
+                                  <TextField
+                                    label="Default position"
+                                    size="small"
+                                    type="number"
+                                    value={subsystemForm.defaultPosition}
+                                    onChange={(event) => updateSubsystemFormField("defaultPosition", event.target.value)}
+                                  />
+                                </Stack>
+                              </Stack>
+                            )}
+
                             <Box
                               sx={{
                                 display: "grid",
@@ -1355,44 +1393,6 @@ export function App() {
                                 </CardContent>
                               </Card>
                             </Box>
-
-                            {subsystemForm.type === "position" && (
-                              <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                                <TextField
-                                  label="CANcoder magnet offset"
-                                  size="small"
-                                  type="number"
-                                  value={subsystemForm.cancoderMagnetOffset}
-                                  onChange={(event) =>
-                                    setSubsystemForm((current) =>
-                                      current ? { ...current, cancoderMagnetOffset: event.target.value } : current
-                                    )
-                                  }
-                                />
-                                <TextField
-                                  label="CANcoder discontinuity point"
-                                  size="small"
-                                  type="number"
-                                  value={subsystemForm.cancoderDiscontinuityPoint}
-                                  onChange={(event) =>
-                                    setSubsystemForm((current) =>
-                                      current ? { ...current, cancoderDiscontinuityPoint: event.target.value } : current
-                                    )
-                                  }
-                                />
-                                <TextField
-                                  label="Default position"
-                                  size="small"
-                                  type="number"
-                                  value={subsystemForm.defaultPosition}
-                                  onChange={(event) =>
-                                    setSubsystemForm((current) =>
-                                      current ? { ...current, defaultPosition: event.target.value } : current
-                                    )
-                                  }
-                                />
-                              </Stack>
-                            )}
 
                             <Stack
                               direction="row"

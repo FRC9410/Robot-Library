@@ -220,7 +220,12 @@ function Get-OptionalDoubleExpression {
         return "Optional.empty()"
     }
 
-    return "Optional.of($Value)"
+    $text = $Value.ToString()
+    if ($text -notmatch '\.' -and $text -notmatch '[eE]') {
+        $text = "$text.0"
+    }
+
+    return "Optional.of($text)"
 }
 
 function Format-IndentedList {
