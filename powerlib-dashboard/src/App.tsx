@@ -1185,12 +1185,12 @@ export function App() {
                                 sx={{
                                   display: "grid",
                                   gap: 1.5,
-                                  gridTemplateColumns: { xs: "1fr", lg: "repeat(2, minmax(260px, 1fr))" }
+                                  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))"
                                 }}
                               >
                                 {subsystemForm.motors.map((motor, motorIndex) => (
                                   <Card key={motorIndex} variant="outlined">
-                                    <CardContent>
+                                    <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
                                       <Stack spacing={1.5}>
                                         <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
                                           <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
@@ -1208,7 +1208,7 @@ export function App() {
                                           )}
                                         </Stack>
 
-                                        <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
+                                        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", flexWrap: "wrap" }}>
                                           <FormControl size="small" sx={{ minWidth: 140 }}>
                                             <InputLabel id={`motor-role-${motorIndex}`}>Role</InputLabel>
                                             <Select
@@ -1232,7 +1232,7 @@ export function App() {
                                             type="number"
                                             value={motor.id}
                                             onChange={(event) => updateSubsystemMotor(motorIndex, { id: event.target.value })}
-                                            sx={{ minWidth: 120 }}
+                                            sx={{ minWidth: 120, flex: "1 1 120px" }}
                                           />
                                           <FormControlLabel
                                             control={
@@ -1275,45 +1275,45 @@ export function App() {
                             <Box
                               sx={{
                                 display: "grid",
-                                gap: 2,
-                                gridTemplateColumns: { xs: "1fr", lg: "repeat(3, minmax(180px, 1fr))" }
+                                gap: 1.5,
+                                gridTemplateColumns: { xs: "1fr", sm: "repeat(3, minmax(0, 1fr))" }
                               }}
                             >
                               <Card variant="outlined">
-                                <CardContent>
+                                <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
                                   <Stack spacing={1.5}>
                                     <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
                                       PID
                                     </Typography>
-                                    <TextField label="kP" size="small" type="number" value={subsystemForm.kP} onChange={(event) => updateSubsystemFormField("kP", event.target.value)} />
-                                    <TextField label="kI" size="small" type="number" value={subsystemForm.kI} onChange={(event) => updateSubsystemFormField("kI", event.target.value)} />
-                                    <TextField label="kD" size="small" type="number" value={subsystemForm.kD} onChange={(event) => updateSubsystemFormField("kD", event.target.value)} />
-                                    <TextField label="kG" size="small" type="number" value={subsystemForm.kG} onChange={(event) => updateSubsystemFormField("kG", event.target.value)} />
+                                    <TextField fullWidth label="kP" size="small" type="number" value={subsystemForm.kP} onChange={(event) => updateSubsystemFormField("kP", event.target.value)} />
+                                    <TextField fullWidth label="kI" size="small" type="number" value={subsystemForm.kI} onChange={(event) => updateSubsystemFormField("kI", event.target.value)} />
+                                    <TextField fullWidth label="kD" size="small" type="number" value={subsystemForm.kD} onChange={(event) => updateSubsystemFormField("kD", event.target.value)} />
+                                    <TextField fullWidth label="kG" size="small" type="number" value={subsystemForm.kG} onChange={(event) => updateSubsystemFormField("kG", event.target.value)} />
                                   </Stack>
                                 </CardContent>
                               </Card>
 
                               <Card variant="outlined">
-                                <CardContent>
+                                <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
                                   <Stack spacing={1.5}>
                                     <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
                                       Feedforward
                                     </Typography>
-                                    <TextField label="kS" size="small" type="number" value={subsystemForm.kS} onChange={(event) => updateSubsystemFormField("kS", event.target.value)} />
-                                    <TextField label="kV" size="small" type="number" value={subsystemForm.kV} onChange={(event) => updateSubsystemFormField("kV", event.target.value)} />
-                                    <TextField label="kA" size="small" type="number" value={subsystemForm.kA} onChange={(event) => updateSubsystemFormField("kA", event.target.value)} />
+                                    <TextField fullWidth label="kS" size="small" type="number" value={subsystemForm.kS} onChange={(event) => updateSubsystemFormField("kS", event.target.value)} />
+                                    <TextField fullWidth label="kV" size="small" type="number" value={subsystemForm.kV} onChange={(event) => updateSubsystemFormField("kV", event.target.value)} />
+                                    <TextField fullWidth label="kA" size="small" type="number" value={subsystemForm.kA} onChange={(event) => updateSubsystemFormField("kA", event.target.value)} />
                                   </Stack>
                                 </CardContent>
                               </Card>
 
                               <Card variant="outlined">
-                                <CardContent>
+                                <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
                                   <Stack spacing={1.5}>
                                     <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
                                       Motion Magic
                                     </Typography>
-                                    <TextField label="Acceleration" size="small" type="number" value={subsystemForm.acceleration} onChange={(event) => updateSubsystemFormField("acceleration", event.target.value)} />
-                                    <TextField label="Cruise velocity" size="small" type="number" value={subsystemForm.cruiseVelocity} onChange={(event) => updateSubsystemFormField("cruiseVelocity", event.target.value)} />
+                                    <TextField fullWidth label="Acceleration" size="small" type="number" value={subsystemForm.acceleration} onChange={(event) => updateSubsystemFormField("acceleration", event.target.value)} />
+                                    <TextField fullWidth label="Cruise velocity" size="small" type="number" value={subsystemForm.cruiseVelocity} onChange={(event) => updateSubsystemFormField("cruiseVelocity", event.target.value)} />
                                   </Stack>
                                 </CardContent>
                               </Card>
