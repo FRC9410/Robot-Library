@@ -44,6 +44,22 @@ function formatMetricLabel(rawMetric: string) {
   return spaced || "Value";
 }
 
+function formatNumber(value: number) {
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(4)));
+}
+
+function formatRobotMetricValue(value: NtTopicSnapshot["value"]) {
+  if (typeof value === "number") {
+    return formatNumber(value);
+  }
+
+  if (Array.isArray(value) && value.every((item) => typeof item === "number")) {
+    return `[${value.map((item) => formatNumber(item)).join(", ")}]`;
+  }
+
+  return stringifyValue(value);
+}
+
 function getSubsystemDisplayName(subsystem: GeneratedSubsystem, index: number) {
   return subsystem.name || subsystem.id || `Subsystem ${index + 1}`;
 }
@@ -94,7 +110,7 @@ function createTiles(subsystems: GeneratedSubsystem[], topics: NtTopicSnapshot[]
         const metricKey = metricParts.join(" ");
         return {
           label: formatMetricLabel(metricKey),
-          value: stringifyValue(topic.value),
+          value: formatRobotMetricValue(topic.value),
           type: String(topic.type)
         };
       })

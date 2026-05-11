@@ -40,6 +40,7 @@ public class PositionSubsystem extends PowerSubsystem {
   private final PositionSubsystemIO io;
   private String subsystemName;
   private String units;
+  private boolean focEnabled;
 
   /** Last commanded position setpoint in rotations. */
   private double setpointRotations;
@@ -63,6 +64,7 @@ public class PositionSubsystem extends PowerSubsystem {
     }
     this.subsystemName = config.subsystemName();
     this.units = config.units();
+    this.focEnabled = config.leadConfig().focEnabled();
     this.setpointRotations = config.defaultPosition().orElseGet(() -> leader != null ? leader.getPosition().getValueAsDouble() : 0.0);
     this.io = io == null ? createDefaultIO() : io;
   }
@@ -125,7 +127,7 @@ public class PositionSubsystem extends PowerSubsystem {
 
     double targetPos = defaultPos.isEmpty() ?  motor.getPosition().getValueAsDouble() : defaultPos.get();
 
-    motor.setControl(new MotionMagicVoltage(0).withPosition(targetPos).withSlot(0));
+    motor.setControl(new MotionMagicVoltage(0).withPosition(targetPos).withSlot(0).withEnableFOC(leadConfig.focEnabled()));
   }
 
   /**
@@ -173,6 +175,10 @@ public class PositionSubsystem extends PowerSubsystem {
   /** Returns the primary position motor (if initialized). */
   public TalonFX getPositionMotor() {
     return positionMotor;
+  }
+
+  public boolean isFocEnabled() {
+    return focEnabled;
   }
 }
 

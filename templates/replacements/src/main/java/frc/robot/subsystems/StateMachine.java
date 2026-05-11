@@ -16,7 +16,6 @@ public class StateMachine extends SubsystemBase {
     IDLE
   }
 
-  public final LED led = new LED();
   public final Vision vision = new Vision();
   public final Swerve drivetrain = Constants.Tuner.createDrivetrain();
 

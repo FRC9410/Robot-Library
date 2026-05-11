@@ -29,7 +29,11 @@ public class PositionSubsystemIOReal implements PositionSubsystemIO {
   public void setPositionRotations(double rotations) {
     TalonFX motor = subsystem.getPositionMotor();
     if (motor != null) {
-      motor.setControl(new MotionMagicVoltage(0).withPosition(rotations).withSlot(0));
+      motor.setControl(
+          new MotionMagicVoltage(0)
+              .withPosition(rotations)
+              .withSlot(0)
+              .withEnableFOC(subsystem.isFocEnabled()));
     }
   }
 

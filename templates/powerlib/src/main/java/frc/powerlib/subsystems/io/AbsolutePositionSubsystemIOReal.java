@@ -31,7 +31,11 @@ public class AbsolutePositionSubsystemIOReal implements AbsolutePositionSubsyste
     setpoint = position;
     TalonFX motor = subsystem.getPositionMotor();
     if (motor != null) {
-      motor.setControl(motionMagicRequest.withPosition(position).withSlot(0));
+      motor.setControl(
+          motionMagicRequest
+              .withPosition(position)
+              .withSlot(0)
+              .withEnableFOC(subsystem.isFocEnabled()));
     }
   }
 

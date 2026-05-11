@@ -237,6 +237,16 @@ function Get-OptionalDoubleExpression {
     return "Optional.of($text)"
 }
 
+function Get-FocEnabledExpression {
+    param($Subsystem)
+
+    if ($Subsystem.PSObject.Properties.Name -contains "focEnabled" -and $null -ne $Subsystem.focEnabled) {
+        return $Subsystem.focEnabled.ToString().ToLowerInvariant()
+    }
+
+    return "true"
+}
+
 function Format-IndentedList {
     param(
         [Parameter(Mandatory = $true)][string[]]$Expressions,
@@ -386,6 +396,7 @@ function New-InteractiveSubsystem {
         type = $type
         motors = @(New-InteractiveMotors)
         pid = New-InteractivePidConfig
+        focEnabled = Prompt-Boolean "Enable FOC?" $true
         ratios = [ordered]@{
             sensorToMechanism = Prompt-DoubleText "Sensor-to-mechanism ratio" "1.0"
             rotorToSensor = Prompt-DoubleText "Rotor-to-sensor ratio" "1.0"
@@ -444,6 +455,9 @@ function Read-SubsystemDocument {
     foreach ($subsystem in @($document.subsystems)) {
         if (-not ($subsystem.PSObject.Properties.Name -contains "id") -or [string]::IsNullOrWhiteSpace($subsystem.id)) {
             $subsystem | Add-Member -MemberType NoteProperty -Name id -Value (Get-StableSubsystemId $subsystem) -Force
+        }
+        if (-not ($subsystem.PSObject.Properties.Name -contains "focEnabled")) {
+            $subsystem | Add-Member -MemberType NoteProperty -Name focEnabled -Value $true -Force
         }
     }
     return $document
@@ -504,6 +518,7 @@ $motorConstants
   public static final Optional<Double> KA = $(Get-OptionalDoubleExpression $Subsystem.pid.kA);
   public static final double SENSOR_TO_MECHANISM_RATIO = $($Subsystem.ratios.sensorToMechanism);
   public static final double ROTOR_TO_SENSOR_RATIO = $($Subsystem.ratios.rotorToSensor);
+  public static final boolean FOC_ENABLED = $(Get-FocEnabledExpression $Subsystem);
   public static final double MOTION_MAGIC_CRUISE_VELOCITY = $($Subsystem.motionMagic.cruiseVelocity);
   public static final double MOTION_MAGIC_ACCELERATION = $($Subsystem.motionMagic.acceleration);
   public static final String NAME = "$($Metadata.PascalName)";
@@ -521,7 +536,8 @@ $motorList),
               KV,
               KA,
               SENSOR_TO_MECHANISM_RATIO,
-              ROTOR_TO_SENSOR_RATIO),
+              ROTOR_TO_SENSOR_RATIO,
+              FOC_ENABLED),
           new MotionMagicConfig(MOTION_MAGIC_CRUISE_VELOCITY, MOTION_MAGIC_ACCELERATION),
           NAME);
 
@@ -566,6 +582,7 @@ $motorConstants
   public static final Optional<Double> KA = $(Get-OptionalDoubleExpression $Subsystem.pid.kA);
   public static final double SENSOR_TO_MECHANISM_RATIO = $($Subsystem.ratios.sensorToMechanism);
   public static final double ROTOR_TO_SENSOR_RATIO = $($Subsystem.ratios.rotorToSensor);
+  public static final boolean FOC_ENABLED = $(Get-FocEnabledExpression $Subsystem);
   public static final int CANCODER_ID = $($Subsystem.cancoder.id);
   public static final double CANCODER_MAGNET_OFFSET = $($Subsystem.cancoder.magnetOffset);
   public static final double CANCODER_DISCONTINUITY_POINT = $($Subsystem.cancoder.discontinuityPoint);
@@ -588,7 +605,8 @@ $motorList),
               KV,
               KA,
               SENSOR_TO_MECHANISM_RATIO,
-              ROTOR_TO_SENSOR_RATIO),
+              ROTOR_TO_SENSOR_RATIO,
+              FOC_ENABLED),
           new CancoderConfig(CANCODER_ID, CANCODER_MAGNET_OFFSET, CANCODER_DISCONTINUITY_POINT),
           new MotionMagicConfig(MOTION_MAGIC_CRUISE_VELOCITY, MOTION_MAGIC_ACCELERATION),
           NAME,
@@ -635,6 +653,7 @@ $motorConstants
   public static final Optional<Double> KA = $(Get-OptionalDoubleExpression $Subsystem.pid.kA);
   public static final double SENSOR_TO_MECHANISM_RATIO = $($Subsystem.ratios.sensorToMechanism);
   public static final double ROTOR_TO_SENSOR_RATIO = $($Subsystem.ratios.rotorToSensor);
+  public static final boolean FOC_ENABLED = $(Get-FocEnabledExpression $Subsystem);
   public static final double MOTION_MAGIC_CRUISE_VELOCITY = $($Subsystem.motionMagic.cruiseVelocity);
   public static final double MOTION_MAGIC_ACCELERATION = $($Subsystem.motionMagic.acceleration);
   public static final double SLOW_MOTION_MAGIC_CRUISE_VELOCITY = $($Subsystem.slowMotionMagic.cruiseVelocity);
@@ -661,7 +680,8 @@ $motorList),
               KV,
               KA,
               SENSOR_TO_MECHANISM_RATIO,
-              ROTOR_TO_SENSOR_RATIO),
+              ROTOR_TO_SENSOR_RATIO,
+              FOC_ENABLED),
           new MotionMagicConfig(MOTION_MAGIC_CRUISE_VELOCITY, MOTION_MAGIC_ACCELERATION),
           new MotionMagicConfig(SLOW_MOTION_MAGIC_CRUISE_VELOCITY, SLOW_MOTION_MAGIC_ACCELERATION),
           NAME,

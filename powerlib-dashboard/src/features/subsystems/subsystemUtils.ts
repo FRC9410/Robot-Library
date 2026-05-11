@@ -50,6 +50,7 @@ export function createEmptySubsystemForm(): SubsystemFormState {
     id: "",
     name: "",
     type: "velocity",
+    focEnabled: true,
     neutralMode: "Brake",
     motors: [createEmptyMotor("leader")],
     sensorToMechanism: "1.0",
@@ -95,6 +96,7 @@ export function subsystemToForm(subsystem: GeneratedSubsystem, index: number): S
           : subsystem.type === "absolutePosition"
           ? "absolutePosition"
           : "velocity",
+    focEnabled: subsystem.focEnabled !== false,
     neutralMode: leader?.neutralMode === "Coast" ? "Coast" : "Brake",
     motors: motors.map((motor, motorIndex) => generatedMotorToForm(motor, motorIndex)),
     sensorToMechanism: toNumberText(subsystem.ratios?.sensorToMechanism, "1.0"),
@@ -143,6 +145,7 @@ export function formToSubsystem(form: SubsystemFormState, existing?: GeneratedSu
     id,
     name: form.name.trim(),
     type: form.type,
+    focEnabled: form.focEnabled,
     motors,
     pid: {
       kP: textToNumber(form.kP, 0),

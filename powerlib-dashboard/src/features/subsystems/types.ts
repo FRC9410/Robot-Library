@@ -17,6 +17,7 @@ export type GeneratedSubsystem = {
   id?: string;
   name?: string;
   type?: string;
+  focEnabled?: boolean;
   motors?: GeneratedMotor[];
   pid?: Record<string, number | string | null>;
   ratios?: {
@@ -59,6 +60,7 @@ export type SubsystemFormState = {
   id: string;
   name: string;
   type: "velocity" | "velocityTorque" | "position" | "absolutePosition";
+  focEnabled: boolean;
   neutralMode: "Brake" | "Coast";
   motors: SubsystemFormMotor[];
   sensorToMechanism: string;

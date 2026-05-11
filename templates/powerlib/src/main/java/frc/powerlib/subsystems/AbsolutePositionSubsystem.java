@@ -26,6 +26,7 @@ public class AbsolutePositionSubsystem extends PowerSubsystem {
   private MotionProfile activeProfile = null;
   private double setpoint;
   private double voltage;
+  private boolean focEnabled;
 
   public AbsolutePositionSubsystem(AbsolutePositionSubsystemConfig config) {
     this(config, null);
@@ -37,6 +38,7 @@ public class AbsolutePositionSubsystem extends PowerSubsystem {
     this.config = config;
     this.setpoint = config.homePosition();
     this.voltage = config.stopVoltage();
+    this.focEnabled = config.leadConfig().focEnabled();
 
     TalonFX leader = getLeaderMotor();
     if (leader != null) {
@@ -108,6 +110,10 @@ public class AbsolutePositionSubsystem extends PowerSubsystem {
 
   public TalonFX getPositionMotor() {
     return positionMotor;
+  }
+
+  public boolean isFocEnabled() {
+    return focEnabled;
   }
 
   private void applyProfileForSetpoint() {

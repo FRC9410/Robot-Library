@@ -1,4 +1,4 @@
-import { FormControl, InputLabel, MenuItem, Select, Stack, TextField } from "@mui/material";
+import { Checkbox, FormControl, FormControlLabel, InputLabel, MenuItem, Select, Stack, TextField } from "@mui/material";
 import type { SubsystemFormState } from "../types";
 import { toCamelCase } from "../subsystemUtils";
 
@@ -79,6 +79,10 @@ export function SubsystemBasicFields({ form, setForm, updateField }: SubsystemBa
             <MenuItem value="Coast">Coast</MenuItem>
           </Select>
         </FormControl>
+        <FormControlLabel
+          control={<Checkbox checked={form.focEnabled} onChange={(event) => updateField("focEnabled", event.target.checked)} />}
+          label="FOC enabled"
+        />
       </Stack>
     </>
   );

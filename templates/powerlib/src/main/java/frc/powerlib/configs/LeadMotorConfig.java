@@ -19,5 +19,19 @@ public record LeadMotorConfig(
     Optional<Double> kV,
     Optional<Double> kA,
     double sensorToMechanismRatio,
-    double rotorToSensorRatio) {}
+    double rotorToSensorRatio,
+    boolean focEnabled) {
+  public LeadMotorConfig(
+      double kP,
+      double kI,
+      double kD,
+      double kG,
+      Optional<Double> kS,
+      Optional<Double> kV,
+      Optional<Double> kA,
+      double sensorToMechanismRatio,
+      double rotorToSensorRatio) {
+    this(kP, kI, kD, kG, kS, kV, kA, sensorToMechanismRatio, rotorToSensorRatio, true);
+  }
+}
 

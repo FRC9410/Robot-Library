@@ -27,6 +27,7 @@ public class VelocitySubsystem extends PowerSubsystem {
   public final VelocitySubsystemIO.Inputs inputs = new VelocitySubsystemIO.Inputs();
   private final VelocitySubsystemIO io;
   private String subsystemName;
+  private boolean focEnabled;
   /**
    * Constructor that uses the leader motor from the config and configures it with lead and motion
    * magic settings from the same config.
@@ -45,6 +46,7 @@ public class VelocitySubsystem extends PowerSubsystem {
       this.velocityMotor = leader;
     }
     this.subsystemName = config.subsystemName();
+    this.focEnabled = config.leadConfig().focEnabled();
     this.io = io == null ? createDefaultIO() : io;
   }
 
@@ -116,6 +118,10 @@ public class VelocitySubsystem extends PowerSubsystem {
   /** Returns the primary velocity motor (if initialized). */
   public TalonFX getVelocityMotor() {
     return velocityMotor;
+  }
+
+  public boolean isFocEnabled() {
+    return focEnabled;
   }
 
   public boolean isRunning () {

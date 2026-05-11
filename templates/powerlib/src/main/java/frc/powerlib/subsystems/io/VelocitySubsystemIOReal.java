@@ -33,7 +33,7 @@ public class VelocitySubsystemIOReal implements VelocitySubsystemIO {
       motor.setControl(
           new MotionMagicVelocityVoltage(0)
               .withVelocity(velocityRotationsPerSecond)
-              .withEnableFOC(true)
+              .withEnableFOC(subsystem.isFocEnabled())
               .withSlot(0));
     }
   }

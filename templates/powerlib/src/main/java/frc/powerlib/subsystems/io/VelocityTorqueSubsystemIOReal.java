@@ -31,6 +31,11 @@ public class VelocityTorqueSubsystemIOReal implements VelocitySubsystemIO {
   public void setVelocity(double velocityRotationsPerSecond) {
     TalonFX motor = subsystem.getVelocityMotor();
     if (motor != null) {
+      if (!subsystem.isFocEnabled()) {
+        setVelocityWithoutFOC(velocityRotationsPerSecond);
+        return;
+      }
+
       motor.setControl(
           new VelocityTorqueCurrentFOC(velocityRotationsPerSecond).withFeedForward(0));
     }
