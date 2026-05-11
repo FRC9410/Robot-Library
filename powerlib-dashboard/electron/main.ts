@@ -166,13 +166,13 @@ ipcMain.handle("powerlib:read-subsystems", async () => {
 
   return {
     exists: false,
-    path: getSubsystemJsonCandidates()[1],
+    path: getSubsystemJsonCandidates()[0],
     subsystems: []
   };
 });
 
 ipcMain.handle("powerlib:save-subsystems", async (_event, subsystems: unknown[]) => {
-  let targetPath = getSubsystemJsonCandidates()[1];
+  let targetPath = getSubsystemJsonCandidates()[0];
 
   for (const candidate of getSubsystemJsonCandidates()) {
     try {
@@ -197,7 +197,8 @@ ipcMain.handle("powerlib:save-subsystems", async (_event, subsystems: unknown[])
 });
 
 ipcMain.handle("powerlib:update-subsystem-code", async () => {
-  const subsystemsPath = getSubsystemJsonCandidates()[1];
+  const robotRoot = getDetectedRobotRoot();
+  const subsystemsPath = path.join(robotRoot, "powerlib-subsystems.json");
   let targetPath = subsystemsPath;
 
   for (const candidate of getSubsystemJsonCandidates()) {
@@ -210,7 +211,6 @@ ipcMain.handle("powerlib:update-subsystem-code", async () => {
     }
   }
 
-  const robotRoot = getRobotRoot(targetPath);
   const scriptCandidates = [
     path.join(robotRoot, "power-tool", "scripts", "generate-subsystem.ps1"),
     path.join(robotRoot, "powerlib-dashboard", "scripts", "generate-subsystem.ps1"),
