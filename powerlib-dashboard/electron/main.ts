@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, Menu, shell } from "electron";
 import { execFile, spawn } from "node:child_process";
 import fs from "node:fs/promises";
+import fsSync from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -66,8 +67,10 @@ function createAppMenu(window: BrowserWindow) {
 }
 
 function getSubsystemJsonCandidates() {
+  const robotRoot = getDetectedRobotRoot();
   return Array.from(
     new Set([
+      path.resolve(robotRoot, "powerlib-subsystems.json"),
       path.resolve(process.cwd(), "powerlib-subsystems.json"),
       path.resolve(process.cwd(), "..", "powerlib-subsystems.json"),
       path.resolve(app.getAppPath(), "powerlib-subsystems.json"),
@@ -80,9 +83,55 @@ function getRobotRoot(subsystemsJsonPath: string) {
   return path.dirname(subsystemsJsonPath);
 }
 
+function pathExistsSync(candidate: string) {
+  try {
+    return fsSync.existsSync(candidate);
+  } catch {
+    return false;
+  }
+}
+
+function getAncestorCandidates(start: string) {
+  const candidates: string[] = [];
+  let current = path.resolve(start);
+
+  for (let index = 0; index < 8; index += 1) {
+    candidates.push(current);
+    const parent = path.dirname(current);
+    if (parent === current) {
+      break;
+    }
+    current = parent;
+  }
+
+  return candidates;
+}
+
+function getDetectedRobotRoot() {
+  const starts = [process.cwd(), app.getAppPath(), __dirname];
+  const candidates = Array.from(new Set(starts.flatMap((start) => getAncestorCandidates(start))));
+
+  for (const candidate of candidates) {
+    const normalized = path.basename(candidate).toLowerCase() === "power-tool" ? path.dirname(candidate) : candidate;
+    if (
+      pathExistsSync(path.join(normalized, "build.gradle")) ||
+      pathExistsSync(path.join(normalized, "settings.gradle")) ||
+      pathExistsSync(path.join(normalized, "src", "main", "java")) ||
+      pathExistsSync(path.join(normalized, "power-tool", "scripts", "generate-subsystem.ps1"))
+    ) {
+      return normalized;
+    }
+  }
+
+  const cwd = path.resolve(process.cwd());
+  return path.basename(cwd).toLowerCase() === "power-tool" ? path.dirname(cwd) : cwd;
+}
+
 function getPowerToolRootCandidates() {
+  const robotRoot = getDetectedRobotRoot();
   return Array.from(
     new Set([
+      path.resolve(robotRoot, "power-tool"),
       path.resolve(process.cwd(), "power-tool"),
       path.resolve(process.cwd()),
       path.resolve(app.getAppPath()),

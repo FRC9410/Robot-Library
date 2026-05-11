@@ -1096,13 +1096,6 @@ export function App() {
 
                     {subsystemDocument.error && <Alert severity="error">{subsystemDocument.error}</Alert>}
 
-                    {!subsystemDocument.error && !subsystemDocument.exists && !subsystemDocument.loading && (
-                      <Alert severity="info" variant="outlined">
-                        No generated subsystem document was found. Run the PowerLib subsystem generator in this robot
-                        project to create `powerlib-subsystems.json`.
-                      </Alert>
-                    )}
-
                     <Stack spacing={1}>
                       {subsystemDocument.subsystems.map((subsystem, index) => {
                         const selected = subsystemForm?.mode === "edit" && subsystemForm.index === index;
