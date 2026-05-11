@@ -65,6 +65,7 @@ type TargetPreset = {
 type GeneratedMotor = {
   role?: string;
   id?: number;
+  motorType?: string;
   neutralMode?: string;
   reversed?: boolean;
 };
@@ -72,6 +73,7 @@ type GeneratedMotor = {
 type SubsystemFormMotor = {
   role: "leader" | "follower";
   id: string;
+  motorType: string;
   reversed: boolean;
 };
 
@@ -154,6 +156,8 @@ const defaultTopics = [
 
 const defaultPrefixes = ["/SmartDashboard/", "/Shuffleboard/", "/LiveWindow/", "/FMSInfo/"];
 
+const motorTypes = ["TalonFX", "SparkMax", "SparkFlex", "VictorSPX"];
+
 function toCamelCase(value: string) {
   const parts = value
     .trim()
@@ -180,6 +184,7 @@ function generatedMotorToForm(motor: GeneratedMotor | undefined, index: number):
   return {
     role: index === 0 ? "leader" : motor?.role === "leader" ? "leader" : "follower",
     id: toNumberText(motor?.id, ""),
+    motorType: motor?.motorType ?? "TalonFX",
     reversed: Boolean(motor?.reversed)
   };
 }
@@ -188,6 +193,7 @@ function createEmptyMotor(role: "leader" | "follower" = "follower"): SubsystemFo
   return {
     role,
     id: "",
+    motorType: "TalonFX",
     reversed: false
   };
 }
@@ -260,6 +266,7 @@ function formToSubsystem(form: SubsystemFormState, existing?: GeneratedSubsystem
   const motors = form.motors.map((motor, index) => ({
     role: index === 0 ? "leader" : motor.role,
     id: textToNumber(motor.id, 0),
+    motorType: motor.motorType,
     neutralMode: index === 0 ? form.neutralMode : undefined,
     reversed: motor.reversed
   }));
@@ -340,6 +347,14 @@ function getPidSummary(subsystem: GeneratedSubsystem) {
   return ["kP", "kI", "kD", "kG"]
     .map((key) => `${key} ${stringifyOptional(pid[key])}`)
     .join(" / ");
+}
+
+function getMotorIdsSummary(subsystem: GeneratedSubsystem) {
+  const ids = (subsystem.motors ?? [])
+    .map((motor) => motor.id)
+    .filter((id) => id !== null && id !== undefined && String(id).length > 0);
+
+  return ids.length > 0 ? `CAN ${ids.join(", ")}` : "No CAN IDs";
 }
 
 function summarizeUpdateOutput(output: string) {
@@ -1048,7 +1063,7 @@ export function App() {
                               <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
                                 <Chip label={subsystem.type ?? "-"} size="small" variant={selected ? "filled" : "outlined"} />
                                 <Typography variant="caption" sx={{ fontFamily: "monospace" }} noWrap>
-                                  {subsystem.id ?? "-"}
+                                  {getMotorIdsSummary(subsystem)}
                                 </Typography>
                               </Stack>
                             </Stack>
@@ -1074,9 +1089,6 @@ export function App() {
                               <Box sx={{ flexGrow: 1 }}>
                                 <Typography variant="h6">
                                   {subsystemForm.mode === "create" ? "Create Subsystem" : `Edit ${subsystemForm.name || "Subsystem"}`}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                  Save writes `powerlib-subsystems.json`; Update Code regenerates Java files.
                                 </Typography>
                               </Box>
                               {subsystemForm.mode === "edit" && subsystemForm.index !== null && (
@@ -1200,7 +1212,8 @@ export function App() {
                                 sx={{
                                   display: "grid",
                                   gap: 1.5,
-                                  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))"
+                                  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 320px))",
+                                  justifyContent: "start"
                                 }}
                               >
                                 {subsystemForm.motors.map((motor, motorIndex) => (
@@ -1243,6 +1256,23 @@ export function App() {
                                             }
                                             label="isReversed"
                                           />
+                                          <FormControl size="small" fullWidth>
+                                            <InputLabel id={`motor-type-${motorIndex}`}>Motor type</InputLabel>
+                                            <Select
+                                              labelId={`motor-type-${motorIndex}`}
+                                              label="Motor type"
+                                              value={motor.motorType}
+                                              onChange={(event) =>
+                                                updateSubsystemMotor(motorIndex, { motorType: event.target.value })
+                                              }
+                                            >
+                                              {motorTypes.map((motorType) => (
+                                                <MenuItem key={motorType} value={motorType}>
+                                                  {motorType}
+                                                </MenuItem>
+                                              ))}
+                                            </Select>
+                                          </FormControl>
                                         </Stack>
                                       </Stack>
                                     </CardContent>
@@ -1255,7 +1285,8 @@ export function App() {
                               sx={{
                                 display: "grid",
                                 gap: 1.5,
-                                gridTemplateColumns: { xs: "1fr", sm: "repeat(3, minmax(0, 1fr))" }
+                                gridTemplateColumns: { xs: "1fr", sm: "repeat(3, minmax(180px, 320px))" },
+                                justifyContent: "start"
                               }}
                             >
                               <Card variant="outlined">
