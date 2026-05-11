@@ -180,6 +180,11 @@ def templateFiles = [
         source: 'replacements/src/main/java/frc/robot/utils/FieldUtils.java',
         destination: 'src/main/java/frc/robot/utils/FieldUtils.java',
         replacement: true
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/deploy/pathplanner/settings.json',
+        destination: 'src/main/deploy/pathplanner/settings.json',
+        replacement: false
     )
 ]
 

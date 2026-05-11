@@ -39,8 +39,8 @@ public interface PowerRobotContainer {
     return SUBSYSTEM_DATA.get(key);
   }
 
-    static Map<String, Object> getAllData() {
-      return SUBSYSTEM_DATA;
+  static Map<String, Object> getAllData() {
+    return SUBSYSTEM_DATA;
   }
 
   /**

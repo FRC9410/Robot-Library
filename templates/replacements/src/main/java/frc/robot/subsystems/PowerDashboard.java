@@ -6,6 +6,7 @@ package frc.robot.subsystems;
 
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import frc.powerlib.PowerRobotContainer;
 
 public class PowerDashboard extends SubsystemBase {
   private final StateMachine stateMachine;
@@ -22,5 +23,22 @@ public class PowerDashboard extends SubsystemBase {
   }
 
   @Override
-  public void periodic() {}
+  public void periodic() {
+    new java.util.HashMap<>(PowerRobotContainer.getAllData())
+        .forEach((key, value) -> publishValue("PowerLib/Data/" + key, value));
+  }
+
+  private void publishValue(String key, Object value) {
+    if (value instanceof Boolean) {
+      SmartDashboard.putBoolean(key, (Boolean) value);
+      return;
+    }
+
+    if (value instanceof Number) {
+      SmartDashboard.putNumber(key, ((Number) value).doubleValue());
+      return;
+    }
+
+    SmartDashboard.putString(key, value == null ? "" : value.toString());
+  }
 }
