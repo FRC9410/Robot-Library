@@ -72,7 +72,6 @@ type GeneratedMotor = {
 type SubsystemFormMotor = {
   role: "leader" | "follower";
   id: string;
-  neutralMode: "Brake" | "Coast";
   reversed: boolean;
 };
 
@@ -112,6 +111,7 @@ type SubsystemFormState = {
   id: string;
   name: string;
   type: "velocity" | "position";
+  neutralMode: "Brake" | "Coast";
   motors: SubsystemFormMotor[];
   sensorToMechanism: string;
   rotorToSensor: string;
@@ -180,7 +180,6 @@ function generatedMotorToForm(motor: GeneratedMotor | undefined, index: number):
   return {
     role: index === 0 ? "leader" : motor?.role === "leader" ? "leader" : "follower",
     id: toNumberText(motor?.id, ""),
-    neutralMode: motor?.neutralMode === "Coast" ? "Coast" : "Brake",
     reversed: Boolean(motor?.reversed)
   };
 }
@@ -189,7 +188,6 @@ function createEmptyMotor(role: "leader" | "follower" = "follower"): SubsystemFo
   return {
     role,
     id: "",
-    neutralMode: "Brake",
     reversed: false
   };
 }
@@ -201,6 +199,7 @@ function createEmptySubsystemForm(): SubsystemFormState {
     id: "",
     name: "",
     type: "velocity",
+    neutralMode: "Brake",
     motors: [createEmptyMotor("leader")],
     sensorToMechanism: "1.0",
     rotorToSensor: "1.0",
@@ -223,12 +222,14 @@ function createEmptySubsystemForm(): SubsystemFormState {
 
 function subsystemToForm(subsystem: GeneratedSubsystem, index: number): SubsystemFormState {
   const motors = subsystem.motors?.length ? subsystem.motors : [{ role: "leader" as const }];
+  const leader = motors.find((motor) => motor.role === "leader") ?? motors[0];
   return {
     mode: "edit",
     index,
     id: subsystem.id ?? toCamelCase(subsystem.name ?? ""),
     name: subsystem.name ?? "",
     type: subsystem.type === "position" ? "position" : "velocity",
+    neutralMode: leader?.neutralMode === "Coast" ? "Coast" : "Brake",
     motors: motors.map((motor, motorIndex) => generatedMotorToForm(motor, motorIndex)),
     sensorToMechanism: toNumberText(subsystem.ratios?.sensorToMechanism, "1.0"),
     rotorToSensor: toNumberText(subsystem.ratios?.rotorToSensor, "1.0"),
@@ -259,7 +260,7 @@ function formToSubsystem(form: SubsystemFormState, existing?: GeneratedSubsystem
   const motors = form.motors.map((motor, index) => ({
     role: index === 0 ? "leader" : motor.role,
     id: textToNumber(motor.id, 0),
-    neutralMode: index === 0 ? motor.neutralMode : undefined,
+    neutralMode: index === 0 ? form.neutralMode : undefined,
     reversed: motor.reversed
   }));
   const subsystem: GeneratedSubsystem = {
@@ -1152,6 +1153,20 @@ export function App() {
                                 value={subsystemForm.rotorToSensor}
                                 onChange={(event) => updateSubsystemFormField("rotorToSensor", event.target.value)}
                               />
+                              <FormControl size="small" sx={{ minWidth: 160 }}>
+                                <InputLabel id="subsystem-neutral-mode-label">Neutral mode</InputLabel>
+                                <Select
+                                  labelId="subsystem-neutral-mode-label"
+                                  label="Neutral mode"
+                                  value={subsystemForm.neutralMode}
+                                  onChange={(event) =>
+                                    updateSubsystemFormField("neutralMode", event.target.value as "Brake" | "Coast")
+                                  }
+                                >
+                                  <MenuItem value="Brake">Brake</MenuItem>
+                                  <MenuItem value="Coast">Coast</MenuItem>
+                                </Select>
+                              </FormControl>
                               {subsystemForm.type === "position" && (
                                 <>
                                   <TextField
@@ -1194,7 +1209,7 @@ export function App() {
                                       <Stack spacing={1.5}>
                                         <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
                                           <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
-                                            Motor {motorIndex + 1}
+                                            {motorIndex === 0 ? "Leader" : `Follower ${motorIndex}`}
                                           </Typography>
                                           {motorIndex > 0 && (
                                             <Button
@@ -1208,31 +1223,14 @@ export function App() {
                                           )}
                                         </Stack>
 
-                                        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", flexWrap: "wrap" }}>
-                                          <FormControl size="small" sx={{ minWidth: 140 }}>
-                                            <InputLabel id={`motor-role-${motorIndex}`}>Role</InputLabel>
-                                            <Select
-                                              labelId={`motor-role-${motorIndex}`}
-                                              label="Role"
-                                              value={motorIndex === 0 ? "leader" : motor.role}
-                                              disabled={motorIndex === 0}
-                                              onChange={(event) =>
-                                                updateSubsystemMotor(motorIndex, {
-                                                  role: event.target.value as "leader" | "follower"
-                                                })
-                                              }
-                                            >
-                                              <MenuItem value="leader">leader</MenuItem>
-                                              <MenuItem value="follower">follower</MenuItem>
-                                            </Select>
-                                          </FormControl>
+                                        <Stack spacing={1.5}>
                                           <TextField
                                             label="CAN ID"
                                             size="small"
                                             type="number"
                                             value={motor.id}
                                             onChange={(event) => updateSubsystemMotor(motorIndex, { id: event.target.value })}
-                                            sx={{ minWidth: 120, flex: "1 1 120px" }}
+                                            fullWidth
                                           />
                                           <FormControlLabel
                                             control={
@@ -1246,25 +1244,6 @@ export function App() {
                                             label="isReversed"
                                           />
                                         </Stack>
-
-                                        {motorIndex === 0 && (
-                                          <FormControl size="small" sx={{ maxWidth: 180 }}>
-                                            <InputLabel id="leader-neutral-mode-label">Neutral mode</InputLabel>
-                                            <Select
-                                              labelId="leader-neutral-mode-label"
-                                              label="Neutral mode"
-                                              value={motor.neutralMode}
-                                              onChange={(event) =>
-                                                updateSubsystemMotor(motorIndex, {
-                                                  neutralMode: event.target.value as "Brake" | "Coast"
-                                                })
-                                              }
-                                            >
-                                              <MenuItem value="Brake">Brake</MenuItem>
-                                              <MenuItem value="Coast">Coast</MenuItem>
-                                            </Select>
-                                          </FormControl>
-                                        )}
                                       </Stack>
                                     </CardContent>
                                   </Card>
