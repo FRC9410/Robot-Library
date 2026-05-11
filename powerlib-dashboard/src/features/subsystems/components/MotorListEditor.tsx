@@ -4,7 +4,6 @@ import {
   Card,
   CardContent,
   Checkbox,
-  Divider,
   FormControl,
   FormControlLabel,
   InputLabel,
@@ -37,7 +36,6 @@ export function MotorListEditor({ motors, onAddMotor, onDeleteMotor, onUpdateMot
           Add Motor
         </Button>
       </Stack>
-      <Divider />
 
       <Box
         sx={{
