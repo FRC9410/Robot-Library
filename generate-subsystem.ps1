@@ -380,6 +380,7 @@ function New-InteractiveSubsystem {
             discontinuityPoint = Prompt-DoubleText "CANcoder discontinuity point rotations" "0.5"
         }
         $subsystem.motionMagic.cruiseVelocity = Prompt-DoubleText "Motion Magic cruise velocity" "0.0"
+        $subsystem.motionMagic.cruiseVelocity = Prompt-DoubleText "Motion Magic cruise velocity" "0.0"
         $subsystem.motionMagic.acceleration = Prompt-DoubleText "Motion Magic acceleration" "0.0"
         $subsystem.position = [ordered]@{
             units = Prompt-Value "Position units" "rotations"
@@ -468,6 +469,7 @@ $motorConstants
   public static final Optional<Double> KA = $(Get-OptionalDoubleExpression $Subsystem.pid.kA);
   public static final double SENSOR_TO_MECHANISM_RATIO = $($Subsystem.ratios.sensorToMechanism);
   public static final double ROTOR_TO_SENSOR_RATIO = $($Subsystem.ratios.rotorToSensor);
+  public static final double MOTION_MAGIC_CRUISE_VELOCITY = $($Subsystem.motionMagic.cruiseVelocity);
   public static final double MOTION_MAGIC_ACCELERATION = $($Subsystem.motionMagic.acceleration);
   public static final String NAME = "$($Metadata.PascalName)";
 
@@ -485,7 +487,7 @@ $motorList),
               KA,
               SENSOR_TO_MECHANISM_RATIO,
               ROTOR_TO_SENSOR_RATIO),
-          MotionMagicConfig.forVelocity(MOTION_MAGIC_ACCELERATION),
+          new MotionMagicConfig(MOTION_MAGIC_CRUISE_VELOCITY, MOTION_MAGIC_ACCELERATION),
           NAME);
 
 $CustomConstantsStartMarker

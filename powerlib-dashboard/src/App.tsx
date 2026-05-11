@@ -69,6 +69,13 @@ type GeneratedMotor = {
   reversed?: boolean;
 };
 
+type SubsystemFormMotor = {
+  role: "leader" | "follower";
+  id: string;
+  neutralMode: "Brake" | "Coast";
+  reversed: boolean;
+};
+
 type GeneratedSubsystem = {
   id?: string;
   name?: string;
@@ -105,11 +112,17 @@ type SubsystemFormState = {
   id: string;
   name: string;
   type: "velocity" | "position";
-  leaderId: string;
-  leaderNeutralMode: "Brake" | "Coast";
-  leaderReversed: boolean;
+  motors: SubsystemFormMotor[];
   sensorToMechanism: string;
   rotorToSensor: string;
+  kP: string;
+  kI: string;
+  kD: string;
+  kG: string;
+  kS: string;
+  kV: string;
+  kA: string;
+  cruiseVelocity: string;
   acceleration: string;
   cancoderId: string;
   cancoderMagnetOffset: string;
@@ -163,6 +176,24 @@ function toNumberText(value: unknown, fallback: string) {
   return String(value);
 }
 
+function generatedMotorToForm(motor: GeneratedMotor | undefined, index: number): SubsystemFormMotor {
+  return {
+    role: index === 0 ? "leader" : motor?.role === "leader" ? "leader" : "follower",
+    id: toNumberText(motor?.id, ""),
+    neutralMode: motor?.neutralMode === "Coast" ? "Coast" : "Brake",
+    reversed: Boolean(motor?.reversed)
+  };
+}
+
+function createEmptyMotor(role: "leader" | "follower" = "follower"): SubsystemFormMotor {
+  return {
+    role,
+    id: "",
+    neutralMode: "Brake",
+    reversed: false
+  };
+}
+
 function createEmptySubsystemForm(): SubsystemFormState {
   return {
     mode: "create",
@@ -170,11 +201,17 @@ function createEmptySubsystemForm(): SubsystemFormState {
     id: "",
     name: "",
     type: "velocity",
-    leaderId: "",
-    leaderNeutralMode: "Brake",
-    leaderReversed: false,
+    motors: [createEmptyMotor("leader")],
     sensorToMechanism: "1.0",
     rotorToSensor: "1.0",
+    kP: "0.0",
+    kI: "0.0",
+    kD: "0.0",
+    kG: "0.0",
+    kS: "0.0",
+    kV: "0.0",
+    kA: "0.0",
+    cruiseVelocity: "0.0",
     acceleration: "0.0",
     cancoderId: "",
     cancoderMagnetOffset: "0.0",
@@ -185,18 +222,24 @@ function createEmptySubsystemForm(): SubsystemFormState {
 }
 
 function subsystemToForm(subsystem: GeneratedSubsystem, index: number): SubsystemFormState {
-  const leader = subsystem.motors?.find((motor) => motor.role === "leader") ?? subsystem.motors?.[0];
+  const motors = subsystem.motors?.length ? subsystem.motors : [{ role: "leader" as const }];
   return {
     mode: "edit",
     index,
     id: subsystem.id ?? toCamelCase(subsystem.name ?? ""),
     name: subsystem.name ?? "",
     type: subsystem.type === "position" ? "position" : "velocity",
-    leaderId: toNumberText(leader?.id, ""),
-    leaderNeutralMode: leader?.neutralMode === "Coast" ? "Coast" : "Brake",
-    leaderReversed: Boolean(leader?.reversed),
+    motors: motors.map((motor, motorIndex) => generatedMotorToForm(motor, motorIndex)),
     sensorToMechanism: toNumberText(subsystem.ratios?.sensorToMechanism, "1.0"),
     rotorToSensor: toNumberText(subsystem.ratios?.rotorToSensor, "1.0"),
+    kP: toNumberText(subsystem.pid?.kP, "0.0"),
+    kI: toNumberText(subsystem.pid?.kI, "0.0"),
+    kD: toNumberText(subsystem.pid?.kD, "0.0"),
+    kG: toNumberText(subsystem.pid?.kG, "0.0"),
+    kS: toNumberText(subsystem.pid?.kS, "0.0"),
+    kV: toNumberText(subsystem.pid?.kV, "0.0"),
+    kA: toNumberText(subsystem.pid?.kA, "0.0"),
+    cruiseVelocity: toNumberText(subsystem.motionMagic?.cruiseVelocity, "0.0"),
     acceleration: toNumberText(subsystem.motionMagic?.acceleration, "0.0"),
     cancoderId: toNumberText(subsystem.cancoder?.id, ""),
     cancoderMagnetOffset: toNumberText(subsystem.cancoder?.magnetOffset, "0.0"),
@@ -213,29 +256,26 @@ function textToNumber(value: string, fallback = 0) {
 
 function formToSubsystem(form: SubsystemFormState, existing?: GeneratedSubsystem): GeneratedSubsystem {
   const id = form.id.trim() || toCamelCase(form.name);
-  const existingFollowers = existing?.motors?.filter((motor) => motor.role !== "leader") ?? [];
+  const motors = form.motors.map((motor, index) => ({
+    role: index === 0 ? "leader" : motor.role,
+    id: textToNumber(motor.id, 0),
+    neutralMode: index === 0 ? motor.neutralMode : undefined,
+    reversed: motor.reversed
+  }));
   const subsystem: GeneratedSubsystem = {
     ...existing,
     id,
     name: form.name.trim(),
     type: form.type,
-    motors: [
-      {
-        role: "leader",
-        id: textToNumber(form.leaderId, 0),
-        neutralMode: form.leaderNeutralMode,
-        reversed: form.leaderReversed
-      },
-      ...existingFollowers
-    ],
-    pid: existing?.pid ?? {
-      kP: 0.0,
-      kI: 0.0,
-      kD: 0.0,
-      kG: 0.0,
-      kS: null,
-      kV: null,
-      kA: null
+    motors,
+    pid: {
+      kP: textToNumber(form.kP, 0),
+      kI: textToNumber(form.kI, 0),
+      kD: textToNumber(form.kD, 0),
+      kG: textToNumber(form.kG, 0),
+      kS: textToNumber(form.kS, 0),
+      kV: textToNumber(form.kV, 0),
+      kA: textToNumber(form.kA, 0)
     },
     ratios: {
       sensorToMechanism: textToNumber(form.sensorToMechanism, 1),
@@ -243,6 +283,7 @@ function formToSubsystem(form: SubsystemFormState, existing?: GeneratedSubsystem
     },
     motionMagic: {
       ...existing?.motionMagic,
+      cruiseVelocity: textToNumber(form.cruiseVelocity, 0),
       acceleration: textToNumber(form.acceleration, 0)
     }
   };
@@ -255,7 +296,7 @@ function formToSubsystem(form: SubsystemFormState, existing?: GeneratedSubsystem
     };
     subsystem.motionMagic = {
       ...subsystem.motionMagic,
-      cruiseVelocity: existing?.motionMagic?.cruiseVelocity ?? 0.0
+      cruiseVelocity: textToNumber(form.cruiseVelocity, 0)
     };
     subsystem.position = {
       units: form.positionUnits.trim() || "rotations",
@@ -373,6 +414,48 @@ export function App() {
     });
   }
 
+  function updateSubsystemFormField<K extends keyof SubsystemFormState>(field: K, value: SubsystemFormState[K]) {
+    setSubsystemForm((current) => (current ? { ...current, [field]: value } : current));
+  }
+
+  function updateSubsystemMotor(index: number, patch: Partial<SubsystemFormMotor>) {
+    setSubsystemForm((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const motors = current.motors.map((motor, motorIndex) => {
+        if (motorIndex !== index) {
+          return motor;
+        }
+
+        return {
+          ...motor,
+          ...patch,
+          role: motorIndex === 0 ? "leader" : patch.role ?? motor.role
+        };
+      });
+
+      return { ...current, motors };
+    });
+  }
+
+  function addSubsystemMotor() {
+    setSubsystemForm((current) =>
+      current ? { ...current, motors: [...current.motors, createEmptyMotor("follower")] } : current
+    );
+  }
+
+  function deleteSubsystemMotor(index: number) {
+    if (index === 0) {
+      return;
+    }
+
+    setSubsystemForm((current) =>
+      current ? { ...current, motors: current.motors.filter((_, motorIndex) => motorIndex !== index) } : current
+    );
+  }
+
   async function loadSubsystems() {
     setSubsystemDocument((current) => ({ ...current, loading: true, error: null }));
 
@@ -428,8 +511,8 @@ export function App() {
       return;
     }
 
-    if (!subsystem.motors?.[0]?.id) {
-      showToast("Leader CAN ID is required.", "error");
+    if (subsystem.motors?.some((motor) => !motor.id)) {
+      showToast("Every motor needs a CAN ID.", "error");
       return;
     }
 
@@ -930,16 +1013,9 @@ export function App() {
 
                     <Divider />
 
-                    <Stack spacing={0.5}>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Subsystem Configs
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "monospace", wordBreak: "break-all" }}>
-                        {subsystemDocument.exists
-                          ? subsystemDocument.path
-                          : `Looking for ${subsystemDocument.path || "powerlib-subsystems.json"}`}
-                      </Typography>
-                    </Stack>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Subsystem Configs
+                    </Typography>
 
                     {subsystemDocument.error && <Alert severity="error">{subsystemDocument.error}</Alert>}
 
@@ -1063,74 +1139,18 @@ export function App() {
 
                             <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
                               <TextField
-                                label="Leader CAN ID"
-                                size="small"
-                                type="number"
-                                value={subsystemForm.leaderId}
-                                onChange={(event) =>
-                                  setSubsystemForm((current) => (current ? { ...current, leaderId: event.target.value } : current))
-                                }
-                              />
-                              <FormControl size="small" sx={{ minWidth: 160 }}>
-                                <InputLabel id="neutral-mode-label">Neutral mode</InputLabel>
-                                <Select
-                                  labelId="neutral-mode-label"
-                                  label="Neutral mode"
-                                  value={subsystemForm.leaderNeutralMode}
-                                  onChange={(event) =>
-                                    setSubsystemForm((current) =>
-                                      current ? { ...current, leaderNeutralMode: event.target.value as "Brake" | "Coast" } : current
-                                    )
-                                  }
-                                >
-                                  <MenuItem value="Brake">Brake</MenuItem>
-                                  <MenuItem value="Coast">Coast</MenuItem>
-                                </Select>
-                              </FormControl>
-                              <FormControlLabel
-                                control={
-                                  <Checkbox
-                                    checked={subsystemForm.leaderReversed}
-                                    onChange={(event) =>
-                                      setSubsystemForm((current) =>
-                                        current ? { ...current, leaderReversed: event.target.checked } : current
-                                      )
-                                    }
-                                  />
-                                }
-                                label="Leader reversed"
-                              />
-                              <TextField
-                                label="Acceleration"
-                                size="small"
-                                type="number"
-                                value={subsystemForm.acceleration}
-                                onChange={(event) =>
-                                  setSubsystemForm((current) => (current ? { ...current, acceleration: event.target.value } : current))
-                                }
-                              />
-                            </Stack>
-
-                            <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                              <TextField
                                 label="Sensor-to-mechanism ratio"
                                 size="small"
                                 type="number"
                                 value={subsystemForm.sensorToMechanism}
-                                onChange={(event) =>
-                                  setSubsystemForm((current) =>
-                                    current ? { ...current, sensorToMechanism: event.target.value } : current
-                                  )
-                                }
+                                onChange={(event) => updateSubsystemFormField("sensorToMechanism", event.target.value)}
                               />
                               <TextField
-                                label="Rotor-to-sensor ratio"
+                                label="Rotor-to-mechanism ratio"
                                 size="small"
                                 type="number"
                                 value={subsystemForm.rotorToSensor}
-                                onChange={(event) =>
-                                  setSubsystemForm((current) => (current ? { ...current, rotorToSensor: event.target.value } : current))
-                                }
+                                onChange={(event) => updateSubsystemFormField("rotorToSensor", event.target.value)}
                               />
                               {subsystemForm.type === "position" && (
                                 <>
@@ -1139,25 +1159,165 @@ export function App() {
                                     size="small"
                                     type="number"
                                     value={subsystemForm.cancoderId}
-                                    onChange={(event) =>
-                                      setSubsystemForm((current) =>
-                                        current ? { ...current, cancoderId: event.target.value } : current
-                                      )
-                                    }
+                                    onChange={(event) => updateSubsystemFormField("cancoderId", event.target.value)}
                                   />
                                   <TextField
                                     label="Position units"
                                     size="small"
                                     value={subsystemForm.positionUnits}
-                                    onChange={(event) =>
-                                      setSubsystemForm((current) =>
-                                        current ? { ...current, positionUnits: event.target.value } : current
-                                      )
-                                    }
+                                    onChange={(event) => updateSubsystemFormField("positionUnits", event.target.value)}
                                   />
                                 </>
                               )}
                             </Stack>
+
+                            <Stack spacing={1}>
+                              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                                <Typography variant="subtitle1" sx={{ flexGrow: 1, fontWeight: 700 }}>
+                                  Motors
+                                </Typography>
+                                <Button startIcon={<AddIcon />} variant="outlined" size="small" onClick={addSubsystemMotor}>
+                                  Add Motor
+                                </Button>
+                              </Stack>
+
+                              <Box
+                                sx={{
+                                  display: "grid",
+                                  gap: 1.5,
+                                  gridTemplateColumns: { xs: "1fr", lg: "repeat(2, minmax(260px, 1fr))" }
+                                }}
+                              >
+                                {subsystemForm.motors.map((motor, motorIndex) => (
+                                  <Card key={motorIndex} variant="outlined">
+                                    <CardContent>
+                                      <Stack spacing={1.5}>
+                                        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                                          <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
+                                            Motor {motorIndex + 1}
+                                          </Typography>
+                                          {motorIndex > 0 && (
+                                            <Button
+                                              color="error"
+                                              size="small"
+                                              startIcon={<DeleteIcon />}
+                                              onClick={() => deleteSubsystemMotor(motorIndex)}
+                                            >
+                                              Delete
+                                            </Button>
+                                          )}
+                                        </Stack>
+
+                                        <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
+                                          <FormControl size="small" sx={{ minWidth: 140 }}>
+                                            <InputLabel id={`motor-role-${motorIndex}`}>Role</InputLabel>
+                                            <Select
+                                              labelId={`motor-role-${motorIndex}`}
+                                              label="Role"
+                                              value={motorIndex === 0 ? "leader" : motor.role}
+                                              disabled={motorIndex === 0}
+                                              onChange={(event) =>
+                                                updateSubsystemMotor(motorIndex, {
+                                                  role: event.target.value as "leader" | "follower"
+                                                })
+                                              }
+                                            >
+                                              <MenuItem value="leader">leader</MenuItem>
+                                              <MenuItem value="follower">follower</MenuItem>
+                                            </Select>
+                                          </FormControl>
+                                          <TextField
+                                            label="CAN ID"
+                                            size="small"
+                                            type="number"
+                                            value={motor.id}
+                                            onChange={(event) => updateSubsystemMotor(motorIndex, { id: event.target.value })}
+                                            sx={{ minWidth: 120 }}
+                                          />
+                                          <FormControlLabel
+                                            control={
+                                              <Checkbox
+                                                checked={motor.reversed}
+                                                onChange={(event) =>
+                                                  updateSubsystemMotor(motorIndex, { reversed: event.target.checked })
+                                                }
+                                              />
+                                            }
+                                            label="isReversed"
+                                          />
+                                        </Stack>
+
+                                        {motorIndex === 0 && (
+                                          <FormControl size="small" sx={{ maxWidth: 180 }}>
+                                            <InputLabel id="leader-neutral-mode-label">Neutral mode</InputLabel>
+                                            <Select
+                                              labelId="leader-neutral-mode-label"
+                                              label="Neutral mode"
+                                              value={motor.neutralMode}
+                                              onChange={(event) =>
+                                                updateSubsystemMotor(motorIndex, {
+                                                  neutralMode: event.target.value as "Brake" | "Coast"
+                                                })
+                                              }
+                                            >
+                                              <MenuItem value="Brake">Brake</MenuItem>
+                                              <MenuItem value="Coast">Coast</MenuItem>
+                                            </Select>
+                                          </FormControl>
+                                        )}
+                                      </Stack>
+                                    </CardContent>
+                                  </Card>
+                                ))}
+                              </Box>
+                            </Stack>
+
+                            <Box
+                              sx={{
+                                display: "grid",
+                                gap: 2,
+                                gridTemplateColumns: { xs: "1fr", lg: "repeat(3, minmax(180px, 1fr))" }
+                              }}
+                            >
+                              <Card variant="outlined">
+                                <CardContent>
+                                  <Stack spacing={1.5}>
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                      PID
+                                    </Typography>
+                                    <TextField label="kP" size="small" type="number" value={subsystemForm.kP} onChange={(event) => updateSubsystemFormField("kP", event.target.value)} />
+                                    <TextField label="kI" size="small" type="number" value={subsystemForm.kI} onChange={(event) => updateSubsystemFormField("kI", event.target.value)} />
+                                    <TextField label="kD" size="small" type="number" value={subsystemForm.kD} onChange={(event) => updateSubsystemFormField("kD", event.target.value)} />
+                                    <TextField label="kG" size="small" type="number" value={subsystemForm.kG} onChange={(event) => updateSubsystemFormField("kG", event.target.value)} />
+                                  </Stack>
+                                </CardContent>
+                              </Card>
+
+                              <Card variant="outlined">
+                                <CardContent>
+                                  <Stack spacing={1.5}>
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                      Feedforward
+                                    </Typography>
+                                    <TextField label="kS" size="small" type="number" value={subsystemForm.kS} onChange={(event) => updateSubsystemFormField("kS", event.target.value)} />
+                                    <TextField label="kV" size="small" type="number" value={subsystemForm.kV} onChange={(event) => updateSubsystemFormField("kV", event.target.value)} />
+                                    <TextField label="kA" size="small" type="number" value={subsystemForm.kA} onChange={(event) => updateSubsystemFormField("kA", event.target.value)} />
+                                  </Stack>
+                                </CardContent>
+                              </Card>
+
+                              <Card variant="outlined">
+                                <CardContent>
+                                  <Stack spacing={1.5}>
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                      Motion Magic
+                                    </Typography>
+                                    <TextField label="Acceleration" size="small" type="number" value={subsystemForm.acceleration} onChange={(event) => updateSubsystemFormField("acceleration", event.target.value)} />
+                                    <TextField label="Cruise velocity" size="small" type="number" value={subsystemForm.cruiseVelocity} onChange={(event) => updateSubsystemFormField("cruiseVelocity", event.target.value)} />
+                                  </Stack>
+                                </CardContent>
+                              </Card>
+                            </Box>
 
                             {subsystemForm.type === "position" && (
                               <Stack direction={{ xs: "column", md: "row" }} spacing={2}>

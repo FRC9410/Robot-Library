@@ -65,6 +65,7 @@ public class VelocitySubsystem extends PowerSubsystem {
     }
 
     MotionMagicConfigs motionMagicConfigs = new MotionMagicConfigs();
+    motionMagicConfigs.withMotionMagicCruiseVelocity(motionMagicConfig.cruiseVelocity());
     motionMagicConfigs.withMotionMagicAcceleration(motionMagicConfig.acceleration());
 
     motor.getConfigurator().apply(config);
