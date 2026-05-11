@@ -10,10 +10,12 @@ import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import frc.powerlib.PowerRobotContainer;
 import frc.robot.commands.SwerveDriveCommand;
 import frc.robot.Constants;
+import frc.robot.subsystems.PowerDashboard;
 import frc.robot.subsystems.StateMachine;
 
 public class RobotContainer implements PowerRobotContainer {
   private final StateMachine stateMachine = new StateMachine();
+  private final PowerDashboard powerDashboard = new PowerDashboard(stateMachine);
   private final CommandXboxController driverController =
       new CommandXboxController(Constants.OI.DRIVER_CONTROLLER_PORT);
 

@@ -41,6 +41,7 @@ import ConstructionIcon from "@mui/icons-material/Construction";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ElectricBoltIcon from "@mui/icons-material/ElectricBolt";
+import InsightsIcon from "@mui/icons-material/Insights";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SaveIcon from "@mui/icons-material/Save";
 import SendIcon from "@mui/icons-material/Send";
@@ -423,6 +424,7 @@ export function App() {
   const [subsystemUpdatingCode, setSubsystemUpdatingCode] = useState(false);
   const [powerToolUpdating, setPowerToolUpdating] = useState(false);
   const [deleteSubsystemIndex, setDeleteSubsystemIndex] = useState<number | null>(null);
+  const [characterizationOpen, setCharacterizationOpen] = useState(false);
   const updateSubsystemCodeRef = useRef<() => Promise<void>>(async () => {});
   const updatePowerToolRef = useRef<() => Promise<void>>(async () => {});
 
@@ -804,6 +806,27 @@ export function App() {
         </DialogActions>
       </Dialog>
 
+      <Dialog open={characterizationOpen} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          Characterization{subsystemForm?.name ? `: ${subsystemForm.name}` : ""}
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Alert severity="info" variant="outlined">
+              Characterization controls will be added here for this subsystem.
+            </Alert>
+            <Typography variant="body2" color="text.secondary">
+              This dialog stays open until you close it.
+            </Typography>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="contained" onClick={() => setCharacterizationOpen(false)}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Snackbar
         open={toast.open}
         autoHideDuration={6000}
@@ -1151,6 +1174,13 @@ export function App() {
                                   {subsystemForm.mode === "create" ? "Create Subsystem" : `Edit ${subsystemForm.name || "Subsystem"}`}
                                 </Typography>
                               </Box>
+                              <Button
+                                startIcon={<InsightsIcon />}
+                                variant="outlined"
+                                onClick={() => setCharacterizationOpen(true)}
+                              >
+                                Characterization
+                              </Button>
                             </Stack>
 
                             <Divider />
@@ -1440,22 +1470,22 @@ export function App() {
                       variant="contained"
                       onClick={saveSubsystemForm}
                       disabled={subsystemSaving}
-                    >
-                      Save Subsystem
-                    </Button>
-                    <Button variant="outlined" onClick={() => setSubsystemForm(null)}>
-                      Cancel
-                    </Button>
-                    {subsystemForm.mode === "edit" && subsystemForm.index !== null && (
-                      <Button
-                        color="error"
-                        startIcon={<DeleteIcon />}
-                        onClick={() => setDeleteSubsystemIndex(subsystemForm.index ?? 0)}
-                        disabled={subsystemSaving}
-                        sx={{ ml: "auto" }}
                       >
-                        Delete
+                        Save Subsystem
                       </Button>
+                      <Button variant="outlined" onClick={() => setSubsystemForm(null)}>
+                        Cancel
+                      </Button>
+                      <Box sx={{ flexGrow: 1 }} />
+                      {subsystemForm.mode === "edit" && subsystemForm.index !== null && (
+                        <Button
+                          color="error"
+                        startIcon={<DeleteIcon />}
+                          onClick={() => setDeleteSubsystemIndex(subsystemForm.index ?? 0)}
+                          disabled={subsystemSaving}
+                        >
+                          Delete
+                        </Button>
                     )}
                   </Stack>
                 )}

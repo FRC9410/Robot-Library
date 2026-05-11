@@ -127,6 +127,11 @@ def templateFiles = [
         replacement: true
     ),
     new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/subsystems/PowerDashboard.java',
+        destination: 'src/main/java/frc/robot/subsystems/PowerDashboard.java',
+        replacement: true
+    ),
+    new TemplateFile(
         source: 'replacements/src/main/java/frc/robot/subsystems/StateMachine.java',
         destination: 'src/main/java/frc/robot/subsystems/StateMachine.java',
         replacement: true
