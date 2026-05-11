@@ -1,4 +1,4 @@
-import { Box, Card, CardContent, Stack, TextField, Typography } from "@mui/material";
+import { Box, Card, CardContent, Divider, Stack, TextField, Typography } from "@mui/material";
 import type { SubsystemFormState } from "../types";
 
 type ControlConstantsGridProps = {
@@ -22,6 +22,7 @@ export function ControlConstantsGrid({ form, updateField }: ControlConstantsGrid
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
               PID
             </Typography>
+            <Divider />
             <TextField fullWidth label="kP" size="small" type="number" value={form.kP} onChange={(event) => updateField("kP", event.target.value)} />
             <TextField fullWidth label="kI" size="small" type="number" value={form.kI} onChange={(event) => updateField("kI", event.target.value)} />
             <TextField fullWidth label="kD" size="small" type="number" value={form.kD} onChange={(event) => updateField("kD", event.target.value)} />
@@ -36,6 +37,7 @@ export function ControlConstantsGrid({ form, updateField }: ControlConstantsGrid
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
               Feedforward
             </Typography>
+            <Divider />
             <TextField fullWidth label="kS" size="small" type="number" value={form.kS} onChange={(event) => updateField("kS", event.target.value)} />
             <TextField fullWidth label="kV" size="small" type="number" value={form.kV} onChange={(event) => updateField("kV", event.target.value)} />
             <TextField fullWidth label="kA" size="small" type="number" value={form.kA} onChange={(event) => updateField("kA", event.target.value)} />
@@ -52,6 +54,7 @@ export function ControlConstantsGrid({ form, updateField }: ControlConstantsGrid
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
               Motion Magic
             </Typography>
+            <Divider />
             <TextField fullWidth label="Acceleration" size="small" type="number" value={form.acceleration} onChange={(event) => updateField("acceleration", event.target.value)} />
             <TextField fullWidth label="Cruise velocity" size="small" type="number" value={form.cruiseVelocity} onChange={(event) => updateField("cruiseVelocity", event.target.value)} />
           </Stack>

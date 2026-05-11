@@ -1,4 +1,4 @@
-import { Stack, TextField, Typography } from "@mui/material";
+import { Divider, Stack, TextField, Typography } from "@mui/material";
 import type { SubsystemFormState } from "../types";
 
 type CancoderFieldsProps = {
@@ -16,6 +16,7 @@ export function CancoderFields({ form, updateField }: CancoderFieldsProps) {
       <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
         CANcoder
       </Typography>
+      <Divider />
       <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
         <TextField
           label="CANcoder CAN ID"

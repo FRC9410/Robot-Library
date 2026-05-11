@@ -1,4 +1,4 @@
-import { Card, CardContent, Box, Stack, TextField, Typography } from "@mui/material";
+import { Card, CardContent, Box, Divider, Stack, TextField, Typography } from "@mui/material";
 import type { SubsystemFormState } from "../types";
 
 type AbsolutePositionFieldsProps = {
@@ -26,6 +26,7 @@ export function AbsolutePositionFields({ form, updateField }: AbsolutePositionFi
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
               Absolute Position
             </Typography>
+            <Divider />
             <TextField fullWidth label="Position units" size="small" value={form.positionUnits} onChange={(event) => updateField("positionUnits", event.target.value)} />
             <TextField fullWidth label="Home position" size="small" type="number" value={form.homePosition} onChange={(event) => updateField("homePosition", event.target.value)} />
             <TextField fullWidth label="Forward soft limit" size="small" type="number" value={form.forwardSoftLimit} onChange={(event) => updateField("forwardSoftLimit", event.target.value)} />
@@ -40,6 +41,7 @@ export function AbsolutePositionFields({ form, updateField }: AbsolutePositionFi
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
               Behavior
             </Typography>
+            <Divider />
             <TextField fullWidth label="Slow threshold" size="small" type="number" value={form.slowThreshold} onChange={(event) => updateField("slowThreshold", event.target.value)} />
             <TextField fullWidth label="Tolerance" size="small" type="number" value={form.tolerance} onChange={(event) => updateField("tolerance", event.target.value)} />
             <TextField fullWidth label="Stop voltage" size="small" type="number" value={form.stopVoltage} onChange={(event) => updateField("stopVoltage", event.target.value)} />

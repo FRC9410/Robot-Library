@@ -4,6 +4,7 @@ import {
   Card,
   CardContent,
   Checkbox,
+  Divider,
   FormControl,
   FormControlLabel,
   InputLabel,
@@ -36,6 +37,7 @@ export function MotorListEditor({ motors, onAddMotor, onDeleteMotor, onUpdateMot
           Add Motor
         </Button>
       </Stack>
+      <Divider />
 
       <Box
         sx={{
@@ -59,6 +61,7 @@ export function MotorListEditor({ motors, onAddMotor, onDeleteMotor, onUpdateMot
                     </Button>
                   )}
                 </Stack>
+                <Divider />
 
                 <Stack spacing={1.5}>
                   <TextField
