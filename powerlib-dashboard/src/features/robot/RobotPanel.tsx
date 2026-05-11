@@ -80,6 +80,7 @@ function createTiles(subsystems: GeneratedSubsystem[], topics: NtTopicSnapshot[]
       .sort((left, right) => metricSortValue(left) - metricSortValue(right) || left.label.localeCompare(right.label));
 
     const connectedMetric = metrics.find((metric) => metric.label.toLowerCase() === "connected");
+    const visibleMetrics = metrics.filter((metric) => metric.label.toLowerCase() !== "connected");
 
     return {
       id: subsystem.id || subsystem.name || `subsystem-${index}`,
@@ -91,7 +92,7 @@ function createTiles(subsystems: GeneratedSubsystem[], topics: NtTopicSnapshot[]
           : connectedMetric?.value.toLowerCase() === "false"
             ? false
             : undefined,
-      metrics
+      metrics: visibleMetrics
     };
   });
 }
