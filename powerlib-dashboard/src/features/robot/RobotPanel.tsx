@@ -154,7 +154,7 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
                           alignItems: "baseline",
                           display: "grid",
                           gap: 0.75,
-                          gridTemplateColumns: "minmax(105px, 0.8fr) minmax(0, 1fr)"
+                          gridTemplateColumns: "minmax(0, 1fr) minmax(48px, max-content)"
                         }}
                       >
                         <Typography variant="body2" color="text.secondary">
