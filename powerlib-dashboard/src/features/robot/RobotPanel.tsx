@@ -112,11 +112,10 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
         sx={{
           display: "grid",
           gap: 1.5,
+          justifyContent: "start",
           gridTemplateColumns: {
             xs: "1fr",
-            sm: "repeat(2, minmax(260px, 1fr))",
-            lg: "repeat(3, minmax(260px, 1fr))",
-            xl: "repeat(4, minmax(260px, 1fr))"
+            sm: "repeat(auto-fill, 320px)"
           }
         }}
       >
