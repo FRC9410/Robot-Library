@@ -12,6 +12,10 @@ public interface VelocitySubsystemIO {
 
   default void setVelocity(double velocityRotationsPerSecond) {}
 
+  default void setVelocityWithoutFOC(double velocityRotationsPerSecond) {
+    setVelocity(velocityRotationsPerSecond);
+  }
+
   default void setVoltage(double volts) {}
 
   default void stop() {

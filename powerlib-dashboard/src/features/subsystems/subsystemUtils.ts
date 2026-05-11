@@ -63,11 +63,19 @@ export function createEmptySubsystemForm(): SubsystemFormState {
     kA: "0.0",
     cruiseVelocity: "0.0",
     acceleration: "0.0",
+    slowCruiseVelocity: "0.0",
+    slowAcceleration: "0.0",
     cancoderId: "",
     cancoderMagnetOffset: "0.0",
     cancoderDiscontinuityPoint: "0.5",
     positionUnits: "rotations",
-    defaultPosition: ""
+    defaultPosition: "",
+    homePosition: "0.0",
+    forwardSoftLimit: "0.0",
+    reverseSoftLimit: "0.0",
+    slowThreshold: "0.0",
+    tolerance: "0.05",
+    stopVoltage: "0.0"
   };
 }
 
@@ -79,7 +87,12 @@ export function subsystemToForm(subsystem: GeneratedSubsystem, index: number): S
     index,
     id: subsystem.id ?? toCamelCase(subsystem.name ?? ""),
     name: subsystem.name ?? "",
-    type: subsystem.type === "position" ? "position" : "velocity",
+    type:
+      subsystem.type === "position"
+        ? "position"
+        : subsystem.type === "absolutePosition"
+          ? "absolutePosition"
+          : "velocity",
     neutralMode: leader?.neutralMode === "Coast" ? "Coast" : "Brake",
     motors: motors.map((motor, motorIndex) => generatedMotorToForm(motor, motorIndex)),
     sensorToMechanism: toNumberText(subsystem.ratios?.sensorToMechanism, "1.0"),
@@ -93,11 +106,19 @@ export function subsystemToForm(subsystem: GeneratedSubsystem, index: number): S
     kA: toNumberText(subsystem.pid?.kA, "0.0"),
     cruiseVelocity: toNumberText(subsystem.motionMagic?.cruiseVelocity, "0.0"),
     acceleration: toNumberText(subsystem.motionMagic?.acceleration, "0.0"),
+    slowCruiseVelocity: toNumberText(subsystem.slowMotionMagic?.cruiseVelocity, "0.0"),
+    slowAcceleration: toNumberText(subsystem.slowMotionMagic?.acceleration, "0.0"),
     cancoderId: toNumberText(subsystem.cancoder?.id, ""),
     cancoderMagnetOffset: toNumberText(subsystem.cancoder?.magnetOffset, "0.0"),
     cancoderDiscontinuityPoint: toNumberText(subsystem.cancoder?.discontinuityPoint, "0.5"),
-    positionUnits: subsystem.position?.units ?? "rotations",
-    defaultPosition: toNumberText(subsystem.position?.default, "")
+    positionUnits: subsystem.position?.units ?? subsystem.absolutePosition?.units ?? "rotations",
+    defaultPosition: toNumberText(subsystem.position?.default, ""),
+    homePosition: toNumberText(subsystem.absolutePosition?.homePosition, "0.0"),
+    forwardSoftLimit: toNumberText(subsystem.absolutePosition?.forwardSoftLimit, "0.0"),
+    reverseSoftLimit: toNumberText(subsystem.absolutePosition?.reverseSoftLimit, "0.0"),
+    slowThreshold: toNumberText(subsystem.absolutePosition?.slowThreshold, "0.0"),
+    tolerance: toNumberText(subsystem.absolutePosition?.tolerance, "0.05"),
+    stopVoltage: toNumberText(subsystem.absolutePosition?.stopVoltage, "0.0")
   };
 }
 
@@ -154,6 +175,22 @@ export function formToSubsystem(form: SubsystemFormState, existing?: GeneratedSu
     subsystem.position = {
       units: form.positionUnits.trim() || "rotations",
       default: form.defaultPosition.trim() ? textToNumber(form.defaultPosition, 0) : null
+    };
+  }
+
+  if (form.type === "absolutePosition") {
+    subsystem.slowMotionMagic = {
+      cruiseVelocity: textToNumber(form.slowCruiseVelocity, 0),
+      acceleration: textToNumber(form.slowAcceleration, 0)
+    };
+    subsystem.absolutePosition = {
+      units: form.positionUnits.trim() || "rotations",
+      homePosition: textToNumber(form.homePosition, 0),
+      forwardSoftLimit: textToNumber(form.forwardSoftLimit, 0),
+      reverseSoftLimit: textToNumber(form.reverseSoftLimit, 0),
+      slowThreshold: textToNumber(form.slowThreshold, 0),
+      tolerance: textToNumber(form.tolerance, 0.05),
+      stopVoltage: textToNumber(form.stopVoltage, 0)
     };
   }
 

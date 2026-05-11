@@ -24,6 +24,7 @@ export type GeneratedSubsystem = {
     rotorToSensor?: number | string;
   };
   motionMagic?: Record<string, number | string | null>;
+  slowMotionMagic?: Record<string, number | string | null>;
   cancoder?: {
     id?: number;
     magnetOffset?: number | string;
@@ -32,6 +33,15 @@ export type GeneratedSubsystem = {
   position?: {
     units?: string;
     default?: number | string | null;
+  };
+  absolutePosition?: {
+    units?: string;
+    homePosition?: number | string;
+    forwardSoftLimit?: number | string;
+    reverseSoftLimit?: number | string;
+    slowThreshold?: number | string;
+    tolerance?: number | string;
+    stopVoltage?: number | string;
   };
 };
 
@@ -48,7 +58,7 @@ export type SubsystemFormState = {
   index: number | null;
   id: string;
   name: string;
-  type: "velocity" | "position";
+  type: "velocity" | "position" | "absolutePosition";
   neutralMode: "Brake" | "Coast";
   motors: SubsystemFormMotor[];
   sensorToMechanism: string;
@@ -62,11 +72,19 @@ export type SubsystemFormState = {
   kA: string;
   cruiseVelocity: string;
   acceleration: string;
+  slowCruiseVelocity: string;
+  slowAcceleration: string;
   cancoderId: string;
   cancoderMagnetOffset: string;
   cancoderDiscontinuityPoint: string;
   positionUnits: string;
   defaultPosition: string;
+  homePosition: string;
+  forwardSoftLimit: string;
+  reverseSoftLimit: string;
+  slowThreshold: string;
+  tolerance: string;
+  stopVoltage: string;
 };
 
 export type CharacterizationCommand = {

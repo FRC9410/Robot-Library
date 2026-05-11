@@ -48,7 +48,7 @@ public class VelocitySubsystem extends PowerSubsystem {
     this.io = io == null ? createDefaultIO() : io;
   }
 
-  private VelocitySubsystemIO createDefaultIO() {
+  protected VelocitySubsystemIO createDefaultIO() {
     return RobotBase.isSimulation() ? new VelocitySubsystemIOSim() : new VelocitySubsystemIOReal(this);
   }
 
@@ -94,6 +94,10 @@ public class VelocitySubsystem extends PowerSubsystem {
    */
   public void setVelocity(double velocityRotationsPerSecond) {
     io.setVelocity(velocityRotationsPerSecond);
+  }
+
+  public void setVelocityWithoutFOC(double velocityRotationsPerSecond) {
+    io.setVelocityWithoutFOC(velocityRotationsPerSecond);
   }
 
   /** Stops the velocity motor. */

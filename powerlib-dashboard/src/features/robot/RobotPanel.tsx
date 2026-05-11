@@ -35,6 +35,7 @@ function toPascalCase(value: string) {
 
 function formatMetricLabel(rawMetric: string) {
   const spaced = rawMetric
+    .replace(/\//g, " ")
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/Rotations/g, " rotations")
     .replace(/Volts/g, " volts")
@@ -59,13 +60,34 @@ function metricSortValue(metric: RobotMetric) {
 
 function createTiles(subsystems: GeneratedSubsystem[], topics: NtTopicSnapshot[]) {
   const dataTopics = topics.filter((topic) => topic.name.startsWith(dataPrefix));
+  const configuredTiles = subsystems.map((subsystem, index) => ({
+    id: subsystem.id || subsystem.name || `subsystem-${index}`,
+    name: getSubsystemDisplayName(subsystem, index),
+    topicKey: getSubsystemTopicKey(subsystem, index),
+    type: subsystem.type || "subsystem"
+  }));
+  const configuredTopicKeys = new Set(configuredTiles.map((tile) => tile.topicKey));
+  const dataOnlyTiles = Array.from(
+    new Set(
+      dataTopics
+        .map((topic) => topic.name.slice(dataPrefix.length).split("/").filter(Boolean)[0])
+        .filter((topicSubsystem): topicSubsystem is string => Boolean(topicSubsystem))
+        .filter((topicSubsystem) => !configuredTopicKeys.has(topicSubsystem))
+    )
+  )
+    .sort((left, right) => left.localeCompare(right))
+    .map((topicSubsystem) => ({
+      id: topicSubsystem,
+      name: topicSubsystem,
+      topicKey: topicSubsystem,
+      type: "data"
+    }));
 
-  return subsystems.map<RobotSubsystemTile>((subsystem, index) => {
-    const subsystemTopicKey = getSubsystemTopicKey(subsystem, index);
+  return [...configuredTiles, ...dataOnlyTiles].map<RobotSubsystemTile>((tile) => {
     const metrics = dataTopics
       .map((topic) => {
         const [topicSubsystem, ...metricParts] = topic.name.slice(dataPrefix.length).split("/").filter(Boolean);
-        if (topicSubsystem !== subsystemTopicKey || metricParts.length === 0) {
+        if (topicSubsystem !== tile.topicKey || metricParts.length === 0) {
           return null;
         }
 
@@ -83,9 +105,9 @@ function createTiles(subsystems: GeneratedSubsystem[], topics: NtTopicSnapshot[]
     const visibleMetrics = metrics.filter((metric) => metric.label.toLowerCase() !== "connected");
 
     return {
-      id: subsystem.id || subsystem.name || `subsystem-${index}`,
-      name: getSubsystemDisplayName(subsystem, index),
-      type: subsystem.type || "subsystem",
+      id: tile.id,
+      name: tile.name,
+      type: tile.type,
       connected:
         connectedMetric?.value.toLowerCase() === "true"
           ? true

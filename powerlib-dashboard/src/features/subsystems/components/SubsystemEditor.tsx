@@ -5,6 +5,7 @@ import InsightsIcon from "@mui/icons-material/Insights";
 import SaveIcon from "@mui/icons-material/Save";
 import type { SubsystemFormMotor, SubsystemFormState } from "../types";
 import { CancoderFields } from "./CancoderFields";
+import { AbsolutePositionFields } from "./AbsolutePositionFields";
 import { ControlConstantsGrid } from "./ControlConstantsGrid";
 import { MotorListEditor } from "./MotorListEditor";
 import { SubsystemBasicFields } from "./SubsystemBasicFields";
@@ -60,6 +61,7 @@ export function SubsystemEditor({
               <SubsystemBasicFields form={form} setForm={setForm} updateField={updateField} />
               <MotorListEditor motors={form.motors} onAddMotor={addMotor} onDeleteMotor={deleteMotor} onUpdateMotor={updateMotor} />
               <CancoderFields form={form} updateField={updateField} />
+              <AbsolutePositionFields form={form} updateField={updateField} />
               <ControlConstantsGrid form={form} updateField={updateField} />
             </Stack>
           ) : (

@@ -2,14 +2,15 @@ package frc.powerlib.subsystems.io;
 
 import com.ctre.phoenix6.controls.MotionMagicVelocityVoltage;
 import com.ctre.phoenix6.controls.NeutralOut;
+import com.ctre.phoenix6.controls.VelocityTorqueCurrentFOC;
 import com.ctre.phoenix6.hardware.TalonFX;
 import frc.powerlib.subsystems.VelocitySubsystem;
 
-public class VelocitySubsystemIOReal implements VelocitySubsystemIO {
+public class VelocityTorqueSubsystemIOReal implements VelocitySubsystemIO {
   private final VelocitySubsystem subsystem;
   private static final NeutralOut brake = new NeutralOut();
 
-  public VelocitySubsystemIOReal(VelocitySubsystem subsystem) {
+  public VelocityTorqueSubsystemIOReal(VelocitySubsystem subsystem) {
     this.subsystem = subsystem;
   }
 
@@ -31,10 +32,7 @@ public class VelocitySubsystemIOReal implements VelocitySubsystemIO {
     TalonFX motor = subsystem.getVelocityMotor();
     if (motor != null) {
       motor.setControl(
-          new MotionMagicVelocityVoltage(0)
-              .withVelocity(velocityRotationsPerSecond)
-              .withEnableFOC(true)
-              .withSlot(0));
+          new VelocityTorqueCurrentFOC(velocityRotationsPerSecond).withFeedForward(0));
     }
   }
 

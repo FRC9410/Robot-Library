@@ -17,8 +17,12 @@ import edu.wpi.first.math.Matrix;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
+import edu.wpi.first.math.kinematics.SwerveModuleState;
 import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
+import edu.wpi.first.networktables.NetworkTableInstance;
+import edu.wpi.first.networktables.StructArrayPublisher;
+import edu.wpi.first.networktables.StructPublisher;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj.Notifier;
@@ -26,6 +30,7 @@ import edu.wpi.first.wpilibj.RobotController;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
+import frc.powerlib.PowerRobotContainer;
 import frc.robot.constants.TunerConstants;
 import frc.robot.constants.TunerConstants.TunerSwerveDrivetrain;
 
@@ -37,6 +42,26 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
   private static final double kSimLoopPeriod = 0.005; // 5 ms
   private Notifier m_simNotifier = null;
   private double m_lastSimTime;
+  private final StructPublisher<Pose2d> posePublisher =
+      NetworkTableInstance.getDefault()
+          .getStructTopic("PowerLib/Swerve/Pose", Pose2d.struct)
+          .publish();
+  private final StructPublisher<ChassisSpeeds> speedsPublisher =
+      NetworkTableInstance.getDefault()
+          .getStructTopic("PowerLib/Swerve/Speeds", ChassisSpeeds.struct)
+          .publish();
+  private final StructPublisher<Rotation2d> rotationPublisher =
+      NetworkTableInstance.getDefault()
+          .getStructTopic("PowerLib/Swerve/Rotation", Rotation2d.struct)
+          .publish();
+  private final StructArrayPublisher<SwerveModuleState> moduleStatesPublisher =
+      NetworkTableInstance.getDefault()
+          .getStructArrayTopic("PowerLib/Swerve/ModuleStates", SwerveModuleState.struct)
+          .publish();
+  private final StructArrayPublisher<SwerveModuleState> moduleTargetsPublisher =
+      NetworkTableInstance.getDefault()
+          .getStructArrayTopic("PowerLib/Swerve/ModuleTargets", SwerveModuleState.struct)
+          .publish();
 
   /* Blue alliance sees forward as 0 degrees (toward red alliance wall) */
   private static final Rotation2d kBlueAlliancePerspectiveRotation = Rotation2d.kZero;
@@ -293,6 +318,39 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
                 m_hasAppliedOperatorPerspective = true;
               });
     }
+
+    publishRobotPose();
+  }
+
+  private void publishRobotPose() {
+    var state = getState();
+    Pose2d pose = state.Pose;
+    ChassisSpeeds speeds = state.Speeds;
+    Rotation2d rotation = pose.getRotation();
+    double xMeters = pose.getX();
+    double yMeters = pose.getY();
+    double rotationDegrees = rotation.getDegrees();
+
+    PowerRobotContainer.setData("Swerve/Pose/XMeters", xMeters);
+    PowerRobotContainer.setData("Swerve/Pose/YMeters", yMeters);
+    PowerRobotContainer.setData("Swerve/Pose/RotationDegrees", rotationDegrees);
+    PowerRobotContainer.setData("Swerve/Speeds/VXMetersPerSecond", speeds.vxMetersPerSecond);
+    PowerRobotContainer.setData("Swerve/Speeds/VYMetersPerSecond", speeds.vyMetersPerSecond);
+    PowerRobotContainer.setData("Swerve/Speeds/OmegaRadiansPerSecond", speeds.omegaRadiansPerSecond);
+
+    posePublisher.set(pose);
+    speedsPublisher.set(speeds);
+    rotationPublisher.set(rotation);
+    moduleStatesPublisher.set(state.ModuleStates);
+    moduleTargetsPublisher.set(state.ModuleTargets);
+
+    SignalLogger.writeDouble("Swerve Pose X", xMeters, "meters");
+    SignalLogger.writeDouble("Swerve Pose Y", yMeters, "meters");
+    SignalLogger.writeDouble("Swerve Pose Rotation", rotationDegrees, "degrees");
+    SignalLogger.writeDouble("Swerve Speed VX", speeds.vxMetersPerSecond, "meters per second");
+    SignalLogger.writeDouble("Swerve Speed VY", speeds.vyMetersPerSecond, "meters per second");
+    SignalLogger.writeDouble(
+        "Swerve Speed Omega", speeds.omegaRadiansPerSecond, "radians per second");
   }
 
   private void startSimThread() {
