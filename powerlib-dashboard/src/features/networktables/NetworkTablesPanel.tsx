@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
-  Button,
   Card,
   CardContent,
   Chip,
@@ -13,10 +12,8 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import CableIcon from "@mui/icons-material/Cable";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import RefreshIcon from "@mui/icons-material/Refresh";
 import type { NtTopicSnapshot } from "../../networktables/nt4Client";
 import { stringifyValue } from "../subsystems/subsystemUtils";
 import { useNetworkTables } from "./NetworkTablesContext";
@@ -120,7 +117,7 @@ function TopicTree({ node, depth = 0, expandedPaths, onToggle }: TopicTreeProps)
 }
 
 export function NetworkTablesPanel() {
-  const { clientRef, status, setStatus, connectionSettings, topics, setTopics, setError, upsertTopic } = useNetworkTables();
+  const { connectionSettings, topics } = useNetworkTables();
   const [search, setSearch] = useState("");
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(["/"]));
 
@@ -142,31 +139,6 @@ export function NetworkTablesPanel() {
     const normalizedSearch = search.trim().toLowerCase();
     return topics.filter((topic) => !normalizedSearch || topic.name.toLowerCase().includes(normalizedSearch)).length;
   }, [topics, search]);
-
-  function connect() {
-    setError(null);
-    setStatus("connecting");
-    setTopics([]);
-    setExpandedPaths(new Set(["/"]));
-
-    try {
-      clientRef.current.connect(connectionSettings.host, connectionSettings.port, (connected) => {
-        setStatus(connected ? "connected" : "disconnected");
-      });
-
-      clientRef.current.watchPrefix("/", upsertTopic);
-    } catch (caught) {
-      setStatus("disconnected");
-      setError(caught instanceof Error ? caught.message : "Could not connect to NetworkTables.");
-    }
-  }
-
-  function disconnect() {
-    clientRef.current.disconnect();
-    setStatus("idle");
-    setTopics([]);
-    setExpandedPaths(new Set(["/"]));
-  }
 
   function togglePath(path: string) {
     setExpandedPaths((current) => {
@@ -195,17 +167,6 @@ export function NetworkTablesPanel() {
                   </Typography>
                 </Box>
                 <TextField label="Filter topics" size="small" value={search} onChange={(event) => setSearch(event.target.value)} />
-                <Stack direction="row" spacing={1}>
-                  <Button startIcon={<CableIcon />} variant="contained" onClick={connect}>
-                    Connect
-                  </Button>
-                  <Button variant="outlined" onClick={disconnect}>
-                    Disconnect
-                  </Button>
-                  <Button startIcon={<RefreshIcon />} variant="outlined" onClick={connect}>
-                    Reconnect
-                  </Button>
-                </Stack>
               </Stack>
             </Box>
 

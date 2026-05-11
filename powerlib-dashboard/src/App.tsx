@@ -3,6 +3,7 @@ import {
   Alert,
   AppBar,
   Box,
+  Button,
   Chip,
   Container,
   Snackbar,
@@ -12,9 +13,11 @@ import {
   Toolbar,
   Typography
 } from "@mui/material";
+import CableIcon from "@mui/icons-material/Cable";
 import ConstructionIcon from "@mui/icons-material/Construction";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import ElectricBoltIcon from "@mui/icons-material/ElectricBolt";
+import SmartToyIcon from "@mui/icons-material/SmartToy";
 import type {
   CharacterizationCommand,
   GeneratedSubsystem,
@@ -37,6 +40,7 @@ import { UpdateCodeDialog } from "./features/subsystems/components/UpdateCodeDia
 import { NetworkTablesPanel } from "./features/networktables/NetworkTablesPanel";
 import { NetworkTablesProvider, useNetworkTables } from "./features/networktables/NetworkTablesContext";
 import { ConnectionSettingsDialog } from "./features/networktables/ConnectionSettingsDialog";
+import { RobotPanel } from "./features/robot/RobotPanel";
 import type { AppView } from "./types/app";
 
 type ToastState = {
@@ -57,14 +61,16 @@ function AppContent() {
   const {
     clientRef,
     status,
+    setStatus,
     connectionSettings,
     setConnectionSettings,
     topics,
+    setTopics,
     error,
     setError,
     upsertTopic
   } = useNetworkTables();
-  const [activeView, setActiveView] = useState<AppView>("subsystems");
+  const [activeView, setActiveView] = useState<AppView>("robot");
   const [subsystemDocument, setSubsystemDocument] = useState<SubsystemDocumentState>({
     loading: false,
     exists: false,
@@ -300,6 +306,28 @@ function AppContent() {
     }
   }
 
+  function connectNetworkTables() {
+    setError(null);
+    setStatus("connecting");
+    setTopics([]);
+
+    try {
+      clientRef.current.connect(connectionSettings.host, connectionSettings.port, (connected) => {
+        setStatus(connected ? "connected" : "disconnected");
+      });
+      clientRef.current.watchPrefix("/", upsertTopic);
+    } catch (caught) {
+      setStatus("disconnected");
+      setError(caught instanceof Error ? caught.message : "Could not connect to NetworkTables.");
+    }
+  }
+
+  function disconnectNetworkTables() {
+    clientRef.current.disconnect();
+    setStatus("idle");
+    setTopics([]);
+  }
+
   updateSubsystemCodeRef.current = updateSubsystemCode;
   updatePowerToolRef.current = updatePowerTool;
 
@@ -322,7 +350,7 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    if (activeView === "subsystems" && !subsystemDocument.loading && !subsystemDocument.path) {
+    if ((activeView === "robot" || activeView === "subsystems") && !subsystemDocument.loading && !subsystemDocument.path) {
       void loadSubsystems();
     }
   }, [activeView, subsystemDocument.loading, subsystemDocument.path]);
@@ -376,8 +404,24 @@ function AppContent() {
               color={status === "connected" ? "success" : status === "connecting" ? "warning" : "default"}
               variant={status === "idle" ? "outlined" : "filled"}
             />
+            <Stack direction="row" spacing={1}>
+              <Chip label={`${connectionSettings.host}:${connectionSettings.port}`} variant="outlined" />
+              <Button startIcon={<CableIcon />} variant="contained" size="small" onClick={connectNetworkTables}>
+                Connect
+              </Button>
+              <Button variant="outlined" size="small" onClick={disconnectNetworkTables}>
+                Disconnect
+              </Button>
+            </Stack>
           </Toolbar>
           <Tabs value={activeView} onChange={(_, value) => setActiveView(value)} sx={{ minHeight: 44 }}>
+            <Tab
+              icon={<SmartToyIcon />}
+              iconPosition="start"
+              label="Robot"
+              value="robot"
+              sx={{ minHeight: 44 }}
+            />
             <Tab
               icon={<ConstructionIcon />}
               iconPosition="start"
@@ -448,6 +492,16 @@ function AppContent() {
       <Container maxWidth={false} sx={{ py: 2 }}>
         <Stack spacing={2}>
           {error && <Alert severity="error">{error}</Alert>}
+
+          {activeView === "robot" && (
+            <RobotPanel
+              status={status}
+              host={connectionSettings.host}
+              port={connectionSettings.port}
+              subsystems={subsystemDocument.subsystems}
+              topics={topics}
+            />
+          )}
 
           {activeView === "networktables" && (
             <NetworkTablesPanel />
