@@ -1,6 +1,6 @@
 import { createContext, ReactNode, useContext, useRef, useState } from "react";
-import type { ConnectionState } from "../../types/app";
 import { NtTopicSnapshot, PowerLibNt4Client } from "../../networktables/nt4Client";
+import type { ConnectionState } from "../../types/app";
 
 type NetworkTablesContextValue = {
   clientRef: React.MutableRefObject<PowerLibNt4Client>;
@@ -15,11 +15,7 @@ type NetworkTablesContextValue = {
 
 const NetworkTablesContext = createContext<NetworkTablesContextValue | null>(null);
 
-type NetworkTablesProviderProps = {
-  children: ReactNode;
-};
-
-export function NetworkTablesProvider({ children }: NetworkTablesProviderProps) {
+export function NetworkTablesProvider({ children }: { children: ReactNode }) {
   const clientRef = useRef(new PowerLibNt4Client());
   const [status, setStatus] = useState<ConnectionState>("idle");
   const [topics, setTopics] = useState<NtTopicSnapshot[]>([]);
@@ -33,18 +29,7 @@ export function NetworkTablesProvider({ children }: NetworkTablesProviderProps) 
   }
 
   return (
-    <NetworkTablesContext.Provider
-      value={{
-        clientRef,
-        status,
-        setStatus,
-        topics,
-        setTopics,
-        error,
-        setError,
-        upsertTopic
-      }}
-    >
+    <NetworkTablesContext.Provider value={{ clientRef, status, setStatus, topics, setTopics, error, setError, upsertTopic }}>
       {children}
     </NetworkTablesContext.Provider>
   );
