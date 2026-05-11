@@ -4,6 +4,7 @@
 
 package frc.robot.subsystems;
 
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 
 public class PowerDashboard extends SubsystemBase {
@@ -15,6 +16,7 @@ public class PowerDashboard extends SubsystemBase {
   }
 
   private void initCharacterizationRoutines() {
+    SmartDashboard.putData("PowerLib/PowerDashboard", this);
     // POWERLIB GENERATED CHARACTERIZATION START - DO NOT DELETE
     // POWERLIB GENERATED CHARACTERIZATION END - DO NOT DELETE
   }

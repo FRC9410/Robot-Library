@@ -1174,13 +1174,15 @@ export function App() {
                                   {subsystemForm.mode === "create" ? "Create Subsystem" : `Edit ${subsystemForm.name || "Subsystem"}`}
                                 </Typography>
                               </Box>
-                              <Button
-                                startIcon={<InsightsIcon />}
-                                variant="outlined"
-                                onClick={() => setCharacterizationOpen(true)}
-                              >
-                                Characterization
-                              </Button>
+                              {subsystemForm.type === "velocity" && (
+                                <Button
+                                  startIcon={<InsightsIcon />}
+                                  variant="outlined"
+                                  onClick={() => setCharacterizationOpen(true)}
+                                >
+                                  Characterization
+                                </Button>
+                              )}
                             </Stack>
 
                             <Divider />
