@@ -393,7 +393,7 @@ function summarizeUpdateOutput(output: string) {
 
 export function App() {
   const clientRef = useRef(new PowerLibNt4Client());
-  const [activeView, setActiveView] = useState<AppView>("networktables");
+  const [activeView, setActiveView] = useState<AppView>("subsystems");
   const [targetId, setTargetId] = useState("sim-localhost");
   const [host, setHost] = useState("localhost");
   const [port, setPort] = useState(5810);
@@ -1099,8 +1099,29 @@ export function App() {
                             <Stack spacing={0.25} sx={{ minWidth: 0 }}>
                               <Typography sx={{ fontWeight: 700 }}>{subsystem.name ?? "-"}</Typography>
                               <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                                <Chip label={subsystem.type ?? "-"} size="small" variant={selected ? "filled" : "outlined"} />
-                                <Typography variant="caption" sx={{ fontFamily: "monospace" }} noWrap>
+                                <Chip
+                                  label={subsystem.type ?? "-"}
+                                  size="small"
+                                  variant={selected ? "filled" : "outlined"}
+                                  sx={
+                                    selected
+                                      ? {
+                                          bgcolor: "rgba(24, 24, 27, 0.18)",
+                                          color: "primary.contrastText",
+                                          fontWeight: 900
+                                        }
+                                      : { fontWeight: 800 }
+                                  }
+                                />
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    color: selected ? "primary.contrastText" : "text.secondary",
+                                    fontFamily: "monospace",
+                                    fontWeight: 800
+                                  }}
+                                  noWrap
+                                >
                                   {getMotorIdsSummary(subsystem)}
                                 </Typography>
                               </Stack>
