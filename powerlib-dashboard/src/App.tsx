@@ -10,6 +10,9 @@ import {
   Chip,
   CircularProgress,
   Container,
+  Dialog,
+  DialogContent,
+  DialogTitle,
   Divider,
   FormControl,
   FormControlLabel,
@@ -290,6 +293,30 @@ function getPidSummary(subsystem: GeneratedSubsystem) {
     .join(" / ");
 }
 
+function summarizeUpdateOutput(output: string) {
+  const generatedCount = output
+    .split(/\r?\n/)
+    .filter((line) => line.trim().startsWith("Generated "))
+    .length;
+  const buildTime = output.match(/BUILD SUCCESSFUL in ([^\r\n]+)/)?.[1];
+  const warningCount = output.match(/(\d+) warning(?:s)?/i)?.[1];
+
+  const parts = ["Generated subsystem code"];
+  if (generatedCount > 0) {
+    parts.push(`wrote ${generatedCount} Java file${generatedCount === 1 ? "" : "s"}`);
+  }
+  if (buildTime) {
+    parts.push(`robot build passed in ${buildTime}`);
+  } else if (output.includes("BUILD SUCCESSFUL")) {
+    parts.push("robot build passed");
+  }
+  if (warningCount) {
+    parts.push(`${warningCount} warning${warningCount === "1" ? "" : "s"}`);
+  }
+
+  return `${parts.join("; ")}.`;
+}
+
 export function App() {
   const clientRef = useRef(new PowerLibNt4Client());
   const [activeView, setActiveView] = useState<AppView>("networktables");
@@ -447,7 +474,7 @@ export function App() {
 
       const result = await window.powerlib.updateSubsystemCode();
       const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
-      setSubsystemActionMessage(output || "Updated generated subsystem code.");
+      setSubsystemActionMessage(output ? summarizeUpdateOutput(output) : "Updated generated subsystem code.");
       await loadSubsystems(false);
     } catch (caught) {
       setSubsystemDocument((current) => ({
@@ -618,6 +645,16 @@ export function App() {
           </Tabs>
         </Container>
       </AppBar>
+
+      <Dialog open={subsystemUpdatingCode}>
+        <DialogTitle>Updating Code</DialogTitle>
+        <DialogContent>
+          <Stack direction="row" spacing={2} sx={{ alignItems: "center", minWidth: 360, py: 1 }}>
+            <CircularProgress size={28} />
+            <Typography>Please wait, code is updating.</Typography>
+          </Stack>
+        </DialogContent>
+      </Dialog>
 
       <Container maxWidth={false} sx={{ py: 2 }}>
         <Stack spacing={2}>
