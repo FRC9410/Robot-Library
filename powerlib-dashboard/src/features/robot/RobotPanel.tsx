@@ -1,16 +1,6 @@
 import { useMemo } from "react";
-import {
-  Alert,
-  Box,
-  Card,
-  CardContent,
-  Chip,
-  Divider,
-  Stack,
-  Typography
-} from "@mui/material";
+import { Alert, Box, Card, CardContent, Chip, Divider, Stack, Typography } from "@mui/material";
 import type { NtTopicSnapshot } from "../../networktables/nt4Client";
-import type { ConnectionState } from "../../types/app";
 import type { GeneratedSubsystem } from "../subsystems/types";
 import { stringifyValue } from "../subsystems/subsystemUtils";
 
@@ -29,18 +19,11 @@ type RobotSubsystemTile = {
 };
 
 type RobotPanelProps = {
-  status: ConnectionState;
-  host: string;
-  port: number;
   subsystems: GeneratedSubsystem[];
   topics: NtTopicSnapshot[];
 };
 
 const dataPrefix = "/SmartDashboard/PowerLib/Data/";
-
-function normalizeKey(value: string) {
-  return value.replace(/[^a-z0-9]/gi, "").toLowerCase();
-}
 
 function toPascalCase(value: string) {
   return value
@@ -60,11 +43,12 @@ function formatMetricLabel(rawMetric: string) {
   return spaced || "Value";
 }
 
-function getSubsystemCandidates(subsystem: GeneratedSubsystem) {
-  return [subsystem.name, subsystem.id, subsystem.name ? toPascalCase(subsystem.name) : undefined]
-    .filter((value): value is string => Boolean(value))
-    .map((value) => ({ raw: value, normalized: normalizeKey(value) }))
-    .filter((candidate, index, candidates) => candidates.findIndex((item) => item.normalized === candidate.normalized) === index);
+function getSubsystemDisplayName(subsystem: GeneratedSubsystem, index: number) {
+  return subsystem.name || subsystem.id || `Subsystem ${index + 1}`;
+}
+
+function getSubsystemTopicKey(subsystem: GeneratedSubsystem, index: number) {
+  return toPascalCase(getSubsystemDisplayName(subsystem, index));
 }
 
 function metricSortValue(metric: RobotMetric) {
@@ -77,17 +61,15 @@ function createTiles(subsystems: GeneratedSubsystem[], topics: NtTopicSnapshot[]
   const dataTopics = topics.filter((topic) => topic.name.startsWith(dataPrefix));
 
   return subsystems.map<RobotSubsystemTile>((subsystem, index) => {
-    const candidates = getSubsystemCandidates(subsystem);
+    const subsystemTopicKey = getSubsystemTopicKey(subsystem, index);
     const metrics = dataTopics
       .map((topic) => {
-        const key = topic.name.slice(dataPrefix.length);
-        const normalizedKey = normalizeKey(key);
-        const match = candidates.find((candidate) => normalizedKey.startsWith(candidate.normalized));
-        if (!match) {
+        const [topicSubsystem, ...metricParts] = topic.name.slice(dataPrefix.length).split("/").filter(Boolean);
+        if (topicSubsystem !== subsystemTopicKey || metricParts.length === 0) {
           return null;
         }
 
-        const metricKey = key.startsWith(match.raw) ? key.slice(match.raw.length) : key;
+        const metricKey = metricParts.join(" ");
         return {
           label: formatMetricLabel(metricKey),
           value: stringifyValue(topic.value),
@@ -101,7 +83,7 @@ function createTiles(subsystems: GeneratedSubsystem[], topics: NtTopicSnapshot[]
 
     return {
       id: subsystem.id || subsystem.name || `subsystem-${index}`,
-      name: subsystem.name || subsystem.id || `Subsystem ${index + 1}`,
+      name: getSubsystemDisplayName(subsystem, index),
       type: subsystem.type || "subsystem",
       connected:
         connectedMetric?.value.toLowerCase() === "true"
@@ -114,29 +96,11 @@ function createTiles(subsystems: GeneratedSubsystem[], topics: NtTopicSnapshot[]
   });
 }
 
-export function RobotPanel({ status, host, port, subsystems, topics }: RobotPanelProps) {
+export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
   const tiles = useMemo(() => createTiles(subsystems, topics), [subsystems, topics]);
 
   return (
     <Stack spacing={2}>
-      <Card variant="outlined">
-        <CardContent>
-          <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ alignItems: { md: "center" } }}>
-            <Box sx={{ flexGrow: 1 }}>
-              <Typography variant="h6">Robot</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {host}:{port} · {tiles.length} configured subsystem{tiles.length === 1 ? "" : "s"}
-              </Typography>
-            </Box>
-            <Chip
-              label={status}
-              color={status === "connected" ? "success" : status === "connecting" ? "warning" : "default"}
-              variant={status === "idle" ? "outlined" : "filled"}
-            />
-          </Stack>
-        </CardContent>
-      </Card>
-
       {tiles.length === 0 && (
         <Alert severity="info" variant="outlined">
           No generated subsystem document was found for robot tiles.

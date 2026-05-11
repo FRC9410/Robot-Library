@@ -75,10 +75,10 @@ public class PositionSubsystem extends PowerSubsystem {
   public void periodic() {
     io.updateInputs(inputs);
     SignalLogger.writeDouble(subsystemName + " Position", inputs.positionRotations, units);
-    PowerRobotContainer.setData(subsystemName + "Position", inputs.positionRotations);
-    PowerRobotContainer.setData(subsystemName + "SetpointRotations", inputs.setpointRotations);
-    PowerRobotContainer.setData(subsystemName + "AppliedVolts", inputs.appliedVolts);
-    PowerRobotContainer.setData(subsystemName + "Connected", inputs.connected);
+    PowerRobotContainer.setData(subsystemName + "/Position", inputs.positionRotations);
+    PowerRobotContainer.setData(subsystemName + "/SetpointRotations", inputs.setpointRotations);
+    PowerRobotContainer.setData(subsystemName + "/AppliedVolts", inputs.appliedVolts);
+    PowerRobotContainer.setData(subsystemName + "/Connected", inputs.connected);
   }
 
   /**

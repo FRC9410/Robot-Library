@@ -495,9 +495,6 @@ function AppContent() {
 
           {activeView === "robot" && (
             <RobotPanel
-              status={status}
-              host={connectionSettings.host}
-              port={connectionSettings.port}
               subsystems={subsystemDocument.subsystems}
               topics={topics}
             />
