@@ -58,19 +58,55 @@ try {
         throw "Could not find Power Tool source in downloaded Robot-Library archive."
     }
 
+    $sourceRoot = Split-Path -Parent $source
     Remove-DirectoryIfExists $toolRoot
     Copy-Item -Path $source -Destination $toolRoot -Recurse
     New-Item -ItemType Directory -Force -Path $scriptsRoot | Out-Null
 
-    Copy-Item -Path $PSCommandPath -Destination $updaterPath -Force
+    $latestUpdater = Join-Path $sourceRoot "update-power-tool.ps1"
+    if (Test-Path $latestUpdater) {
+        Copy-Item -Path $latestUpdater -Destination $updaterPath -Force
+    } else {
+        Copy-Item -Path $PSCommandPath -Destination $updaterPath -Force
+    }
+
+    $latestGenerator = Join-Path $sourceRoot "generate-subsystem.ps1"
+    if (Test-Path $latestGenerator) {
+        Copy-Item -Path $latestGenerator -Destination (Join-Path $scriptsRoot "generate-subsystem.ps1") -Force
+    }
+
+    Set-Content -Path (Join-Path $scriptsRoot "powerlib-generate-subsystem.cmd") -Encoding ascii -Value '@echo off
+powershell -ExecutionPolicy Bypass -File "%~dp0generate-subsystem.ps1" %*
+'
+
+    Set-Content -Path (Join-Path $scriptsRoot "powerlib-update-subsystems.cmd") -Encoding ascii -Value '@echo off
+powershell -ExecutionPolicy Bypass -File "%~dp0generate-subsystem.ps1" -UpdateSubsystems %*
+'
 
     Set-Content -Path $launcherPath -Encoding ascii -Value '@echo off
-powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command "Start-Process -FilePath npm.cmd -ArgumentList start -WorkingDirectory ''%~dp0power-tool'' -WindowStyle Hidden"
+set "TOOL_ROOT=%~dp0power-tool"
+set "ELECTRON_EXE=%TOOL_ROOT%\node_modules\electron\dist\electron.exe"
+if exist "%ELECTRON_EXE%" (
+  start "" "%ELECTRON_EXE%" "%TOOL_ROOT%"
+) else (
+  powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command "Start-Process -FilePath npm.cmd -ArgumentList start -WorkingDirectory ''%TOOL_ROOT%'' -WindowStyle Hidden"
+)
 '
 
     Set-Content -Path $scriptLauncherPath -Encoding ascii -Value '$toolRoot = Split-Path -Parent $PSScriptRoot
-$npm = if ($IsWindows) { "npm.cmd" } else { "npm" }
-Start-Process -FilePath $npm -ArgumentList "start" -WorkingDirectory $toolRoot -WindowStyle Hidden
+$isWindowsHost = [System.Environment]::OSVersion.Platform -eq "Win32NT"
+$electron = if ($isWindowsHost) {
+    Join-Path $toolRoot "node_modules/electron/dist/electron.exe"
+} else {
+    Join-Path $toolRoot "node_modules/.bin/electron"
+}
+
+if (Test-Path $electron) {
+    Start-Process -FilePath $electron -ArgumentList $toolRoot -WorkingDirectory $toolRoot
+} else {
+    $npm = if ($isWindowsHost) { "npm.cmd" } else { "npm" }
+    Start-Process -FilePath $npm -ArgumentList "start" -WorkingDirectory $toolRoot -WindowStyle Hidden
+}
 '
 
     Push-Location $toolRoot
