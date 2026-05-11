@@ -882,7 +882,13 @@ export function App() {
                 creating this velocity subsystem.
               </Alert>
             )}
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ flexWrap: "wrap" }}>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" },
+                gap: 1.25
+              }}
+            >
               {characterizationCommands.map((command) => (
                 <Button
                   key={command.baseTopic}
@@ -890,15 +896,18 @@ export function App() {
                   variant="contained"
                   onClick={() => runCharacterizationCommand(command)}
                   disabled={status !== "connected" || command.running}
-                  sx={{ minWidth: 210 }}
+                  sx={{
+                    justifyContent: "flex-start",
+                    minHeight: 48,
+                    px: 2,
+                    textAlign: "left",
+                    width: "100%"
+                  }}
                 >
                   {command.running ? `${command.label} running` : command.label}
                 </Button>
               ))}
-            </Stack>
-            <Typography variant="body2" color="text.secondary">
-              This dialog stays open until you close it.
-            </Typography>
+            </Box>
           </Stack>
         </DialogContent>
         <DialogActions>
