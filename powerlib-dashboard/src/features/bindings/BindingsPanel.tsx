@@ -797,7 +797,8 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
 
   function renderConstantFields(command: BindingCommand, path: number[], valueLabel: string, showOwner: boolean) {
     const subsystemConstants = constantOptions.filter((constant) => constant.subsystemId === command.subsystemId);
-    const constantSource = command.constantSource === "existing" ? "existing" : "new";
+    const constantNameExists = subsystemConstants.some((constant) => constant.name === command.constantName);
+    const constantSource = command.constantSource ?? (constantNameExists ? "existing" : "new");
     return (
       <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" } }}>
         {showOwner && (

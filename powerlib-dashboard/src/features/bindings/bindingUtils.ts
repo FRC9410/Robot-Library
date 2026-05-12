@@ -135,7 +135,7 @@ export function normalizeCommand(command: BindingCommand, subsystems: GeneratedS
       kind,
       subsystemId: command.subsystemId ?? subsystems[0]?.id ?? "",
       method: "",
-      constantSource: command.constantSource === "existing" ? "existing" : "new",
+      constantSource: command.constantSource,
       constantName: command.constantName ?? "WAIT_SECONDS",
       value: command.value ?? 1
     };
@@ -145,7 +145,7 @@ export function normalizeCommand(command: BindingCommand, subsystems: GeneratedS
     kind,
     subsystemId: command.subsystemId ?? subsystems[0]?.id ?? "",
     method: command.method ?? "",
-    constantSource: command.constantSource === "existing" ? "existing" : "new",
+    constantSource: command.constantSource,
     constantName: command.constantName ?? "",
     value: command.value ?? 0
   };
