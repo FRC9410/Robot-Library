@@ -41,6 +41,17 @@ declare global {
       updatePowerTool: () => Promise<{
         started: boolean;
       }>;
+      readSimConfig: () => Promise<{
+        exists: boolean;
+        path: string;
+        config: unknown;
+        error?: string;
+      }>;
+      saveSimConfig: (config: unknown) => Promise<{
+        exists: boolean;
+        path: string;
+        config: unknown;
+      }>;
       onMenuConnectionSettings: (callback: () => void) => () => void;
       onMenuUpdateSubsystemCode: (callback: () => void) => () => void;
       onMenuUpdateInstallSection: (callback: (_event: unknown, section: string) => void) => () => void;

@@ -282,6 +282,72 @@ ipcMain.handle("powerlib:save-bindings", async (_event, bindings: unknown[]) => 
   };
 });
 
+function getSimConfigJsonCandidates() {
+  const robotRoot = getDetectedRobotRoot();
+  return Array.from(
+    new Set([
+      path.resolve(robotRoot, "powerlib-sim-config.json"),
+      path.resolve(process.cwd(), "powerlib-sim-config.json"),
+      path.resolve(process.cwd(), "..", "powerlib-sim-config.json"),
+      path.resolve(app.getAppPath(), "powerlib-sim-config.json"),
+      path.resolve(app.getAppPath(), "..", "powerlib-sim-config.json")
+    ])
+  );
+}
+
+ipcMain.handle("powerlib:read-sim-config", async () => {
+  for (const candidate of getSimConfigJsonCandidates()) {
+    try {
+      const raw = await fs.readFile(candidate, "utf-8");
+      const parsed = JSON.parse(raw);
+      return {
+        exists: true,
+        path: candidate,
+        config: parsed.config ?? parsed
+      };
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+      if (code !== "ENOENT") {
+        return {
+          exists: false,
+          path: candidate,
+          config: null,
+          error: error instanceof Error ? error.message : "Could not read powerlib-sim-config.json."
+        };
+      }
+    }
+  }
+
+  return {
+    exists: false,
+    path: getSimConfigJsonCandidates()[0],
+    config: null
+  };
+});
+
+ipcMain.handle("powerlib:save-sim-config", async (_event, config: unknown) => {
+  let targetPath = getSimConfigJsonCandidates()[0];
+
+  for (const candidate of getSimConfigJsonCandidates()) {
+    try {
+      await fs.access(candidate);
+      targetPath = candidate;
+      break;
+    } catch {
+      // Keep looking. If none exist, write to the installed robot root candidate.
+    }
+  }
+
+  const document = { config };
+
+  await fs.writeFile(targetPath, `${JSON.stringify(document, null, 2)}\n`, "utf-8");
+  return {
+    exists: true,
+    path: targetPath,
+    config
+  };
+});
+
 ipcMain.handle("powerlib:read-binding-constants", async () => {
   const constants: Array<{
     subsystemId: string;

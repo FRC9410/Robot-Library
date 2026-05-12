@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld("powerlib", {
   readBindings: () => ipcRenderer.invoke("powerlib:read-bindings"),
   saveBindings: (bindings: unknown[]) => ipcRenderer.invoke("powerlib:save-bindings", bindings),
   readBindingConstants: () => ipcRenderer.invoke("powerlib:read-binding-constants"),
+  readSimConfig: () => ipcRenderer.invoke("powerlib:read-sim-config"),
+  saveSimConfig: (config: unknown) => ipcRenderer.invoke("powerlib:save-sim-config", config),
   updateSubsystemCode: () => ipcRenderer.invoke("powerlib:update-subsystem-code"),
   updateInstallSection: (section: string) => ipcRenderer.invoke("powerlib:update-install-section", section),
   updatePowerTool: () => ipcRenderer.invoke("powerlib:update-power-tool"),
