@@ -6,6 +6,11 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   Divider,
   FormControl,
   InputLabel,
@@ -58,6 +63,8 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
   const [form, setForm] = useState<BindingFormState | null>(null);
   const [saving, setSaving] = useState(false);
   const [constantOptions, setConstantOptions] = useState<BindingConstantOption[]>([]);
+  const [deleteBindingOpen, setDeleteBindingOpen] = useState(false);
+  const [selectedCommandPath, setSelectedCommandPath] = useState<number[] | null>(null);
 
   async function loadBindings() {
     setDocument((current) => ({ ...current, loading: true, error: null }));
@@ -136,6 +143,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
       }
       await saveBindings(next);
       setForm(null);
+      setSelectedCommandPath(null);
       onToast(`Saved ${binding.name}. Use File > Update Code to regenerate Java files.`, "success");
     } catch (caught) {
       onToast(caught instanceof Error ? caught.message : "Could not save binding JSON.", "error");
@@ -152,7 +160,9 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
     try {
       await saveBindings(document.bindings.filter((_, index) => index !== form.index));
       onToast(`Removed ${form.name || "binding"}. Use File > Update Code to reconcile generated Java files.`, "success");
+      setDeleteBindingOpen(false);
       setForm(null);
+      setSelectedCommandPath(null);
     } catch (caught) {
       onToast(caught instanceof Error ? caught.message : "Could not delete binding.", "error");
     } finally {
@@ -215,18 +225,29 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
 
   function insertCommandAtPath(path: number[], command: BindingCommand) {
     if (path.length === 0) {
-      updateCommands((commands) => [...commands, command]);
+      updateCommands((commands) => {
+        setSelectedCommandPath([commands.length]);
+        return [...commands, command];
+      });
       return;
     }
     updateCommandAtPath(path, {});
     updateCommands((commands) =>
-      updateNodeAtPath(commands, path, (node) => ({ ...node, children: [...(node.children ?? []), command] }))
+      updateNodeAtPath(commands, path, (node) => {
+        const childIndex = node.children?.length ?? 0;
+        setSelectedCommandPath([...path, childIndex]);
+        return { ...node, children: [...(node.children ?? []), command] };
+      })
     );
   }
 
   function deleteCommandAtPath(path: number[]) {
     if (path.length === 1) {
-      updateCommands((commands) => commands.filter((_, index) => index !== path[0]));
+      updateCommands((commands) => {
+        const next = commands.filter((_, index) => index !== path[0]);
+        setSelectedCommandPath(next.length > 0 ? [Math.min(path[0], next.length - 1)] : null);
+        return next;
+      });
       return;
     }
     const parentPath = path.slice(0, -1);
@@ -237,6 +258,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
         children: (node.children ?? []).filter((_, index) => index !== childIndex)
       }))
     );
+    setSelectedCommandPath(parentPath);
   }
 
   function convertCommandKindAtPath(path: number[], kind: BindingCommandKind) {
@@ -294,21 +316,54 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
     return `${subsystem?.name ?? "Subsystem"}.${command.method || "method"}${valueText}`;
   }
 
+  function pathsEqual(left: number[] | null, right: number[]) {
+    return Boolean(left && left.length === right.length && left.every((value, index) => value === right[index]));
+  }
+
+  function getCommandAtPath(commands: BindingCommand[], path: number[] | null): BindingCommand | null {
+    if (!path || path.length === 0) {
+      return null;
+    }
+
+    let current: BindingCommand | undefined;
+    let children = commands;
+    for (const index of path) {
+      current = children[index];
+      if (!current) {
+        return null;
+      }
+      children = current.children ?? [];
+    }
+    return current ?? null;
+  }
+
   function renderCommandTree(commands: BindingCommand[], depth = 0) {
     return commands.map((command, index) => {
+      const path = [...argumentsPath(depth), index];
       const isGroup = command.kind === "sequence" || command.kind === "parallelRace";
       const isWait = command.kind === "wait";
       return (
         <Box key={`${depth}-${index}`} sx={{ pl: depth === 0 ? 0 : 2, position: "relative" }}>
           <Stack
+            component="button"
             direction="row"
             spacing={1}
+            onClick={() => setSelectedCommandPath(path)}
             sx={{
               alignItems: "center",
+              bgcolor: pathsEqual(selectedCommandPath, path) ? "action.selected" : "transparent",
+              border: 0,
               borderLeft: depth === 0 ? 0 : 1,
+              borderRadius: 1,
               borderColor: "divider",
+              color: "text.primary",
+              cursor: "pointer",
+              font: "inherit",
               pl: depth === 0 ? 0 : 1.5,
-              py: 0.5
+              py: 0.75,
+              pr: 1,
+              textAlign: "left",
+              width: "100%"
             }}
           >
             <Chip
@@ -321,7 +376,56 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
               {getCommandLabel(command)}
             </Typography>
           </Stack>
-          {isGroup && renderCommandTree(command.children ?? [], depth + 1)}
+          {isGroup && renderCommandTreeAtPath(command.children ?? [], path, depth + 1)}
+        </Box>
+      );
+    });
+  }
+
+  function argumentsPath(_depth: number) {
+    return [] as number[];
+  }
+
+  function renderCommandTreeAtPath(commands: BindingCommand[], parentPath: number[], depth = 0) {
+    return commands.map((command, index) => {
+      const path = [...parentPath, index];
+      const isGroup = command.kind === "sequence" || command.kind === "parallelRace";
+      const isWait = command.kind === "wait";
+      return (
+        <Box key={path.join(".")} sx={{ pl: 2, position: "relative" }}>
+          <Stack
+            component="button"
+            direction="row"
+            spacing={1}
+            onClick={() => setSelectedCommandPath(path)}
+            sx={{
+              alignItems: "center",
+              bgcolor: pathsEqual(selectedCommandPath, path) ? "action.selected" : "transparent",
+              border: 0,
+              borderLeft: 1,
+              borderRadius: 1,
+              borderColor: "divider",
+              color: "text.primary",
+              cursor: "pointer",
+              font: "inherit",
+              pl: 1.5,
+              py: 0.75,
+              pr: 1,
+              textAlign: "left",
+              width: "100%"
+            }}
+          >
+            <Chip
+              size="small"
+              label={isGroup ? (command.kind === "parallelRace" ? "race" : "seq") : isWait ? "wait" : "fn"}
+              color={isGroup || isWait ? "primary" : "default"}
+              variant={isGroup || isWait ? "filled" : "outlined"}
+            />
+            <Typography variant="body2" sx={{ fontWeight: isGroup ? 800 : 600 }}>
+              {getCommandLabel(command)}
+            </Typography>
+          </Stack>
+          {isGroup && renderCommandTreeAtPath(command.children ?? [], path, depth + 1)}
         </Box>
       );
     });
@@ -471,6 +575,125 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
     );
   }
 
+  function renderCommandInspector(command: BindingCommand | null, path: number[] | null) {
+    if (!command || !path) {
+      return (
+        <Stack spacing={2} sx={{ alignItems: "center", justifyContent: "center", minHeight: 260, textAlign: "center" }}>
+          <Typography variant="h6">Select a command node</Typography>
+          <Typography color="text.secondary">Choose a function, wait, sequential, or parallel race node from the tree.</Typography>
+        </Stack>
+      );
+    }
+
+    const canDelete = Boolean(form && form.commands.length > 1) || path.length > 1;
+    const isGroup = command.kind === "sequence" || command.kind === "parallelRace";
+    if (isGroup) {
+      return (
+        <Stack spacing={2}>
+          <Stack direction="row" sx={{ alignItems: "center", gap: 1 }}>
+            <Typography variant="h6" sx={{ flexGrow: 1 }}>
+              {command.kind === "parallelRace" ? "Parallel Race" : "Sequential"}
+            </Typography>
+            <CommandKindSelect command={command} path={path} />
+            {canDelete && (
+              <Button color="error" startIcon={<DeleteIcon />} onClick={() => deleteCommandAtPath(path)}>
+                Delete
+              </Button>
+            )}
+          </Stack>
+          <Divider />
+          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+            <Button startIcon={<AddIcon />} variant="outlined" onClick={() => insertCommandAtPath(path, createEmptyBindingCommand(subsystems))}>
+              Add Function
+            </Button>
+            <Button variant="outlined" onClick={() => insertCommandAtPath(path, createEmptyBindingGroup("sequence", subsystems))}>
+              New Sequential
+            </Button>
+            <Button variant="outlined" onClick={() => insertCommandAtPath(path, createEmptyBindingGroup("parallelRace", subsystems))}>
+              New Parallel Race
+            </Button>
+            <Button variant="outlined" onClick={() => insertCommandAtPath(path, createEmptyWaitCommand(subsystems))}>
+              New Wait
+            </Button>
+          </Stack>
+          <Typography color="text.secondary">
+            This group has {(command.children ?? []).length} child command{(command.children ?? []).length === 1 ? "" : "s"}.
+          </Typography>
+        </Stack>
+      );
+    }
+
+    if (command.kind === "wait") {
+      return (
+        <Stack spacing={2}>
+          <Stack direction="row" sx={{ alignItems: "center", gap: 1 }}>
+            <Typography variant="h6" sx={{ flexGrow: 1 }}>Wait</Typography>
+            <CommandKindSelect command={command} path={path} />
+            {canDelete && (
+              <Button color="error" startIcon={<DeleteIcon />} onClick={() => deleteCommandAtPath(path)}>
+                Delete
+              </Button>
+            )}
+          </Stack>
+          <Divider />
+          {renderConstantFields(command, path, "Seconds", true)}
+        </Stack>
+      );
+    }
+
+    const subsystem = subsystems.find((candidate) => candidate.id === command.subsystemId);
+    const methods = getMethodsForSubsystem(subsystem);
+    const needsValue = methodNeedsValue(subsystems, command);
+    return (
+      <Stack spacing={2}>
+        <Stack direction="row" sx={{ alignItems: "center", gap: 1 }}>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>Function</Typography>
+          <CommandKindSelect command={command} path={path} />
+          {canDelete && (
+            <Button color="error" startIcon={<DeleteIcon />} onClick={() => deleteCommandAtPath(path)}>
+              Delete
+            </Button>
+          )}
+        </Stack>
+        <Divider />
+        <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
+          <FormControl>
+            <InputLabel>Subsystem</InputLabel>
+            <Select
+              label="Subsystem"
+              value={command.subsystemId}
+              onChange={(event) => {
+                const subsystemId = event.target.value;
+                const nextSubsystem = subsystems.find((candidate) => candidate.id === subsystemId);
+                updateCommandAtPath(path, {
+                  subsystemId,
+                  method: getMethodsForSubsystem(nextSubsystem)[0]?.name ?? ""
+                });
+              }}
+            >
+              {subsystems.map((candidate) => (
+                <MenuItem key={candidate.id ?? candidate.name} value={candidate.id ?? ""}>
+                  {candidate.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl>
+            <InputLabel>Method</InputLabel>
+            <Select label="Method" value={command.method} onChange={(event) => updateCommandAtPath(path, { method: event.target.value })}>
+              {methods.map((method) => (
+                <MenuItem key={method.name} value={method.name}>
+                  {method.name}{method.needsValue ? "(value)" : ""}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
+        {needsValue && renderConstantFields(command, path, "Value", false)}
+      </Stack>
+    );
+  }
+
   useEffect(() => {
     void loadBindings();
     void loadConstants();
@@ -545,7 +768,14 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
       <Card variant="outlined" sx={{ minHeight: 0, overflow: "hidden" }}>
         <CardContent sx={{ height: "100%", overflowY: "auto" }}>
           <Stack spacing={2}>
-            <Button startIcon={<AddIcon />} variant="contained" onClick={() => setForm(createEmptyBindingForm(subsystems))}>
+            <Button
+              startIcon={<AddIcon />}
+              variant="contained"
+              onClick={() => {
+                setForm(createEmptyBindingForm(subsystems));
+                setSelectedCommandPath([0]);
+              }}
+            >
               Create Binding
             </Button>
             <Button startIcon={<RefreshIcon />} variant="outlined" onClick={() => void loadBindings()}>
@@ -558,7 +788,11 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
               <Button
                 key={binding.id ?? `${binding.name}-${index}`}
                 variant={form?.index === index ? "contained" : "outlined"}
-                onClick={() => setForm(bindingToForm(binding, index, subsystems))}
+                onClick={() => {
+                  const nextForm = bindingToForm(binding, index, subsystems);
+                  setForm(nextForm);
+                  setSelectedCommandPath(nextForm.commands.length > 0 ? [0] : null);
+                }}
                 sx={{ justifyContent: "flex-start", textAlign: "left" }}
               >
                 <Stack spacing={0.5} sx={{ alignItems: "flex-start" }}>
@@ -646,14 +880,18 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
                     New Wait
                   </Button>
                 </Stack>
-                <Card variant="outlined">
-                  <CardContent sx={{ py: 1.5 }}>
-                    <Stack spacing={0.5}>{renderCommandTree(form.commands)}</Stack>
-                  </CardContent>
-                </Card>
-                <Stack spacing={2}>
-                  {form.commands.map((command, index) => renderCommandEditor(command, [index], form.commands.length > 1))}
-                </Stack>
+                <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "360px 1fr" }, minHeight: 360 }}>
+                  <Card variant="outlined" sx={{ minHeight: 0 }}>
+                    <CardContent sx={{ height: "100%", overflowY: "auto" }}>
+                      <Stack spacing={0.5}>{renderCommandTree(form.commands)}</Stack>
+                    </CardContent>
+                  </Card>
+                  <Card variant="outlined" sx={{ minHeight: 0 }}>
+                    <CardContent sx={{ height: "100%", overflowY: "auto" }}>
+                      {renderCommandInspector(getCommandAtPath(form.commands, selectedCommandPath), selectedCommandPath)}
+                    </CardContent>
+                  </Card>
+                </Box>
               </Stack>
             ) : (
               <Stack spacing={2} sx={{ alignItems: "center", justifyContent: "center", minHeight: 420, textAlign: "center" }}>
@@ -664,18 +902,34 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
           </CardContent>
         </Card>
         {form && (
-          <Stack direction="row" spacing={1} sx={{ alignItems: "center", borderTop: 1, borderColor: "divider", py: 1.5 }}>
-            <Button startIcon={saving ? <CircularProgress size={18} /> : <SaveIcon />} variant="contained" onClick={saveForm} disabled={saving}>
-              Save Binding
-            </Button>
-            <Button variant="outlined" onClick={() => setForm(null)}>Cancel</Button>
-            <Box sx={{ flexGrow: 1 }} />
-            {form.mode === "edit" && (
-              <Button color="error" startIcon={<DeleteIcon />} onClick={() => void deleteBinding()} disabled={saving}>
-                Delete
+          <>
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center", borderTop: 1, borderColor: "divider", py: 1.5 }}>
+              <Button startIcon={saving ? <CircularProgress size={18} /> : <SaveIcon />} variant="contained" onClick={saveForm} disabled={saving}>
+                Save Binding
               </Button>
-            )}
-          </Stack>
+              <Button variant="outlined" onClick={() => setForm(null)}>Cancel</Button>
+              <Box sx={{ flexGrow: 1 }} />
+              {form.mode === "edit" && (
+                <Button color="error" startIcon={<DeleteIcon />} onClick={() => setDeleteBindingOpen(true)} disabled={saving}>
+                  Delete
+                </Button>
+              )}
+            </Stack>
+            <Dialog open={deleteBindingOpen} onClose={() => setDeleteBindingOpen(false)}>
+              <DialogTitle>Delete Button Binding?</DialogTitle>
+              <DialogContent>
+                <DialogContentText>
+                  This removes {form.name || "this binding"} from powerlib-bindings.json. Update Code will remove it from the generated Java.
+                </DialogContentText>
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={() => setDeleteBindingOpen(false)}>Cancel</Button>
+                <Button color="error" startIcon={saving ? <CircularProgress size={18} /> : <DeleteIcon />} onClick={() => void deleteBinding()} disabled={saving}>
+                  Delete
+                </Button>
+              </DialogActions>
+            </Dialog>
+          </>
         )}
       </Stack>
     </Box>

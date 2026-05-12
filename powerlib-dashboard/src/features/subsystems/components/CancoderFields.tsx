@@ -16,7 +16,6 @@ export function CancoderFields({ form, updateField }: CancoderFieldsProps) {
       <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
         CANcoder
       </Typography>
-      <Divider />
       <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
         <TextField
           label="CANcoder CAN ID"
@@ -53,6 +52,7 @@ export function CancoderFields({ form, updateField }: CancoderFieldsProps) {
           onChange={(event) => updateField("defaultPosition", event.target.value)}
         />
       </Stack>
+      <Divider />
     </Stack>
   );
 }
