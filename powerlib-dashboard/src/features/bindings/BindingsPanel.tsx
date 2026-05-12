@@ -402,7 +402,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
           {parts.target}
         </Typography>
         <Typography variant="body2" noWrap color="text.secondary" sx={{ fontWeight: 700, maxWidth: 150 }}>
-          .{parts.method}
+          - {parts.method}
         </Typography>
         {parts.value && (
           <Chip
