@@ -43,7 +43,7 @@ src/main/java/frc/powerlib/utils/*.java
 
 ## Added / Replaced Robot Files
 
-These robot starter/template files are written into the robot project. On the first install, existing stock files are backed up before replacement. On later installs, existing robot template files are preserved and the updated template is written beside them with a `Template` suffix, such as `RobotContainerTemplate.java`.
+These robot starter/template files are written into the robot project. On the first install, existing stock files are backed up before replacement. On later installs, existing robot template files are preserved and the updated template is written beside them with a `.template` suffix, such as `RobotContainer.java.template`.
 
 ```text
 src/main/java/frc/robot/Constants.java

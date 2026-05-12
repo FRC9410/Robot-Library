@@ -47,7 +47,7 @@ power-tool/scripts/powerlib-update-subsystems.cmd
 
 Before replacing a stock file during the first install, the installer creates a temporary backup. If the install succeeds, that backup is deleted during cleanup unless you pass `-PpowerlibKeepBackups=true`. If the install fails halfway through, the backup is left in place next to the original file.
 
-After PowerLib has already been installed once, robot starter/template files are no longer overwritten when the destination already exists. Instead, the installer writes the updated template beside the existing file with a `Template` suffix, for example `RobotContainerTemplate.java` or `settingsTemplate.json`. PowerLib library files under `frc.powerlib` still update in place.
+After PowerLib has already been installed once, robot starter/template files are no longer overwritten when the destination already exists. Instead, the installer writes the updated template beside the existing file with a `.template` suffix, for example `RobotContainer.java.template` or `settings.json.template`. PowerLib library files under `frc.powerlib` still update in place.
 
 When installing vendordeps, the installer first downloads the official latest JSONs for all five packages. By default, it then applies pinned overrides for any packages we know need pinning, currently MapleSim `0.4.0-beta`. Pass `-PpowerlibLatestVendordeps=true` to keep the latest vendordeps instead of applying pinned overrides. The installer saves each JSON using its `fileName`, and removes older vendordep JSONs with the same vendor `name` or `uuid`.
 

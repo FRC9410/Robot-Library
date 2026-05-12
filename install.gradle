@@ -426,15 +426,7 @@ def backupExistingFile = { File destination ->
 }
 
 def getTemplateCopyDestination = { File destination ->
-    String name = destination.name
-    int extensionIndex = name.lastIndexOf('.')
-    if (extensionIndex <= 0) {
-        return new File(destination.parentFile, "${name}Template")
-    }
-
-    String baseName = name.substring(0, extensionIndex)
-    String extension = name.substring(extensionIndex)
-    return new File(destination.parentFile, "${baseName}Template${extension}")
+    return new File(destination.parentFile, "${destination.name}.template")
 }
 
 def hasPriorPowerLibInstall = { Project project ->
