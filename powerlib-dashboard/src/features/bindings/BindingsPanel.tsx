@@ -863,12 +863,14 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
             onChange={(event) => updateCommandAtPath(path, { constantName: event.target.value.toUpperCase() })}
           />
         )}
-        <TextField
-          label={valueLabel}
-          type="number"
-          value={command.value ?? ""}
-          onChange={(event) => updateCommandAtPath(path, { value: event.target.value })}
-        />
+        {constantSource === "new" && (
+          <TextField
+            label={valueLabel}
+            type="number"
+            value={command.value ?? ""}
+            onChange={(event) => updateCommandAtPath(path, { value: event.target.value })}
+          />
+        )}
       </Box>
     );
   }
@@ -909,6 +911,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
                 <Button
                   key={binding.id ?? `${binding.name}-${index}`}
                   variant={isSelected ? "contained" : "outlined"}
+                  color={isSelected ? "primary" : "inherit"}
                   onClick={() => {
                     const nextForm = bindingToForm(binding, index, subsystems);
                     setForm(nextForm);
@@ -916,25 +919,27 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
                   }}
                   sx={{
                     justifyContent: "flex-start",
+                    minHeight: 64,
                     textAlign: "left",
+                    textTransform: "none",
                     ...(isSelected && {
                       color: "primary.contrastText",
                       "& .MuiChip-root": {
-                        bgcolor: "rgba(0, 0, 0, 0.55)",
+                        bgcolor: "rgba(24, 24, 27, 0.18)",
                         color: "primary.contrastText",
-                        fontWeight: 800
+                        fontWeight: 900
                       }
                     })
                   }}
                 >
-                  <Stack spacing={0.5} sx={{ alignItems: "flex-start", minWidth: 0 }}>
-                    <Typography noWrap sx={{ fontWeight: 900, maxWidth: "100%" }}>
+                  <Stack spacing={0.25} sx={{ alignItems: "flex-start", minWidth: 0 }}>
+                    <Typography noWrap sx={{ fontWeight: 700, maxWidth: "100%" }}>
                       {binding.name || "Unnamed binding"}
                     </Typography>
                     <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
-                      <Chip size="small" label={binding.controller ?? "driver"} />
-                      <Chip size="small" label={binding.input ?? "a"} />
-                      <Chip size="small" label={binding.event ?? "onTrue"} />
+                      <Chip size="small" label={binding.controller ?? "driver"} variant={isSelected ? "filled" : "outlined"} sx={!isSelected ? { fontWeight: 800 } : undefined} />
+                      <Chip size="small" label={binding.input ?? "a"} variant={isSelected ? "filled" : "outlined"} sx={!isSelected ? { fontWeight: 800 } : undefined} />
+                      <Chip size="small" label={binding.event ?? "onTrue"} variant={isSelected ? "filled" : "outlined"} sx={!isSelected ? { fontWeight: 800 } : undefined} />
                     </Stack>
                   </Stack>
                 </Button>
