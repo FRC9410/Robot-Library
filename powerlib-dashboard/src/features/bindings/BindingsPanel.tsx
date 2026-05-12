@@ -331,7 +331,12 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
 
   function AddCommandMenuButton({ targetPath }: { targetPath: number[] | null }) {
     return (
-      <Button startIcon={<AddIcon />} variant="outlined" onClick={(event) => openAddMenu(event, targetPath)}>
+      <Button
+        startIcon={<AddIcon />}
+        variant="outlined"
+        onClick={(event) => openAddMenu(event, targetPath)}
+        sx={{ alignSelf: "flex-start" }}
+      >
         Add Function/Command
       </Button>
     );
@@ -350,6 +355,69 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
     const subsystem = subsystems.find((candidate) => candidate.id === command.subsystemId);
     const valueText = methodNeedsValue(subsystems, command) ? ` ${command.constantName || "value"}` : "";
     return `${subsystem?.name ?? "Subsystem"}.${command.method || "method"}${valueText}`;
+  }
+
+  function getFunctionCommandParts(command: BindingCommand) {
+    const subsystem = subsystems.find((candidate) => candidate.id === command.subsystemId);
+    return {
+      target: subsystem?.name ?? "Subsystem",
+      method: command.method || "method",
+      value: methodNeedsValue(subsystems, command) ? command.constantName || "value" : ""
+    };
+  }
+
+  function renderTreeNodeLabel(command: BindingCommand, isGroup: boolean) {
+    if (isGroup) {
+      return (
+        <Typography variant="body2" sx={{ fontWeight: 800 }}>
+          {getCommandLabel(command)}
+        </Typography>
+      );
+    }
+
+    if (command.kind === "wait") {
+      return (
+        <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0 }}>
+          <Typography variant="body2" sx={{ fontWeight: 800, whiteSpace: "nowrap" }}>
+            Wait
+          </Typography>
+          <Chip
+            size="small"
+            label={command.constantName || "seconds"}
+            variant="outlined"
+            sx={{
+              height: 20,
+              maxWidth: 150,
+              "& .MuiChip-label": { px: 0.75, overflow: "hidden", textOverflow: "ellipsis" }
+            }}
+          />
+        </Stack>
+      );
+    }
+
+    const parts = getFunctionCommandParts(command);
+    return (
+      <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", minWidth: 0 }}>
+        <Typography variant="body2" noWrap sx={{ fontWeight: 800, maxWidth: 120 }}>
+          {parts.target}
+        </Typography>
+        <Typography variant="body2" noWrap color="text.secondary" sx={{ fontWeight: 700, maxWidth: 150 }}>
+          .{parts.method}
+        </Typography>
+        {parts.value && (
+          <Chip
+            size="small"
+            label={parts.value}
+            variant="outlined"
+            sx={{
+              height: 20,
+              maxWidth: 150,
+              "& .MuiChip-label": { px: 0.75, overflow: "hidden", textOverflow: "ellipsis" }
+            }}
+          />
+        )}
+      </Stack>
+    );
   }
 
   function pathsEqual(left: number[] | null, right: number[]) {
@@ -379,7 +447,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
       const isGroup = command.kind === "sequence" || command.kind === "parallelRace";
       const isWait = command.kind === "wait";
       return (
-        <Box key={`${depth}-${index}`} sx={{ pl: depth === 0 ? 0 : 2, position: "relative" }}>
+        <Box key={`${depth}-${index}`} sx={{ pl: 2, position: "relative" }}>
           <Stack
             component="button"
             direction="row"
@@ -389,13 +457,13 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
               alignItems: "center",
               bgcolor: pathsEqual(selectedCommandPath, path) ? "action.selected" : "transparent",
               border: 0,
-              borderLeft: depth === 0 ? 0 : 1,
+              borderLeft: 1,
               borderRadius: 1,
               borderColor: "divider",
               color: "text.primary",
               cursor: "pointer",
               font: "inherit",
-              pl: depth === 0 ? 0 : 1.5,
+              pl: 1.5,
               py: 0.75,
               pr: 1,
               textAlign: "left",
@@ -408,9 +476,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
               color={isGroup || isWait ? "primary" : "default"}
               variant={isGroup || isWait ? "filled" : "outlined"}
             />
-            <Typography variant="body2" sx={{ fontWeight: isGroup ? 800 : 600 }}>
-              {getCommandLabel(command)}
-            </Typography>
+            {renderTreeNodeLabel(command, isGroup)}
           </Stack>
           {isGroup && renderCommandTreeAtPath(command.children ?? [], path, depth + 1)}
         </Box>
@@ -457,9 +523,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
               color={isGroup || isWait ? "primary" : "default"}
               variant={isGroup || isWait ? "filled" : "outlined"}
             />
-            <Typography variant="body2" sx={{ fontWeight: isGroup ? 800 : 600 }}>
-              {getCommandLabel(command)}
-            </Typography>
+            {renderTreeNodeLabel(command, isGroup)}
           </Stack>
           {isGroup && renderCommandTreeAtPath(command.children ?? [], path, depth + 1)}
         </Box>
@@ -741,6 +805,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
 
   function renderConstantFields(command: BindingCommand, path: number[], valueLabel: string, showOwner: boolean) {
     const subsystemConstants = constantOptions.filter((constant) => constant.subsystemId === command.subsystemId);
+    const constantSource = command.constantSource === "existing" ? "existing" : "new";
     return (
       <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" } }}>
         {showOwner && (
@@ -760,30 +825,44 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
           </FormControl>
         )}
         <FormControl>
-          <InputLabel>Existing constant</InputLabel>
+          <InputLabel>Constant source</InputLabel>
           <Select
-            label="Existing constant"
-            value=""
-            onChange={(event) => {
-              const selected = subsystemConstants.find((constant) => constant.name === event.target.value);
-              if (selected) {
-                updateCommandAtPath(path, { constantName: selected.name, value: selected.value });
-              }
-            }}
+            label="Constant source"
+            value={constantSource}
+            onChange={(event) => updateCommandAtPath(path, { constantSource: event.target.value as "new" | "existing" })}
           >
-            <MenuItem value="">Select constant</MenuItem>
-            {subsystemConstants.map((constant) => (
-              <MenuItem key={constant.name} value={constant.name}>
-                {constant.name} = {constant.value}
-              </MenuItem>
-            ))}
+            <MenuItem value="new">New constant</MenuItem>
+            <MenuItem value="existing">Existing constant</MenuItem>
           </Select>
         </FormControl>
-        <TextField
-          label="Constant name"
-          value={command.constantName ?? ""}
-          onChange={(event) => updateCommandAtPath(path, { constantName: event.target.value.toUpperCase() })}
-        />
+        {constantSource === "existing" ? (
+          <FormControl>
+            <InputLabel>Existing constant</InputLabel>
+            <Select
+              label="Existing constant"
+              value={subsystemConstants.some((constant) => constant.name === command.constantName) ? command.constantName : ""}
+              onChange={(event) => {
+                const selected = subsystemConstants.find((constant) => constant.name === event.target.value);
+                if (selected) {
+                  updateCommandAtPath(path, { constantName: selected.name, value: selected.value });
+                }
+              }}
+            >
+              <MenuItem value="">Select constant</MenuItem>
+              {subsystemConstants.map((constant) => (
+                <MenuItem key={constant.name} value={constant.name}>
+                  {constant.name} = {constant.value}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        ) : (
+          <TextField
+            label="Constant name"
+            value={command.constantName ?? ""}
+            onChange={(event) => updateCommandAtPath(path, { constantName: event.target.value.toUpperCase() })}
+          />
+        )}
         <TextField
           label={valueLabel}
           type="number"
@@ -863,7 +942,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
                   sx={{
                     display: "grid",
                     gap: 2,
-                    gridTemplateColumns: { xs: "1fr", lg: "1.5fr repeat(3, minmax(150px, 1fr))" }
+                    gridTemplateColumns: { xs: "1fr", md: "2fr repeat(3, minmax(150px, 1fr))" }
                   }}
                 >
                   <TextField label="Binding name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
@@ -979,7 +1058,22 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
                 </Button>
               </DialogActions>
             </Dialog>
-            <Menu anchorEl={addMenuAnchor} open={Boolean(addMenuAnchor)} onClose={closeAddMenu}>
+            <Menu
+              anchorEl={addMenuAnchor}
+              open={Boolean(addMenuAnchor)}
+              onClose={closeAddMenu}
+              anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+              transformOrigin={{ vertical: "top", horizontal: "left" }}
+              disablePortal
+              slotProps={{
+                paper: {
+                  sx: {
+                    mt: 0.5,
+                    minWidth: addMenuAnchor?.clientWidth ?? 180
+                  }
+                }
+              }}
+            >
               <MenuItem onClick={() => addCommandFromMenu("function")}>Function</MenuItem>
               <MenuItem onClick={() => addCommandFromMenu("sequence")}>Sequential</MenuItem>
               <MenuItem onClick={() => addCommandFromMenu("parallelRace")}>Parallel Race</MenuItem>

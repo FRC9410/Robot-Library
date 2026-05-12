@@ -48,6 +48,7 @@ export function createEmptyBindingCommand(subsystems: GeneratedSubsystem[]): Bin
     kind: "function",
     subsystemId,
     method,
+    constantSource: "new",
     constantName: "",
     value: 0
   };
@@ -67,6 +68,7 @@ export function createEmptyWaitCommand(subsystems: GeneratedSubsystem[]): Bindin
     kind: "wait",
     subsystemId: subsystems[0]?.id ?? "",
     method: "",
+    constantSource: "new",
     constantName: "WAIT_SECONDS",
     value: 1
   };
@@ -133,6 +135,7 @@ export function normalizeCommand(command: BindingCommand, subsystems: GeneratedS
       kind,
       subsystemId: command.subsystemId ?? subsystems[0]?.id ?? "",
       method: "",
+      constantSource: command.constantSource === "existing" ? "existing" : "new",
       constantName: command.constantName ?? "WAIT_SECONDS",
       value: command.value ?? 1
     };
@@ -142,6 +145,7 @@ export function normalizeCommand(command: BindingCommand, subsystems: GeneratedS
     kind,
     subsystemId: command.subsystemId ?? subsystems[0]?.id ?? "",
     method: command.method ?? "",
+    constantSource: command.constantSource === "existing" ? "existing" : "new",
     constantName: command.constantName ?? "",
     value: command.value ?? 0
   };

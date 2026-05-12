@@ -7,6 +7,7 @@ export type BindingCommand = {
   kind?: BindingCommandKind;
   subsystemId: string;
   method: string;
+  constantSource?: "new" | "existing";
   constantName?: string;
   value?: number | string;
   children?: BindingCommand[];
