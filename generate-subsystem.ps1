@@ -1461,7 +1461,7 @@ function New-BindingCommandExpression {
 
     $childExpressions = @($children | ForEach-Object { New-BindingCommandExpression $_ $Subsystems })
     if ($kind -eq "sequence") {
-        return "Commands.sequence($($childExpressions -join ', '))"
+        return "new SequentialCommandGroup($($childExpressions -join ', '))"
     }
 
     return "new ParallelRaceGroup($($childExpressions -join ', '))"
@@ -1483,6 +1483,7 @@ function Write-PowerButtonBindingsFile {
     $lines += "import edu.wpi.first.wpilibj2.command.Commands;"
     $lines += "import edu.wpi.first.wpilibj2.command.InstantCommand;"
     $lines += "import edu.wpi.first.wpilibj2.command.ParallelRaceGroup;"
+    $lines += "import edu.wpi.first.wpilibj2.command.SequentialCommandGroup;"
     $lines += "import edu.wpi.first.wpilibj2.command.button.CommandXboxController;"
     $lines += "import frc.robot.subsystems.StateMachine;"
     $lines += ""
@@ -1521,7 +1522,7 @@ function Write-PowerButtonBindingsFile {
         } elseif ($commandExpressions.Count -eq 1) {
             $commandExpressions[0]
         } else {
-            "Commands.sequence($($commandExpressions -join ', '))"
+            "new SequentialCommandGroup($($commandExpressions -join ', '))"
         }
 
         $lines += ""
