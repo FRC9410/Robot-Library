@@ -45,7 +45,9 @@ power-tool/scripts/powerlib-generate-subsystem.cmd
 power-tool/scripts/powerlib-update-subsystems.cmd
 ```
 
-Before replacing a stock file, the installer creates a temporary backup. If the install succeeds, that backup is deleted during cleanup unless you pass `-PpowerlibKeepBackups=true`. If the install fails halfway through, the backup is left in place next to the original file.
+Before replacing a stock file during the first install, the installer creates a temporary backup. If the install succeeds, that backup is deleted during cleanup unless you pass `-PpowerlibKeepBackups=true`. If the install fails halfway through, the backup is left in place next to the original file.
+
+After PowerLib has already been installed once, robot starter/template files are no longer overwritten when the destination already exists. Instead, the installer writes the updated template beside the existing file with a `Template` suffix, for example `RobotContainerTemplate.java` or `settingsTemplate.json`. PowerLib library files under `frc.powerlib` still update in place.
 
 When installing vendordeps, the installer first downloads the official latest JSONs for all five packages. By default, it then applies pinned overrides for any packages we know need pinning, currently MapleSim `0.4.0-beta`. Pass `-PpowerlibLatestVendordeps=true` to keep the latest vendordeps instead of applying pinned overrides. The installer saves each JSON using its `fileName`, and removes older vendordep JSONs with the same vendor `name` or `uuid`.
 
@@ -67,14 +69,17 @@ powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -Ppowerlib
 To update only part of an installed project, turn off the sections you do not want. By default, all sections are installed.
 
 ```powershell
-# Update helper scripts and vendordeps, but leave Java library/starter files alone.
+# Update templates, Power Tool/scripts, and vendordeps, but leave PowerLib library files alone.
 powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -PpowerlibInstallLib=false
 
-# Update Java library/starter files and helper scripts, but leave vendordeps alone.
+# Update PowerLib library files, Power Tool/scripts, and vendordeps, but leave robot templates alone.
+powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -PpowerlibInstallTemplates=false
+
+# Update Java files and Power Tool/scripts, but leave vendordeps alone.
 powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -PpowerlibInstallVendordeps=false
 
 # Update only vendordeps.
-powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -PpowerlibInstallLib=false -PpowerlibInstallScripts=false
+powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -PpowerlibInstallLib=false -PpowerlibInstallTemplates=false -PpowerlibInstallDashboard=false
 ```
 
 When run from an interactive terminal, the installer asks at the beginning whether to install each section, including Power Tool.
@@ -99,14 +104,17 @@ pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1 -PpowerlibKeepBa
 To update only part of an installed project, turn off the sections you do not want. By default, all sections are installed.
 
 ```bash
-# Update helper scripts and vendordeps, but leave Java library/starter files alone.
+# Update templates, Power Tool/scripts, and vendordeps, but leave PowerLib library files alone.
 pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1 -PpowerlibInstallLib=false
 
-# Update Java library/starter files and helper scripts, but leave vendordeps alone.
+# Update PowerLib library files, Power Tool/scripts, and vendordeps, but leave robot templates alone.
+pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1 -PpowerlibInstallTemplates=false
+
+# Update Java files and Power Tool/scripts, but leave vendordeps alone.
 pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1 -PpowerlibInstallVendordeps=false
 
 # Update only vendordeps.
-pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1 -PpowerlibInstallLib=false -PpowerlibInstallScripts=false
+pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1 -PpowerlibInstallLib=false -PpowerlibInstallTemplates=false -PpowerlibInstallDashboard=false
 ```
 
 When run from an interactive terminal, the installer asks at the beginning whether to install each section, including Power Tool.
@@ -117,7 +125,7 @@ These flags control which sections the installer updates. They all default to `t
 
 ```text
 -PpowerlibInstallLib=true
--PpowerlibInstallScripts=true
+-PpowerlibInstallTemplates=true
 -PpowerlibInstallVendordeps=true
 -PpowerlibInstallTools=true
 -PpowerlibInstallDashboard=true
@@ -127,13 +135,13 @@ These flags control which sections the installer updates. They all default to `t
 At the beginning of an interactive install, the installer asks whether to install:
 
 ```text
-PowerLib Java/starter files
-helper scripts
+PowerLib library files
+robot starter/template files
 vendor dependencies
-Power Tool source and npm dependencies
+Power Tool source, npm dependencies, and scripts
 ```
 
-The Power Tool option downloads the app source, runs `npm install`, builds the app, and writes the run scripts.
+The Power Tool option downloads the app source, runs `npm install`, builds the app, and writes the run/update/generation scripts. Updating Power Tool refreshes those scripts too.
 
 Set `-PpowerlibInteractive=false` to skip prompts and use the flag/default values directly.
 
@@ -163,7 +171,7 @@ powershell -ExecutionPolicy Bypass -File .\power-tool\scripts\power-tool.ps1
 
 The Power Tool source stays in the robot project so it can be run or edited locally. The installer builds the app once, then the launchers run the built Electron app with `npm start`. Its `node_modules` folder is created by `npm install` and should not be committed.
 
-Use `Update Power Tool` inside the app to download the latest Power Tool source, reinstall npm dependencies, and restart the app.
+Use `Update Power Tool` inside the app to download the latest Power Tool source, refresh the scripts, reinstall npm dependencies, and restart the app.
 
 To build the dashboard locally from this library repo:
 

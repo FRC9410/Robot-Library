@@ -34,11 +34,16 @@ declare global {
         stdout: string;
         stderr: string;
       }>;
+      updateInstallSection: (section: string) => Promise<{
+        stdout: string;
+        stderr: string;
+      }>;
       updatePowerTool: () => Promise<{
         started: boolean;
       }>;
       onMenuConnectionSettings: (callback: () => void) => () => void;
       onMenuUpdateSubsystemCode: (callback: () => void) => () => void;
+      onMenuUpdateInstallSection: (callback: (_event: unknown, section: string) => void) => () => void;
       onMenuUpdatePowerTool: (callback: () => void) => () => void;
     };
   }

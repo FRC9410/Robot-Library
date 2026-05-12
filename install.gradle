@@ -253,18 +253,18 @@ def vendorDependencies = [
 ]
 
 def rawBaseUrl = 'https://raw.githubusercontent.com/FRC9410/Robot-Library/main/templates'
-def generatorScriptUrl = 'https://raw.githubusercontent.com/FRC9410/Robot-Library/main/generate-subsystem.ps1'
 def dashboardBuildScriptUrl = 'https://raw.githubusercontent.com/FRC9410/Robot-Library/main/build-dashboard-install.ps1'
 def keepBackupsPropertyName = 'powerlibKeepBackups'
 def latestVendordepsPropertyName = 'powerlibLatestVendordeps'
 def skipBuildPropertyName = 'powerlibSkipBuild'
 def installLibPropertyName = 'powerlibInstallLib'
-def installScriptsPropertyName = 'powerlibInstallScripts'
+def installTemplatesPropertyName = 'powerlibInstallTemplates'
 def installVendordepsPropertyName = 'powerlibInstallVendordeps'
 def installToolsPropertyName = 'powerlibInstallTools'
 def installDashboardPropertyName = 'powerlibInstallDashboard'
 def interactiveInstallPropertyName = 'powerlibInteractive'
 def dashboardInstallScriptName = 'power-tool-install.ps1'
+def installStateFileName = '.powerlib-installed'
 
 def findBooleanProperty = { Project project, String propertyName, boolean defaultValue ->
     if (!project.hasProperty(propertyName)) {
@@ -425,12 +425,39 @@ def backupExistingFile = { File destination ->
     return backup
 }
 
-def copyTemplateFile = { Project project, TemplateFile template ->
+def getTemplateCopyDestination = { File destination ->
+    String name = destination.name
+    int extensionIndex = name.lastIndexOf('.')
+    if (extensionIndex <= 0) {
+        return new File(destination.parentFile, "${name}Template")
+    }
+
+    String baseName = name.substring(0, extensionIndex)
+    String extension = name.substring(extensionIndex)
+    return new File(destination.parentFile, "${baseName}Template${extension}")
+}
+
+def hasPriorPowerLibInstall = { Project project ->
+    return project.file(installStateFileName).exists() ||
+        project.file('src/main/java/frc/powerlib').exists() ||
+        project.file('power-tool').exists() ||
+        project.file('power-tool.cmd').exists()
+}
+
+def markPowerLibInstallComplete = { Project project ->
+    File marker = project.file(installStateFileName)
+    marker.text = "PowerLib installer last completed at ${new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")}\n"
+}
+
+def copyTemplateFile = { Project project, TemplateFile template, boolean writeTemplateCopyIfDestinationExists = false ->
     File destination = project.file(template.destination)
-    destination.parentFile.mkdirs()
+    File copyDestination = writeTemplateCopyIfDestinationExists && destination.exists()
+        ? getTemplateCopyDestination(destination)
+        : destination
+    copyDestination.parentFile.mkdirs()
 
     File backup = null
-    if (template.replacement) {
+    if (template.replacement && copyDestination == destination) {
         backup = backupExistingFile(destination)
     }
 
@@ -438,60 +465,19 @@ def copyTemplateFile = { Project project, TemplateFile template ->
     File localTemplate = localTemplateRoot == null ? null : new File(localTemplateRoot, template.source)
 
     if (localTemplate != null && localTemplate.exists()) {
-        Files.copy(localTemplate.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        Files.copy(localTemplate.toPath(), copyDestination.toPath(), StandardCopyOption.REPLACE_EXISTING)
     } else {
         URL templateUrl = new URL("${rawBaseUrl}/${template.source}")
-        destination.text = templateUrl.getText('UTF-8')
+        copyDestination.text = templateUrl.getText('UTF-8')
+    }
+
+    if (copyDestination != destination) {
+        logger.lifecycle("Existing ${project.relativePath(destination)} preserved; wrote updated template to ${project.relativePath(copyDestination)}")
     }
 
     return backup
 }
 
-
-def installGeneratorScript = { Project project ->
-    File scriptsDirectory = project.file('power-tool/scripts')
-    scriptsDirectory.mkdirs()
-
-    File generatorScript = new File(scriptsDirectory, 'generate-subsystem.ps1')
-    File localInstallerRoot = findLocalInstallerRoot()
-    File localGeneratorScript = localInstallerRoot == null ? null : new File(localInstallerRoot, 'generate-subsystem.ps1')
-    if (localGeneratorScript != null && localGeneratorScript.exists()) {
-        Files.copy(localGeneratorScript.toPath(), generatorScript.toPath(), StandardCopyOption.REPLACE_EXISTING)
-    } else {
-        generatorScript.text = new URL(generatorScriptUrl).getText('UTF-8')
-    }
-
-    File generateCommand = new File(scriptsDirectory, 'powerlib-generate-subsystem.cmd')
-    generateCommand.text = '''@echo off
-powershell -ExecutionPolicy Bypass -File "%~dp0generate-subsystem.ps1" %*
-'''
-
-    File updateCommand = new File(scriptsDirectory, 'powerlib-update-subsystems.cmd')
-    updateCommand.text = '''@echo off
-powershell -ExecutionPolicy Bypass -File "%~dp0generate-subsystem.ps1" -UpdateSubsystems %*
-'''
-
-    File oldGeneratorScript = project.file('.robot-library-generate-subsystem.gradle')
-    if (oldGeneratorScript.exists() && !oldGeneratorScript.delete()) {
-        logger.warn("Could not remove old subsystem generator script: ${oldGeneratorScript.name}")
-    }
-    [
-        project.file('.robot-library-generate-subsystem.ps1'),
-        project.file('powerlib-generate-subsystem.cmd'),
-        project.file('powerlib-update-subsystems.cmd'),
-        project.file('powerlib-dashboard.ps1'),
-        project.file('power-tool.ps1'),
-        project.file('powerlib-dashboard.cmd')
-    ].each { oldScript ->
-        if (oldScript.exists() && !oldScript.delete()) {
-            logger.warn("Could not remove old helper script: ${oldScript.name}")
-        }
-    }
-
-    logger.lifecycle("Installed subsystem generator script: ${project.relativePath(generatorScript)}")
-    logger.lifecycle("Installed subsystem generator command: ${project.relativePath(generateCommand)}")
-    logger.lifecycle("Installed subsystem update command: ${project.relativePath(updateCommand)}")
-}
 
 def deleteOldDashboardBuildScript = { Project project ->
     File oldDashboardBuildScript = project.file('powerlib-build-dashboard.ps1')
@@ -585,24 +571,25 @@ gradle.projectsLoaded {
     rootProject {
         tasks.register('robotLibraryInstall') {
             group = 'robot library'
-            description = 'Installs Team 9410 PowerLib starter files into this robot project.'
+            description = 'Installs Team 9410 PowerLib files, robot templates, vendordeps, and tools.'
 
             doLast {
                 List<File> backups = []
                 boolean keepBackups = findBooleanProperty(project, keepBackupsPropertyName, false)
                 boolean useLatestVendordeps = findBooleanProperty(project, latestVendordepsPropertyName, false)
-                boolean installLib = findInstallChoice(project, installLibPropertyName, 'Install PowerLib Java/starter files?', true)
-                boolean installScripts = findInstallChoice(project, installScriptsPropertyName, 'Install helper scripts?', true)
+                boolean installLib = findInstallChoice(project, installLibPropertyName, 'Install PowerLib library files?', true)
+                boolean installTemplates = findInstallChoice(project, installTemplatesPropertyName, 'Install robot starter/template files?', true)
                 boolean installVendordeps = findInstallChoice(project, installVendordepsPropertyName, 'Install vendor dependencies?', true)
                 boolean installTools = findBooleanProperty(project, installToolsPropertyName, true)
                 boolean installDashboard = installTools && findInstallChoice(project, installDashboardPropertyName, 'Download Power Tool source and run npm install?', true)
-                boolean vendordepsOnly = installVendordeps && !installLib && !installDashboard && !installScripts
+                boolean vendordepsOnly = installVendordeps && !installLib && !installTemplates && !installDashboard
+                boolean priorPowerLibInstall = hasPriorPowerLibInstall(project)
 
                 logger.lifecycle('PowerLib install selections:')
-                logger.lifecycle("  Java/starter files: ${installLib}")
-                logger.lifecycle("  Helper scripts: ${installScripts}")
+                logger.lifecycle("  PowerLib library files: ${installLib}")
+                logger.lifecycle("  Robot starter/template files: ${installTemplates}")
                 logger.lifecycle("  Vendor dependencies: ${installVendordeps}")
-                logger.lifecycle("  Power Tool: ${installDashboard}")
+                logger.lifecycle("  Power Tool and scripts: ${installDashboard}")
 
                 if (installVendordeps) {
                     vendorDependencies.each { dependency ->
@@ -622,14 +609,25 @@ gradle.projectsLoaded {
                 }
 
                 if (installLib) {
-                    templateFiles.each { template ->
+                    templateFiles.findAll { template -> template.source.startsWith('powerlib/') }.each { template ->
                         File backup = copyTemplateFile(project, template)
                         if (backup != null) {
                             backups.add(backup)
                         }
                     }
                 } else {
-                    logger.lifecycle('Skipped PowerLib files')
+                    logger.lifecycle('Skipped PowerLib library files')
+                }
+
+                if (installTemplates) {
+                    templateFiles.findAll { template -> !template.source.startsWith('powerlib/') }.each { template ->
+                        File backup = copyTemplateFile(project, template, priorPowerLibInstall)
+                        if (backup != null) {
+                            backups.add(backup)
+                        }
+                    }
+                } else {
+                    logger.lifecycle('Skipped robot starter/template files')
                 }
 
                 if (installDashboard) {
@@ -637,12 +635,6 @@ gradle.projectsLoaded {
                 } else {
                     logger.lifecycle(installTools ? 'Skipped Power Tool' : 'Skipped PowerLib tools')
                     deleteOldDashboardBuildScript(project)
-                }
-
-                if (installScripts) {
-                    installGeneratorScript(project)
-                } else {
-                    logger.lifecycle('Skipped helper scripts')
                 }
 
                 if (keepBackups) {
@@ -659,6 +651,7 @@ gradle.projectsLoaded {
 
 
                 logger.lifecycle('PowerLib install complete')
+                markPowerLibInstallComplete(project)
 
                 if (!findBooleanProperty(project, skipBuildPropertyName, false)) {
                     runRobotBuild(project)

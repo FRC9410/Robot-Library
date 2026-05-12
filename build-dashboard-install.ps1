@@ -17,6 +17,13 @@ $updaterPath = Join-Path $dashboardScriptsPath "update-power-tool.ps1"
 $legacyDashboardOutput = Join-Path $installRoot "powerlib-dashboard"
 $legacyWindowsLauncherPath = Join-Path $installRoot "powerlib-dashboard.cmd"
 $legacyPowershellLauncherPath = Join-Path $installRoot "powerlib-dashboard.ps1"
+$legacyScriptPaths = @(
+    (Join-Path $installRoot ".robot-library-generate-subsystem.gradle"),
+    (Join-Path $installRoot ".robot-library-generate-subsystem.ps1"),
+    (Join-Path $installRoot "powerlib-generate-subsystem.cmd"),
+    (Join-Path $installRoot "powerlib-update-subsystems.cmd"),
+    (Join-Path $installRoot "power-tool.ps1")
+)
 
 function Remove-DirectoryIfExists {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -50,6 +57,9 @@ try {
     Remove-DirectoryIfExists $legacyDashboardOutput
     Remove-Item -LiteralPath $legacyWindowsLauncherPath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $legacyPowershellLauncherPath -Force -ErrorAction SilentlyContinue
+    foreach ($legacyScriptPath in $legacyScriptPaths) {
+        Remove-Item -LiteralPath $legacyScriptPath -Force -ErrorAction SilentlyContinue
+    }
     Copy-Item -Path $dashboardSource -Destination $dashboardOutput -Recurse
 
     Push-Location $dashboardOutput

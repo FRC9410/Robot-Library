@@ -88,11 +88,13 @@ function AppContent() {
   });
   const [subsystemSaving, setSubsystemSaving] = useState(false);
   const [subsystemUpdatingCode, setSubsystemUpdatingCode] = useState(false);
+  const [installSectionUpdating, setInstallSectionUpdating] = useState<string | null>(null);
   const [powerToolUpdating, setPowerToolUpdating] = useState(false);
   const [deleteSubsystemIndex, setDeleteSubsystemIndex] = useState<number | null>(null);
   const [characterizationOpen, setCharacterizationOpen] = useState(false);
   const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(false);
   const updateSubsystemCodeRef = useRef<() => Promise<void>>(async () => {});
+  const updateInstallSectionRef = useRef<(section: string) => Promise<void>>(async () => {});
   const updatePowerToolRef = useRef<() => Promise<void>>(async () => {});
 
   const characterizationCommands = useMemo<CharacterizationCommand[]>(() => {
@@ -308,6 +310,39 @@ function AppContent() {
     }
   }
 
+  const installSectionLabels: Record<string, string> = {
+    lib: "PowerLib library files",
+    templates: "robot templates",
+    vendordeps: "vendor dependencies"
+  };
+
+  async function updateInstallSection(section: string) {
+    if (installSectionUpdating) {
+      return;
+    }
+
+    const label = installSectionLabels[section] ?? section;
+    setInstallSectionUpdating(label);
+    setError(null);
+
+    try {
+      if (!window.powerlib?.updateInstallSection) {
+        throw new Error("PowerLib installer bridge is not available.");
+      }
+
+      const result = await window.powerlib.updateInstallSection(section);
+      const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+      showToast(output ? summarizeUpdateOutput(output) : `Updated ${label}.`, "success");
+      if (section === "templates" || section === "lib") {
+        await loadSubsystems();
+      }
+    } catch (caught) {
+      showToast(caught instanceof Error ? caught.message : `Could not update ${label}.`, "error");
+    } finally {
+      setInstallSectionUpdating(null);
+    }
+  }
+
   function connectNetworkTables() {
     setError(null);
     setStatus("connecting");
@@ -331,6 +366,7 @@ function AppContent() {
   }
 
   updateSubsystemCodeRef.current = updateSubsystemCode;
+  updateInstallSectionRef.current = updateInstallSection;
   updatePowerToolRef.current = updatePowerTool;
 
   useEffect(() => {
@@ -340,6 +376,9 @@ function AppContent() {
     const removeUpdateSubsystemCode = window.powerlib?.onMenuUpdateSubsystemCode?.(() => {
       void updateSubsystemCodeRef.current();
     });
+    const removeUpdateInstallSection = window.powerlib?.onMenuUpdateInstallSection?.((_event, section) => {
+      void updateInstallSectionRef.current(section);
+    });
     const removeUpdatePowerTool = window.powerlib?.onMenuUpdatePowerTool?.(() => {
       void updatePowerToolRef.current();
     });
@@ -347,6 +386,7 @@ function AppContent() {
     return () => {
       removeConnectionSettings?.();
       removeUpdateSubsystemCode?.();
+      removeUpdateInstallSection?.();
       removeUpdatePowerTool?.();
     };
   }, []);
@@ -453,7 +493,15 @@ function AppContent() {
         </Container>
       </AppBar>
 
-      <UpdateCodeDialog open={subsystemUpdatingCode} />
+      <UpdateCodeDialog
+        open={subsystemUpdatingCode || Boolean(installSectionUpdating)}
+        title={installSectionUpdating ? "Updating PowerLib" : "Updating Code"}
+        message={
+          installSectionUpdating
+            ? `Please wait, updating ${installSectionUpdating}.`
+            : "Please wait, code is updating."
+        }
+      />
 
       <ConnectionSettingsDialog
         open={connectionSettingsOpen}

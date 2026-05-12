@@ -23,10 +23,10 @@ pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1
 The installer asks which sections to install:
 
 ```text
-PowerLib Java/starter files
-helper scripts
+PowerLib library files
+robot starter/template files
 vendor dependencies
-Power Tool source and npm dependencies
+Power Tool source, npm dependencies, and scripts
 ```
 
 ## Added Library Files
@@ -43,7 +43,7 @@ src/main/java/frc/powerlib/utils/*.java
 
 ## Added / Replaced Robot Files
 
-These PowerLib-ready starter files are written into the robot project. If one already exists, the installer backs it up before replacing it:
+These robot starter/template files are written into the robot project. On the first install, existing stock files are backed up before replacement. On later installs, existing robot template files are preserved and the updated template is written beside them with a `Template` suffix, such as `RobotContainerTemplate.java`.
 
 ```text
 src/main/java/frc/robot/Constants.java
@@ -84,6 +84,10 @@ Power Tool is installed into the robot project as source:
 power-tool/
 power-tool.cmd
 power-tool/scripts/power-tool.ps1
+power-tool/scripts/update-power-tool.ps1
+power-tool/scripts/generate-subsystem.ps1
+power-tool/scripts/powerlib-generate-subsystem.cmd
+power-tool/scripts/powerlib-update-subsystems.cmd
 ```
 
 Open it on Windows from the robot project root:
@@ -100,7 +104,7 @@ powershell -ExecutionPolicy Bypass -File .\power-tool\scripts\power-tool.ps1
 
 Power Tool includes NetworkTables tools and generated subsystem editing. Install builds the app once, then the launchers run the built Electron app with `npm start`. Its `node_modules` folder is created during install and should not be committed.
 
-Use `Update Power Tool` inside the app to download the latest Power Tool source, reinstall npm dependencies, and restart the app.
+Use `Update Power Tool` inside the app to download the latest Power Tool source, refresh the scripts, reinstall npm dependencies, and restart the app.
 
 ## Internal Docs
 

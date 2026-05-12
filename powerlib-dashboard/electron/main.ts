@@ -34,6 +34,19 @@ function createAppMenu(window: BrowserWindow) {
           label: "Update Code",
           click: () => window.webContents.send("powerlib:menu-update-subsystem-code")
         },
+        { type: "separator" },
+        {
+          label: "Update PowerLib Library Files",
+          click: () => window.webContents.send("powerlib:menu-update-install-section", "lib")
+        },
+        {
+          label: "Update Robot Templates",
+          click: () => window.webContents.send("powerlib:menu-update-install-section", "templates")
+        },
+        {
+          label: "Update Vendor Dependencies",
+          click: () => window.webContents.send("powerlib:menu-update-install-section", "vendordeps")
+        },
         {
           label: "Update Power Tool",
           click: () => window.webContents.send("powerlib:menu-update-power-tool")
@@ -383,7 +396,7 @@ ipcMain.handle("powerlib:update-subsystem-code", async () => {
   try {
     await fs.access(scriptPath);
   } catch {
-    throw new Error(`Missing ${scriptCandidates[0]}. Install PowerLib helper scripts first.`);
+    throw new Error(`Missing ${scriptCandidates[0]}. Reinstall or update Power Tool to add PowerLib scripts.`);
   }
 
   const { stdout, stderr } = await execFileAsync(
@@ -411,6 +424,93 @@ ipcMain.handle("powerlib:update-subsystem-code", async () => {
     stdout,
     stderr
   };
+});
+
+ipcMain.handle("powerlib:update-install-section", async (_event, section: string) => {
+  const robotRoot = getDetectedRobotRoot();
+  const installerPath = path.join(robotRoot, "build", "powerlib-section-install.ps1");
+  await fs.mkdir(path.dirname(installerPath), { recursive: true });
+
+  const installScriptCandidates = [
+    path.join(robotRoot, "power-tool", "scripts", "install.ps1"),
+    path.join(robotRoot, "power-tool", "install.ps1"),
+    path.join(robotRoot, "install.ps1")
+  ];
+  const localLibraryInstallScript = path.resolve(app.getAppPath(), "..", "install.ps1");
+
+  let installScriptContent: string | null = null;
+  for (const candidate of installScriptCandidates) {
+    try {
+      installScriptContent = await fs.readFile(candidate, "utf-8");
+      break;
+    } catch {
+      // Keep looking.
+    }
+  }
+
+  if (!installScriptContent && pathExistsSync(localLibraryInstallScript)) {
+    installScriptContent = await fs.readFile(localLibraryInstallScript, "utf-8");
+  }
+
+  if (installScriptContent) {
+    await fs.writeFile(installerPath, installScriptContent, "utf-8");
+  } else {
+    await fs.writeFile(
+      installerPath,
+      [
+        "param([Parameter(ValueFromRemainingArguments = $true)][string[]]$GradleArgs)",
+        "$ErrorActionPreference = 'Stop'",
+        'Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FRC9410/Robot-Library/main/install.ps1" -OutFile ".robot-library-install.ps1"',
+        '& powershell -ExecutionPolicy Bypass -File .\\.robot-library-install.ps1 @GradleArgs'
+      ].join("\r\n"),
+      "utf-8"
+    );
+  }
+
+  const sectionArgs: Record<string, string[]> = {
+    lib: [
+      "-PpowerlibInstallLib=true",
+      "-PpowerlibInstallTemplates=false",
+      "-PpowerlibInstallVendordeps=false",
+      "-PpowerlibInstallDashboard=false"
+    ],
+    templates: [
+      "-PpowerlibInstallLib=false",
+      "-PpowerlibInstallTemplates=true",
+      "-PpowerlibInstallVendordeps=false",
+      "-PpowerlibInstallDashboard=false"
+    ],
+    vendordeps: [
+      "-PpowerlibInstallLib=false",
+      "-PpowerlibInstallTemplates=false",
+      "-PpowerlibInstallVendordeps=true",
+      "-PpowerlibInstallDashboard=false"
+    ]
+  };
+
+  const args = sectionArgs[section];
+  if (!args) {
+    throw new Error(`Unknown PowerLib update section: ${section}`);
+  }
+
+  const { stdout, stderr } = await execFileAsync(
+    "powershell",
+    [
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      installerPath,
+      "-PpowerlibInteractive=false",
+      ...args
+    ],
+    {
+      cwd: robotRoot,
+      windowsHide: true,
+      maxBuffer: 1024 * 1024 * 8
+    }
+  );
+
+  return { stdout, stderr };
 });
 
 ipcMain.handle("powerlib:update-power-tool", async () => {

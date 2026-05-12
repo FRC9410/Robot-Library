@@ -16,6 +16,15 @@ $scriptLauncherPath = Join-Path $scriptsRoot "power-tool.ps1"
 $updaterPath = Join-Path $scriptsRoot "update-power-tool.ps1"
 $logPath = Join-Path $robotRoot "build\power-tool-update.log"
 $runnerPath = Join-Path $robotRoot "build\run-power-tool-update.ps1"
+$legacyScriptPaths = @(
+    (Join-Path $robotRoot ".robot-library-generate-subsystem.gradle"),
+    (Join-Path $robotRoot ".robot-library-generate-subsystem.ps1"),
+    (Join-Path $robotRoot "powerlib-generate-subsystem.cmd"),
+    (Join-Path $robotRoot "powerlib-update-subsystems.cmd"),
+    (Join-Path $robotRoot "powerlib-dashboard.cmd"),
+    (Join-Path $robotRoot "powerlib-dashboard.ps1"),
+    (Join-Path $robotRoot "power-tool.ps1")
+)
 $transcriptStarted = $false
 
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $logPath) | Out-Null
@@ -60,6 +69,9 @@ try {
 
     $sourceRoot = Split-Path -Parent $source
     Remove-DirectoryIfExists $toolRoot
+    foreach ($legacyScriptPath in $legacyScriptPaths) {
+        Remove-Item -LiteralPath $legacyScriptPath -Force -ErrorAction SilentlyContinue
+    }
     Copy-Item -Path $source -Destination $toolRoot -Recurse
     New-Item -ItemType Directory -Force -Path $scriptsRoot | Out-Null
 
