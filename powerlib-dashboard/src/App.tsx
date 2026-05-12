@@ -18,6 +18,7 @@ import ConstructionIcon from "@mui/icons-material/Construction";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import ElectricBoltIcon from "@mui/icons-material/ElectricBolt";
 import GamepadIcon from "@mui/icons-material/Gamepad";
+import PrecisionManufacturingIcon from "@mui/icons-material/PrecisionManufacturing";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import type {
   CharacterizationCommand,
@@ -43,6 +44,9 @@ import { NetworkTablesProvider, useNetworkTables } from "./features/networktable
 import { ConnectionSettingsDialog } from "./features/networktables/ConnectionSettingsDialog";
 import { RobotPanel } from "./features/robot/RobotPanel";
 import { BindingsPanel } from "./features/bindings/BindingsPanel";
+import { SimulationPanel } from "./features/simulation/components/SimulationPanel";
+import type { SimConfig } from "./features/simulation/types";
+import { DEFAULT_SIM_CONFIG } from "./features/simulation/types";
 import type { AppView } from "./types/app";
 
 type ToastState = {
@@ -93,6 +97,8 @@ function AppContent() {
   const [deleteSubsystemIndex, setDeleteSubsystemIndex] = useState<number | null>(null);
   const [characterizationOpen, setCharacterizationOpen] = useState(false);
   const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(false);
+  const [simConfig, setSimConfig] = useState<SimConfig>(DEFAULT_SIM_CONFIG);
+  const [simSaving, setSimSaving] = useState(false);
   const updateSubsystemCodeRef = useRef<() => Promise<void>>(async () => {});
   const updateInstallSectionRef = useRef<(section: string) => Promise<void>>(async () => {});
   const updatePowerToolRef = useRef<() => Promise<void>>(async () => {});
@@ -266,6 +272,39 @@ function AppContent() {
     }
   }
 
+  async function loadSimConfig() {
+    if (!window.powerlib?.readSimConfig) {
+      return;
+    }
+
+    try {
+      const result = await window.powerlib.readSimConfig();
+      if (result.exists && result.config) {
+        setSimConfig(result.config as SimConfig);
+      }
+    } catch {
+      // Fall back to defaults if the file doesn't exist yet.
+    }
+  }
+
+  async function handleSaveSimConfig(config: SimConfig) {
+    if (!window.powerlib?.saveSimConfig) {
+      showToast("PowerLib file bridge is not available.", "error");
+      return;
+    }
+
+    setSimSaving(true);
+    try {
+      await window.powerlib.saveSimConfig(config);
+      setSimConfig(config);
+      showToast("Saved simulation settings. Use File > Update Code to regenerate SimConstants.java.", "success");
+    } catch (caught) {
+      showToast(caught instanceof Error ? caught.message : "Could not save simulation config.", "error");
+    } finally {
+      setSimSaving(false);
+    }
+  }
+
   async function updateSubsystemCode() {
     if (subsystemUpdatingCode) {
       return;
@@ -413,6 +452,12 @@ function AppContent() {
     }
   }, [activeView, subsystemDocument.loading, subsystemDocument.path]);
 
+  useEffect(() => {
+    if (activeView === "simulation") {
+      void loadSimConfig();
+    }
+  }, [activeView]);
+
   function watchCharacterizationPrefix() {
     if (!subsystemForm?.name) {
       return;
@@ -499,6 +544,13 @@ function AppContent() {
               iconPosition="start"
               label="NetworkTables"
               value="networktables"
+              sx={{ minHeight: 44 }}
+            />
+            <Tab
+              icon={<PrecisionManufacturingIcon />}
+              iconPosition="start"
+              label="Simulation"
+              value="simulation"
               sx={{ minHeight: 44 }}
             />
           </Tabs>
@@ -602,6 +654,14 @@ function AppContent() {
 
           {activeView === "bindings" && (
             <BindingsPanel subsystems={subsystemDocument.subsystems} onToast={showToast} />
+          )}
+
+          {activeView === "simulation" && (
+            <SimulationPanel
+              config={simConfig}
+              saving={simSaving}
+              onSave={(config) => void handleSaveSimConfig(config)}
+            />
           )}
         </Stack>
       </Container>

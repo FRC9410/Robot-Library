@@ -51,3 +51,6 @@ power-tool.cmd
 power-tool-update.ps1
 *.powerlib.bak
 *.powerlib.bak.*
+
+# claude
+.claude
