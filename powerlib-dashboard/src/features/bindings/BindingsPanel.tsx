@@ -903,27 +903,43 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
             <Divider />
             <Typography variant="subtitle2">Button Bindings</Typography>
             {document.loading && <CircularProgress size={22} />}
-            {document.bindings.map((binding, index) => (
-              <Button
-                key={binding.id ?? `${binding.name}-${index}`}
-                variant={form?.index === index ? "contained" : "outlined"}
-                onClick={() => {
-                  const nextForm = bindingToForm(binding, index, subsystems);
-                  setForm(nextForm);
-                  setSelectedCommandPath(null);
-                }}
-                sx={{ justifyContent: "flex-start", textAlign: "left" }}
-              >
-                <Stack spacing={0.5} sx={{ alignItems: "flex-start" }}>
-                  <Typography sx={{ fontWeight: 800 }}>{binding.name || "Unnamed binding"}</Typography>
-                  <Stack direction="row" spacing={0.75}>
-                    <Chip size="small" label={binding.controller ?? "driver"} />
-                    <Chip size="small" label={binding.input ?? "a"} />
-                    <Chip size="small" label={binding.event ?? "onTrue"} />
+            {document.bindings.map((binding, index) => {
+              const isSelected = form?.index === index;
+              return (
+                <Button
+                  key={binding.id ?? `${binding.name}-${index}`}
+                  variant={isSelected ? "contained" : "outlined"}
+                  onClick={() => {
+                    const nextForm = bindingToForm(binding, index, subsystems);
+                    setForm(nextForm);
+                    setSelectedCommandPath(null);
+                  }}
+                  sx={{
+                    justifyContent: "flex-start",
+                    textAlign: "left",
+                    ...(isSelected && {
+                      color: "primary.contrastText",
+                      "& .MuiChip-root": {
+                        bgcolor: "rgba(0, 0, 0, 0.55)",
+                        color: "primary.contrastText",
+                        fontWeight: 800
+                      }
+                    })
+                  }}
+                >
+                  <Stack spacing={0.5} sx={{ alignItems: "flex-start", minWidth: 0 }}>
+                    <Typography noWrap sx={{ fontWeight: 900, maxWidth: "100%" }}>
+                      {binding.name || "Unnamed binding"}
+                    </Typography>
+                    <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
+                      <Chip size="small" label={binding.controller ?? "driver"} />
+                      <Chip size="small" label={binding.input ?? "a"} />
+                      <Chip size="small" label={binding.event ?? "onTrue"} />
+                    </Stack>
                   </Stack>
-                </Stack>
-              </Button>
-            ))}
+                </Button>
+              );
+            })}
             {!document.loading && document.bindings.length === 0 && (
               <Typography color="text.secondary">No button bindings yet.</Typography>
             )}
