@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import {
   Box,
   Button,
@@ -14,6 +14,7 @@ import {
   Divider,
   FormControl,
   InputLabel,
+  Menu,
   MenuItem,
   Select,
   Stack,
@@ -65,6 +66,8 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
   const [constantOptions, setConstantOptions] = useState<BindingConstantOption[]>([]);
   const [deleteBindingOpen, setDeleteBindingOpen] = useState(false);
   const [selectedCommandPath, setSelectedCommandPath] = useState<number[] | null>(null);
+  const [addMenuAnchor, setAddMenuAnchor] = useState<HTMLElement | null>(null);
+  const [addMenuTargetPath, setAddMenuTargetPath] = useState<number[] | null>(null);
 
   async function loadBindings() {
     setDocument((current) => ({ ...current, loading: true, error: null }));
@@ -299,6 +302,39 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
       }
     }
     return null;
+  }
+
+  function createCommandByKind(kind: BindingCommandKind) {
+    if (kind === "sequence" || kind === "parallelRace") {
+      return createEmptyBindingGroup(kind, subsystems);
+    }
+    if (kind === "wait") {
+      return createEmptyWaitCommand(subsystems);
+    }
+    return createEmptyBindingCommand(subsystems);
+  }
+
+  function openAddMenu(event: MouseEvent<HTMLElement>, targetPath: number[] | null) {
+    setAddMenuAnchor(event.currentTarget);
+    setAddMenuTargetPath(targetPath);
+  }
+
+  function closeAddMenu() {
+    setAddMenuAnchor(null);
+    setAddMenuTargetPath(null);
+  }
+
+  function addCommandFromMenu(kind: BindingCommandKind) {
+    insertCommandAtPath(addMenuTargetPath ?? [], createCommandByKind(kind));
+    closeAddMenu();
+  }
+
+  function AddCommandMenuButton({ targetPath }: { targetPath: number[] | null }) {
+    return (
+      <Button startIcon={<AddIcon />} variant="outlined" onClick={(event) => openAddMenu(event, targetPath)}>
+        Add Function/Command
+      </Button>
+    );
   }
 
   function getCommandLabel(command: BindingCommand) {
@@ -576,6 +612,23 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
   }
 
   function renderCommandInspector(command: BindingCommand | null, path: number[] | null) {
+    if (form && path === null) {
+      return (
+        <Stack spacing={2}>
+          <Stack direction="row" sx={{ alignItems: "center", gap: 1 }}>
+            <Typography variant="h6" sx={{ flexGrow: 1 }}>
+              Binding Root
+            </Typography>
+            <AddCommandMenuButton targetPath={null} />
+          </Stack>
+          <Divider />
+          <Typography color="text.secondary">
+            This binding has {form.commands.length} top-level command{form.commands.length === 1 ? "" : "s"}.
+          </Typography>
+        </Stack>
+      );
+    }
+
     if (!command || !path) {
       return (
         <Stack spacing={2} sx={{ alignItems: "center", justifyContent: "center", minHeight: 260, textAlign: "center" }}>
@@ -602,20 +655,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
             )}
           </Stack>
           <Divider />
-          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
-            <Button startIcon={<AddIcon />} variant="outlined" onClick={() => insertCommandAtPath(path, createEmptyBindingCommand(subsystems))}>
-              Add Function
-            </Button>
-            <Button variant="outlined" onClick={() => insertCommandAtPath(path, createEmptyBindingGroup("sequence", subsystems))}>
-              New Sequential
-            </Button>
-            <Button variant="outlined" onClick={() => insertCommandAtPath(path, createEmptyBindingGroup("parallelRace", subsystems))}>
-              New Parallel Race
-            </Button>
-            <Button variant="outlined" onClick={() => insertCommandAtPath(path, createEmptyWaitCommand(subsystems))}>
-              New Wait
-            </Button>
-          </Stack>
+          <AddCommandMenuButton targetPath={path} />
           <Typography color="text.secondary">
             This group has {(command.children ?? []).length} child command{(command.children ?? []).length === 1 ? "" : "s"}.
           </Typography>
@@ -773,7 +813,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
               variant="contained"
               onClick={() => {
                 setForm(createEmptyBindingForm(subsystems));
-                setSelectedCommandPath([0]);
+                setSelectedCommandPath(null);
               }}
             >
               Create Binding
@@ -791,7 +831,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
                 onClick={() => {
                   const nextForm = bindingToForm(binding, index, subsystems);
                   setForm(nextForm);
-                  setSelectedCommandPath(nextForm.commands.length > 0 ? [0] : null);
+                  setSelectedCommandPath(null);
                 }}
                 sx={{ justifyContent: "flex-start", textAlign: "left" }}
               >
@@ -863,27 +903,37 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
                 <Divider />
                 <Stack direction="row" sx={{ alignItems: "center", gap: 1, flexWrap: "wrap" }}>
                   <Typography variant="subtitle1" sx={{ fontWeight: 800, flexGrow: 1 }}>Command Tree</Typography>
-                  <Button
-                    startIcon={<AddIcon />}
-                    variant="outlined"
-                    onClick={() => insertCommandAtPath([], createEmptyBindingCommand(subsystems))}
-                  >
-                    Add Function
-                  </Button>
-                  <Button variant="outlined" onClick={() => insertCommandAtPath([], createEmptyBindingGroup("sequence", subsystems))}>
-                    New Sequential
-                  </Button>
-                  <Button variant="outlined" onClick={() => insertCommandAtPath([], createEmptyBindingGroup("parallelRace", subsystems))}>
-                    New Parallel Race
-                  </Button>
-                  <Button variant="outlined" onClick={() => insertCommandAtPath([], createEmptyWaitCommand(subsystems))}>
-                    New Wait
-                  </Button>
                 </Stack>
                 <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "360px 1fr" }, minHeight: 360 }}>
                   <Card variant="outlined" sx={{ minHeight: 0 }}>
                     <CardContent sx={{ height: "100%", overflowY: "auto" }}>
-                      <Stack spacing={0.5}>{renderCommandTree(form.commands)}</Stack>
+                      <Stack spacing={0.5}>
+                        <Stack
+                          component="button"
+                          direction="row"
+                          spacing={1}
+                          onClick={() => setSelectedCommandPath(null)}
+                          sx={{
+                            alignItems: "center",
+                            bgcolor: selectedCommandPath === null ? "action.selected" : "transparent",
+                            border: 0,
+                            borderRadius: 1,
+                            color: "text.primary",
+                            cursor: "pointer",
+                            font: "inherit",
+                            px: 1,
+                            py: 0.75,
+                            textAlign: "left",
+                            width: "100%"
+                          }}
+                        >
+                          <Chip size="small" label="root" color="primary" />
+                          <Typography variant="body2" sx={{ fontWeight: 800 }}>
+                            Binding Root
+                          </Typography>
+                        </Stack>
+                        {renderCommandTree(form.commands)}
+                      </Stack>
                     </CardContent>
                   </Card>
                   <Card variant="outlined" sx={{ minHeight: 0 }}>
@@ -929,6 +979,12 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
                 </Button>
               </DialogActions>
             </Dialog>
+            <Menu anchorEl={addMenuAnchor} open={Boolean(addMenuAnchor)} onClose={closeAddMenu}>
+              <MenuItem onClick={() => addCommandFromMenu("function")}>Function</MenuItem>
+              <MenuItem onClick={() => addCommandFromMenu("sequence")}>Sequential</MenuItem>
+              <MenuItem onClick={() => addCommandFromMenu("parallelRace")}>Parallel Race</MenuItem>
+              <MenuItem onClick={() => addCommandFromMenu("wait")}>Wait</MenuItem>
+            </Menu>
           </>
         )}
       </Stack>
