@@ -429,6 +429,16 @@ ipcMain.handle("powerlib:update-subsystem-code", async () => {
 ipcMain.handle("powerlib:update-install-section", async (_event, section: string) => {
   const robotRoot = getDetectedRobotRoot();
   const installerPath = path.join(robotRoot, "build", "powerlib-section-install.ps1");
+  const repoRefPath = path.join(robotRoot, ".powerlib-repo-ref");
+  let repoRef = "main";
+  try {
+    const savedRepoRef = (await fs.readFile(repoRefPath, "utf-8")).trim();
+    if (savedRepoRef) {
+      repoRef = savedRepoRef;
+    }
+  } catch {
+    // Default to main for older installs without a saved repo ref.
+  }
   await fs.mkdir(path.dirname(installerPath), { recursive: true });
 
   const installScriptCandidates = [
@@ -460,7 +470,7 @@ ipcMain.handle("powerlib:update-install-section", async (_event, section: string
       [
         "param([Parameter(ValueFromRemainingArguments = $true)][string[]]$GradleArgs)",
         "$ErrorActionPreference = 'Stop'",
-        'Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FRC9410/Robot-Library/main/install.ps1" -OutFile ".robot-library-install.ps1"',
+        `Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FRC9410/Robot-Library/${repoRef}/install.ps1" -OutFile ".robot-library-install.ps1"`,
         '& powershell -ExecutionPolicy Bypass -File .\\.robot-library-install.ps1 @GradleArgs'
       ].join("\r\n"),
       "utf-8"
@@ -500,6 +510,8 @@ ipcMain.handle("powerlib:update-install-section", async (_event, section: string
       "Bypass",
       "-File",
       installerPath,
+      "-RepoRef",
+      repoRef,
       "-PpowerlibInteractive=false",
       ...args
     ],

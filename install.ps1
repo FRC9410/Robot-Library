@@ -1,5 +1,6 @@
 param(
-    [string]$InstallerUrl = "https://raw.githubusercontent.com/FRC9410/Robot-Library/main/install.gradle",
+    [string]$RepoRef = "main",
+    [string]$InstallerUrl = "",
     [switch]$KeepInstaller,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$GradleArgs
@@ -11,6 +12,11 @@ $installRoot = (Get-Location).Path
 $installerPath = Join-Path $installRoot ".robot-library-install.gradle"
 $isWindowsHost = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
 $gradleWrapper = if ($isWindowsHost) { Join-Path $installRoot "gradlew.bat" } else { Join-Path $installRoot "gradlew" }
+$repoRefGradleArg = "-PpowerlibRepoRef=$RepoRef"
+
+if ([string]::IsNullOrWhiteSpace($InstallerUrl)) {
+    $InstallerUrl = "https://raw.githubusercontent.com/FRC9410/Robot-Library/$RepoRef/install.gradle"
+}
 
 if (-not (Test-Path $gradleWrapper)) {
     throw "Could not find Gradle wrapper at $gradleWrapper. Run this from the root of a WPILib robot project."
@@ -24,6 +30,10 @@ if (Test-Path $localInstaller) {
 }
 
 try {
+    if (-not ($GradleArgs | Where-Object { $_ -like "-PpowerlibRepoRef=*" })) {
+        $GradleArgs = @($repoRefGradleArg) + @($GradleArgs)
+    }
+
     & $gradleWrapper --no-daemon --console=plain -I $installerPath robotLibraryInstall @GradleArgs
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE

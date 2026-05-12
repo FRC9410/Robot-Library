@@ -13,6 +13,13 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FRC9410/Robot-Library/
 powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1
 ```
 
+To install from a branch or tag, pass the same Git ref to the installer:
+
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FRC9410/Robot-Library/feature/maple-sim-integration/install.ps1" -OutFile ".robot-library-install.ps1"
+powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -RepoRef "feature/maple-sim-integration"
+```
+
 macOS / Linux:
 
 ```bash

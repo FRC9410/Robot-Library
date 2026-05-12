@@ -1,11 +1,16 @@
 param(
-    [string]$RepositoryArchiveUrl = "https://github.com/FRC9410/Robot-Library/archive/refs/heads/main.zip",
+    [string]$RepoRef = "main",
+    [string]$RepositoryArchiveUrl = "",
     [switch]$SkipNpmInstall
 )
 
 $ErrorActionPreference = "Stop"
 
 $installRoot = (Get-Location).Path
+$rawBaseUrl = "https://raw.githubusercontent.com/FRC9410/Robot-Library/$RepoRef"
+if ([string]::IsNullOrWhiteSpace($RepositoryArchiveUrl)) {
+    $RepositoryArchiveUrl = "https://github.com/FRC9410/Robot-Library/archive/refs/heads/$RepoRef.zip"
+}
 $tempRoot = Join-Path $installRoot "build\power-tool-source"
 $archivePath = Join-Path $tempRoot "Robot-Library.zip"
 $extractRoot = Join-Path $tempRoot "extract"
@@ -113,15 +118,18 @@ if (Test-Path $electron) {
     if (Test-Path $sourceUpdater) {
         Copy-Item -Path $sourceUpdater -Destination $updaterPath -Force
     } else {
-        Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FRC9410/Robot-Library/main/update-power-tool.ps1" -OutFile $updaterPath
+        Invoke-WebRequest -Uri "$rawBaseUrl/update-power-tool.ps1" -OutFile $updaterPath
     }
 
     $sourceGenerator = Join-Path $sourceRoot "generate-subsystem.ps1"
     if (Test-Path $sourceGenerator) {
         Copy-Item -Path $sourceGenerator -Destination (Join-Path $dashboardScriptsPath "generate-subsystem.ps1") -Force
     } else {
-        Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FRC9410/Robot-Library/main/generate-subsystem.ps1" -OutFile (Join-Path $dashboardScriptsPath "generate-subsystem.ps1")
+        Invoke-WebRequest -Uri "$rawBaseUrl/generate-subsystem.ps1" -OutFile (Join-Path $dashboardScriptsPath "generate-subsystem.ps1")
     }
+
+    Set-Content -Path (Join-Path $dashboardScriptsPath ".powerlib-repo-ref") -Encoding ascii -Value "$RepoRef`r`n"
+    Set-Content -Path (Join-Path $installRoot ".powerlib-repo-ref") -Encoding ascii -Value "$RepoRef`r`n"
 
     Set-Content -Path (Join-Path $dashboardScriptsPath "powerlib-generate-subsystem.cmd") -Encoding ascii -Value '@echo off
 powershell -ExecutionPolicy Bypass -File "%~dp0generate-subsystem.ps1" %*

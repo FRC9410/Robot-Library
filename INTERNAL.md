@@ -60,6 +60,13 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FRC9410/Robot-Library/
 powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1
 ```
 
+To install from a branch or tag, download `install.ps1` from that ref and pass `-RepoRef` so `install.gradle`, templates, vendordep pins, Power Tool source, and future Power Tool updates use the same ref:
+
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FRC9410/Robot-Library/feature/maple-sim-integration/install.ps1" -OutFile ".robot-library-install.ps1"
+powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -RepoRef "feature/maple-sim-integration"
+```
+
 To keep replacement backups after a successful install, add this flag:
 
 ```powershell
@@ -130,6 +137,7 @@ These flags control which sections the installer updates. They all default to `t
 -PpowerlibInstallTools=true
 -PpowerlibInstallDashboard=true
 -PpowerlibInteractive=true
+-PpowerlibRepoRef=main
 ```
 
 At the beginning of an interactive install, the installer asks whether to install:

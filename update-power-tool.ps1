@@ -1,6 +1,7 @@
 param(
     [int]$ParentPid = 0,
-    [string]$RepositoryArchiveUrl = "https://github.com/FRC9410/Robot-Library/archive/refs/heads/main.zip"
+    [string]$RepoRef = "",
+    [string]$RepositoryArchiveUrl = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -8,6 +9,20 @@ $ErrorActionPreference = "Stop"
 $robotRoot = (Get-Location).Path
 $toolRoot = Join-Path $robotRoot "power-tool"
 $scriptsRoot = Join-Path $toolRoot "scripts"
+$repoRefPath = Join-Path $robotRoot ".powerlib-repo-ref"
+$toolRepoRefPath = Join-Path $scriptsRoot ".powerlib-repo-ref"
+if ([string]::IsNullOrWhiteSpace($RepoRef)) {
+    if (Test-Path $repoRefPath) {
+        $RepoRef = (Get-Content -Path $repoRefPath -Raw).Trim()
+    } elseif (Test-Path $toolRepoRefPath) {
+        $RepoRef = (Get-Content -Path $toolRepoRefPath -Raw).Trim()
+    } else {
+        $RepoRef = "main"
+    }
+}
+if ([string]::IsNullOrWhiteSpace($RepositoryArchiveUrl)) {
+    $RepositoryArchiveUrl = "https://github.com/FRC9410/Robot-Library/archive/refs/heads/$RepoRef.zip"
+}
 $tempRoot = Join-Path $robotRoot "build\power-tool-update"
 $archivePath = Join-Path $tempRoot "Robot-Library.zip"
 $extractRoot = Join-Path $tempRoot "extract"
@@ -94,6 +109,9 @@ powershell -ExecutionPolicy Bypass -File "%~dp0generate-subsystem.ps1" %*
     Set-Content -Path (Join-Path $scriptsRoot "powerlib-update-subsystems.cmd") -Encoding ascii -Value '@echo off
 powershell -ExecutionPolicy Bypass -File "%~dp0generate-subsystem.ps1" -UpdateSubsystems %*
 '
+
+    Set-Content -Path $repoRefPath -Encoding ascii -Value "$RepoRef`r`n"
+    Set-Content -Path $toolRepoRefPath -Encoding ascii -Value "$RepoRef`r`n"
 
     Set-Content -Path $launcherPath -Encoding ascii -Value '@echo off
 set "TOOL_ROOT=%~dp0power-tool"

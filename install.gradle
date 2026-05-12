@@ -252,8 +252,7 @@ def vendorDependencies = [
     )
 ]
 
-def rawBaseUrl = 'https://raw.githubusercontent.com/FRC9410/Robot-Library/main/templates'
-def dashboardBuildScriptUrl = 'https://raw.githubusercontent.com/FRC9410/Robot-Library/main/build-dashboard-install.ps1'
+def repoRefPropertyName = 'powerlibRepoRef'
 def keepBackupsPropertyName = 'powerlibKeepBackups'
 def latestVendordepsPropertyName = 'powerlibLatestVendordeps'
 def skipBuildPropertyName = 'powerlibSkipBuild'
@@ -265,6 +264,28 @@ def installDashboardPropertyName = 'powerlibInstallDashboard'
 def interactiveInstallPropertyName = 'powerlibInteractive'
 def dashboardInstallScriptName = 'power-tool-install.ps1'
 def installStateFileName = '.powerlib-installed'
+def repoRefStateFileName = '.powerlib-repo-ref'
+
+def findStringProperty = { Project project, String propertyName, String defaultValue ->
+    if (!project.hasProperty(propertyName)) {
+        return defaultValue
+    }
+
+    String value = project.findProperty(propertyName).toString()
+    return value.trim().isEmpty() ? defaultValue : value.trim()
+}
+
+def findRepoRef = { Project project ->
+    return findStringProperty(project, repoRefPropertyName, 'main')
+}
+
+def rawBaseUrlFor = { Project project ->
+    return "https://raw.githubusercontent.com/FRC9410/Robot-Library/${findRepoRef(project)}/templates"
+}
+
+def rawFileUrlFor = { Project project, String path ->
+    return "https://raw.githubusercontent.com/FRC9410/Robot-Library/${findRepoRef(project)}/${path}"
+}
 
 def findBooleanProperty = { Project project, String propertyName, boolean defaultValue ->
     if (!project.hasProperty(propertyName)) {
@@ -438,7 +459,8 @@ def hasPriorPowerLibInstall = { Project project ->
 
 def markPowerLibInstallComplete = { Project project ->
     File marker = project.file(installStateFileName)
-    marker.text = "PowerLib installer last completed at ${new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")}\n"
+    marker.text = "PowerLib installer last completed at ${new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")}\nRepo ref: ${findRepoRef(project)}\n"
+    project.file(repoRefStateFileName).text = "${findRepoRef(project)}\n"
 }
 
 def copyTemplateFile = { Project project, TemplateFile template, boolean writeTemplateCopyIfDestinationExists = false ->
@@ -459,7 +481,7 @@ def copyTemplateFile = { Project project, TemplateFile template, boolean writeTe
     if (localTemplate != null && localTemplate.exists()) {
         Files.copy(localTemplate.toPath(), copyDestination.toPath(), StandardCopyOption.REPLACE_EXISTING)
     } else {
-        URL templateUrl = new URL("${rawBaseUrl}/${template.source}")
+        URL templateUrl = new URL("${rawBaseUrlFor(project)}/${template.source}")
         copyDestination.text = templateUrl.getText('UTF-8')
     }
 
@@ -488,7 +510,7 @@ def installDashboardTools = { Project project ->
         if (localDashboardInstallScript != null && localDashboardInstallScript.exists()) {
             Files.copy(localDashboardInstallScript.toPath(), dashboardInstallScript.toPath(), StandardCopyOption.REPLACE_EXISTING)
         } else {
-            dashboardInstallScript.text = new URL(dashboardBuildScriptUrl).getText('UTF-8')
+            dashboardInstallScript.text = new URL(rawFileUrlFor(project, 'build-dashboard-install.ps1')).getText('UTF-8')
         }
 
         runCommand(project.rootDir, [
@@ -496,7 +518,9 @@ def installDashboardTools = { Project project ->
             '-ExecutionPolicy',
             'Bypass',
             '-File',
-            dashboardInstallScript.absolutePath
+            dashboardInstallScript.absolutePath,
+            '-RepoRef',
+            findRepoRef(project)
         ])
     } catch (Exception exception) {
         logger.warn("Skipped Power Tool install: ${exception.message}")
@@ -517,7 +541,7 @@ def parseJsonFile = { File file ->
     }
 }
 
-def readVendordepJson = { VendorDependency dependency, boolean usePinnedVersion ->
+def readVendordepJson = { Project project, VendorDependency dependency, boolean usePinnedVersion ->
     File localTemplateRoot = findLocalTemplateRoot()
     File localVendordep = usePinnedVersion && dependency.pinnedSource != null && localTemplateRoot != null
         ? new File(localTemplateRoot, dependency.pinnedSource)
@@ -528,7 +552,7 @@ def readVendordepJson = { VendorDependency dependency, boolean usePinnedVersion 
     }
 
     if (usePinnedVersion && dependency.pinnedSource != null) {
-        return new URL("${rawBaseUrl}/${dependency.pinnedSource}").getText('UTF-8')
+        return new URL("${rawBaseUrlFor(project)}/${dependency.pinnedSource}").getText('UTF-8')
     }
 
     return new URL(dependency.url).getText('UTF-8')
@@ -538,7 +562,7 @@ def installVendorDependency = { Project project, VendorDependency dependency, bo
     File vendorDepsDir = project.file('vendordeps')
     vendorDepsDir.mkdirs()
 
-    String jsonText = readVendordepJson(dependency, usePinnedVersion)
+    String jsonText = readVendordepJson(project, dependency, usePinnedVersion)
     def json = new JsonSlurper().parseText(jsonText)
     String fallbackName = usePinnedVersion ? dependency.pinnedSource : dependency.url
     String fileName = json.fileName ?: fallbackName.tokenize('/').last()
