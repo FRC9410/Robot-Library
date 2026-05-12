@@ -20,12 +20,12 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SaveIcon from "@mui/icons-material/Save";
 import type { GeneratedSubsystem } from "../subsystems/types";
-import type { BindingDocumentState, BindingFormState, GeneratedBinding } from "./types";
+import type { BindingCommand, BindingCommandKind, BindingDocumentState, BindingFormState, GeneratedBinding } from "./types";
 import {
   bindingToForm,
-  chainOptions,
   controllerOptions,
   createEmptyBindingCommand,
+  createEmptyBindingGroup,
   createEmptyBindingForm,
   eventOptions,
   formToBinding,
@@ -97,13 +97,11 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
       onToast("Binding name is required.", "error");
       return;
     }
-    if (binding.commands?.some((command) => !command.subsystemId || !command.method)) {
+    if (hasInvalidCommands(binding.commands ?? [])) {
       onToast("Every binding command needs a subsystem and method.", "error");
       return;
     }
-    if (
-      binding.commands?.some((command) => methodNeedsValue(subsystems, command) && (!command.constantName || command.value === undefined))
-    ) {
+    if (hasInvalidCommandValues(binding.commands ?? [])) {
       onToast("Commands with values need a constant name and value.", "error");
       return;
     }
@@ -142,16 +140,283 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
     }
   }
 
-  function updateCommand(index: number, patch: Partial<BindingFormState["commands"][number]>) {
+  function hasInvalidCommands(commands: BindingCommand[]): boolean {
+    return commands.some((command) => {
+      if (command.kind === "sequence" || command.kind === "parallelRace") {
+        return !command.children?.length || hasInvalidCommands(command.children);
+      }
+      return !command.subsystemId || !command.method;
+    });
+  }
+
+  function hasInvalidCommandValues(commands: BindingCommand[]): boolean {
+    return commands.some((command) => {
+      if (command.kind === "sequence" || command.kind === "parallelRace") {
+        return hasInvalidCommandValues(command.children ?? []);
+      }
+      return methodNeedsValue(subsystems, command) && (!command.constantName || command.value === undefined);
+    });
+  }
+
+  function updateCommands(updater: (commands: BindingCommand[]) => BindingCommand[]) {
     setForm((current) => {
       if (!current) {
         return current;
       }
-      const commands = current.commands.map((command, commandIndex) =>
-        commandIndex === index ? { ...command, ...patch } : command
-      );
-      return { ...current, commands };
+      return { ...current, commands: updater(current.commands) };
     });
+  }
+
+  function updateCommandAtPath(path: number[], patch: Partial<BindingCommand>) {
+    updateCommands((commands) => updateNodeAtPath(commands, path, (command) => ({ ...command, ...patch })));
+  }
+
+  function updateNodeAtPath(commands: BindingCommand[], path: number[], updater: (command: BindingCommand) => BindingCommand): BindingCommand[] {
+    const [index, ...rest] = path;
+    return commands.map((command, commandIndex) => {
+      if (commandIndex !== index) {
+        return command;
+      }
+      if (rest.length === 0) {
+        return updater(command);
+      }
+      return {
+        ...command,
+        children: updateNodeAtPath(command.children ?? [], rest, updater)
+      };
+    });
+  }
+
+  function insertCommandAtPath(path: number[], command: BindingCommand) {
+    if (path.length === 0) {
+      updateCommands((commands) => [...commands, command]);
+      return;
+    }
+    updateCommandAtPath(path, {});
+    updateCommands((commands) =>
+      updateNodeAtPath(commands, path, (node) => ({ ...node, children: [...(node.children ?? []), command] }))
+    );
+  }
+
+  function deleteCommandAtPath(path: number[]) {
+    if (path.length === 1) {
+      updateCommands((commands) => commands.filter((_, index) => index !== path[0]));
+      return;
+    }
+    const parentPath = path.slice(0, -1);
+    const childIndex = path[path.length - 1];
+    updateCommands((commands) =>
+      updateNodeAtPath(commands, parentPath, (node) => ({
+        ...node,
+        children: (node.children ?? []).filter((_, index) => index !== childIndex)
+      }))
+    );
+  }
+
+  function convertCommandKindAtPath(path: number[], kind: BindingCommandKind) {
+    updateCommands((commands) =>
+      updateNodeAtPath(commands, path, (command) => {
+        const currentKind = command.kind === "sequence" || command.kind === "parallelRace" ? command.kind : "function";
+        if (currentKind === kind) {
+          return command;
+        }
+        if (kind === "function") {
+          const firstFunction = findFirstFunction(command.children ?? []);
+          return firstFunction ?? createEmptyBindingCommand(subsystems);
+        }
+        return {
+          kind,
+          subsystemId: "",
+          method: "",
+          children: currentKind === "function" ? [command] : command.children?.length ? command.children : [createEmptyBindingCommand(subsystems)]
+        };
+      })
+    );
+  }
+
+  function findFirstFunction(commands: BindingCommand[]): BindingCommand | null {
+    for (const command of commands) {
+      if (command.kind !== "sequence" && command.kind !== "parallelRace") {
+        return command;
+      }
+      const nested = findFirstFunction(command.children ?? []);
+      if (nested) {
+        return nested;
+      }
+    }
+    return null;
+  }
+
+  function getCommandLabel(command: BindingCommand) {
+    if (command.kind === "sequence") {
+      return "Sequential";
+    }
+    if (command.kind === "parallelRace") {
+      return "Parallel Race";
+    }
+    const subsystem = subsystems.find((candidate) => candidate.id === command.subsystemId);
+    const valueText = methodNeedsValue(subsystems, command) ? ` ${command.constantName || "value"}` : "";
+    return `${subsystem?.name ?? "Subsystem"}.${command.method || "method"}${valueText}`;
+  }
+
+  function renderCommandTree(commands: BindingCommand[], depth = 0) {
+    return commands.map((command, index) => {
+      const isGroup = command.kind === "sequence" || command.kind === "parallelRace";
+      return (
+        <Box key={`${depth}-${index}`} sx={{ pl: depth === 0 ? 0 : 2, position: "relative" }}>
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{
+              alignItems: "center",
+              borderLeft: depth === 0 ? 0 : 1,
+              borderColor: "divider",
+              pl: depth === 0 ? 0 : 1.5,
+              py: 0.5
+            }}
+          >
+            <Chip
+              size="small"
+              label={isGroup ? (command.kind === "parallelRace" ? "race" : "seq") : "fn"}
+              color={isGroup ? "primary" : "default"}
+              variant={isGroup ? "filled" : "outlined"}
+            />
+            <Typography variant="body2" sx={{ fontWeight: isGroup ? 800 : 600 }}>
+              {getCommandLabel(command)}
+            </Typography>
+          </Stack>
+          {isGroup && renderCommandTree(command.children ?? [], depth + 1)}
+        </Box>
+      );
+    });
+  }
+
+  function CommandKindSelect({ command, path }: { command: BindingCommand; path: number[] }) {
+    const kind = command.kind === "sequence" || command.kind === "parallelRace" ? command.kind : "function";
+    return (
+      <FormControl size="small" sx={{ minWidth: 170 }}>
+        <InputLabel>Command type</InputLabel>
+        <Select
+          label="Command type"
+          value={kind}
+          onChange={(event) => convertCommandKindAtPath(path, event.target.value as BindingCommandKind)}
+        >
+          <MenuItem value="function">Function</MenuItem>
+          <MenuItem value="sequence">Sequential</MenuItem>
+          <MenuItem value="parallelRace">Parallel Race</MenuItem>
+        </Select>
+      </FormControl>
+    );
+  }
+
+  function renderCommandEditor(command: BindingCommand, path: number[], canDelete: boolean) {
+    const isGroup = command.kind === "sequence" || command.kind === "parallelRace";
+    if (isGroup) {
+      return (
+        <Card key={path.join(".")} variant="outlined">
+          <CardContent>
+            <Stack spacing={2}>
+              <Stack direction="row" sx={{ alignItems: "center" }}>
+                <Typography sx={{ fontWeight: 800, flexGrow: 1 }}>
+                  {command.kind === "parallelRace" ? "Parallel Race" : "Sequential"}
+                </Typography>
+                <CommandKindSelect command={command} path={path} />
+                {canDelete && (
+                  <Button color="error" startIcon={<DeleteIcon />} onClick={() => deleteCommandAtPath(path)}>
+                    Delete
+                  </Button>
+                )}
+              </Stack>
+              <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+                <Button startIcon={<AddIcon />} variant="outlined" onClick={() => insertCommandAtPath(path, createEmptyBindingCommand(subsystems))}>
+                  Add Function
+                </Button>
+                <Button variant="outlined" onClick={() => insertCommandAtPath(path, createEmptyBindingGroup("sequence", subsystems))}>
+                  New Sequential
+                </Button>
+                <Button variant="outlined" onClick={() => insertCommandAtPath(path, createEmptyBindingGroup("parallelRace", subsystems))}>
+                  New Parallel Race
+                </Button>
+              </Stack>
+              <Stack spacing={2} sx={{ pl: { xs: 0, md: 2 }, borderLeft: { md: 1 }, borderColor: "divider" }}>
+                {(command.children ?? []).map((child, index) =>
+                  renderCommandEditor(child, [...path, index], (command.children ?? []).length > 1)
+                )}
+              </Stack>
+            </Stack>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    const subsystem = subsystems.find((candidate) => candidate.id === command.subsystemId);
+    const methods = getMethodsForSubsystem(subsystem);
+    const needsValue = methodNeedsValue(subsystems, command);
+    return (
+      <Card key={path.join(".")} variant="outlined">
+        <CardContent>
+          <Stack spacing={2}>
+            <Stack direction="row" sx={{ alignItems: "center" }}>
+              <Typography sx={{ fontWeight: 800, flexGrow: 1 }}>Function</Typography>
+              <CommandKindSelect command={command} path={path} />
+              {canDelete && (
+                <Button color="error" startIcon={<DeleteIcon />} onClick={() => deleteCommandAtPath(path)}>
+                  Delete
+                </Button>
+              )}
+            </Stack>
+            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
+              <FormControl>
+                <InputLabel>Subsystem</InputLabel>
+                <Select
+                  label="Subsystem"
+                  value={command.subsystemId}
+                  onChange={(event) => {
+                    const subsystemId = event.target.value;
+                    const nextSubsystem = subsystems.find((candidate) => candidate.id === subsystemId);
+                    updateCommandAtPath(path, {
+                      subsystemId,
+                      method: getMethodsForSubsystem(nextSubsystem)[0]?.name ?? ""
+                    });
+                  }}
+                >
+                  {subsystems.map((candidate) => (
+                    <MenuItem key={candidate.id ?? candidate.name} value={candidate.id ?? ""}>
+                      {candidate.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl>
+                <InputLabel>Method</InputLabel>
+                <Select label="Method" value={command.method} onChange={(event) => updateCommandAtPath(path, { method: event.target.value })}>
+                  {methods.map((method) => (
+                    <MenuItem key={method.name} value={method.name}>
+                      {method.name}{method.needsValue ? "(value)" : ""}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              {needsValue && (
+                <>
+                  <TextField
+                    label="Constant name"
+                    value={command.constantName ?? ""}
+                    onChange={(event) => updateCommandAtPath(path, { constantName: toConstantName(event.target.value) })}
+                  />
+                  <TextField
+                    label="Value"
+                    type="number"
+                    value={command.value ?? ""}
+                    onChange={(event) => updateCommandAtPath(path, { value: event.target.value })}
+                  />
+                </>
+              )}
+            </Box>
+          </Stack>
+        </CardContent>
+      </Card>
+    );
   }
 
   useEffect(() => {
@@ -216,7 +481,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
                   sx={{
                     display: "grid",
                     gap: 2,
-                    gridTemplateColumns: { xs: "1fr", lg: "1.5fr repeat(4, minmax(150px, 1fr))" }
+                    gridTemplateColumns: { xs: "1fr", lg: "1.5fr repeat(3, minmax(150px, 1fr))" }
                   }}
                 >
                   <TextField label="Binding name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
@@ -252,110 +517,31 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
                       ))}
                     </Select>
                   </FormControl>
-                  <FormControl>
-                    <InputLabel>Chain</InputLabel>
-                    <Select
-                      label="Chain"
-                      value={form.chain}
-                      onChange={(event) => setForm({ ...form, chain: event.target.value as BindingFormState["chain"] })}
-                    >
-                      {chainOptions.map((option) => (
-                        <MenuItem key={option} value={option}>{option}</MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
                 </Box>
                 <Divider />
-                <Stack direction="row" sx={{ alignItems: "center" }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 800, flexGrow: 1 }}>Commands</Typography>
+                <Stack direction="row" sx={{ alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 800, flexGrow: 1 }}>Command Tree</Typography>
                   <Button
                     startIcon={<AddIcon />}
                     variant="outlined"
-                    onClick={() => setForm({ ...form, commands: [...form.commands, createEmptyBindingCommand(subsystems)] })}
+                    onClick={() => insertCommandAtPath([], createEmptyBindingCommand(subsystems))}
                   >
-                    Add Command
+                    Add Function
+                  </Button>
+                  <Button variant="outlined" onClick={() => insertCommandAtPath([], createEmptyBindingGroup("sequence", subsystems))}>
+                    New Sequential
+                  </Button>
+                  <Button variant="outlined" onClick={() => insertCommandAtPath([], createEmptyBindingGroup("parallelRace", subsystems))}>
+                    New Parallel Race
                   </Button>
                 </Stack>
+                <Card variant="outlined">
+                  <CardContent sx={{ py: 1.5 }}>
+                    <Stack spacing={0.5}>{renderCommandTree(form.commands)}</Stack>
+                  </CardContent>
+                </Card>
                 <Stack spacing={2}>
-                  {form.commands.map((command, index) => {
-                    const subsystem = subsystems.find((candidate) => candidate.id === command.subsystemId);
-                    const methods = getMethodsForSubsystem(subsystem);
-                    const needsValue = methodNeedsValue(subsystems, command);
-                    return (
-                      <Card key={index} variant="outlined">
-                        <CardContent>
-                          <Stack spacing={2}>
-                            <Stack direction="row" sx={{ alignItems: "center" }}>
-                              <Typography sx={{ fontWeight: 800, flexGrow: 1 }}>Command {index + 1}</Typography>
-                              {form.commands.length > 1 && (
-                                <Button
-                                  color="error"
-                                  startIcon={<DeleteIcon />}
-                                  onClick={() =>
-                                    setForm({ ...form, commands: form.commands.filter((_, commandIndex) => commandIndex !== index) })
-                                  }
-                                >
-                                  Delete
-                                </Button>
-                              )}
-                            </Stack>
-                            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
-                              <FormControl>
-                                <InputLabel>Subsystem</InputLabel>
-                                <Select
-                                  label="Subsystem"
-                                  value={command.subsystemId}
-                                  onChange={(event) => {
-                                    const subsystemId = event.target.value;
-                                    const nextSubsystem = subsystems.find((candidate) => candidate.id === subsystemId);
-                                    updateCommand(index, {
-                                      subsystemId,
-                                      method: getMethodsForSubsystem(nextSubsystem)[0]?.name ?? ""
-                                    });
-                                  }}
-                                >
-                                  {subsystems.map((candidate) => (
-                                    <MenuItem key={candidate.id ?? candidate.name} value={candidate.id ?? ""}>
-                                      {candidate.name}
-                                    </MenuItem>
-                                  ))}
-                                </Select>
-                              </FormControl>
-                              <FormControl>
-                                <InputLabel>Method</InputLabel>
-                                <Select
-                                  label="Method"
-                                  value={command.method}
-                                  onChange={(event) => updateCommand(index, { method: event.target.value })}
-                                >
-                                  {methods.map((method) => (
-                                    <MenuItem key={method.name} value={method.name}>
-                                      {method.name}{method.needsValue ? "(value)" : ""}
-                                    </MenuItem>
-                                  ))}
-                                </Select>
-                              </FormControl>
-                              {needsValue && (
-                                <>
-                                  <TextField
-                                    label="Constant name"
-                                    value={command.constantName ?? ""}
-                                    onChange={(event) => updateCommand(index, { constantName: toConstantName(event.target.value) })}
-                                  />
-                                  <TextField
-                                    label="Value"
-                                    type="number"
-                                    value={command.value ?? ""}
-                                    onChange={(event) => updateCommand(index, { value: event.target.value })}
-                                  />
-                                </>
-                              )}
-                            </Box>
-                          </Stack>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
+                  {form.commands.map((command, index) => renderCommandEditor(command, [index], form.commands.length > 1))}
                 </Stack>
               </Stack>
             ) : (

@@ -1305,7 +1305,8 @@ function Get-BindingTriggerExpression {
         throw "Unsupported binding input '$InputName'. Accepted values: $($accepted -join ', ')."
     }
 
-    return "$(Get-BindingControllerExpression $Controller).$InputName()"
+    $threshold = if ($InputName -eq "leftTrigger" -or $InputName -eq "rightTrigger") { "0.5" } else { "" }
+    return "$(Get-BindingControllerExpression $Controller).$InputName($threshold)"
 }
 
 function Get-BindingEventName {
@@ -1355,7 +1356,18 @@ function Rewrite-BindingConstantsBlock {
     Set-Content -Path $ConstantsPath -Value $updated -Encoding ascii
 }
 
-function New-BindingCommandExpression {
+function Get-BindingCommandKind {
+    param([Parameter(Mandatory = $true)]$Command)
+
+    $kind = (Get-JsonPropertyValue $Command "kind" "function").ToString()
+    if ($kind -eq "sequence" -or $kind -eq "parallelRace" -or $kind -eq "function") {
+        return $kind
+    }
+
+    return "function"
+}
+
+function New-InstantBindingCommandCall {
     param(
         [Parameter(Mandatory = $true)]$Command,
         [Parameter(Mandatory = $true)]$Subsystems
@@ -1377,35 +1389,66 @@ function New-BindingCommandExpression {
     }
 
     $call = if ($needsValue) {
-        "stateMachine.$($metadata.CamelName).$method($argument)"
+        "stateMachine.$($metadata.CamelName).$method($argument);"
     } else {
-        "stateMachine.$($metadata.CamelName).$method()"
+        "stateMachine.$($metadata.CamelName).$method();"
     }
 
-    return "new InstantCommand(() -> $call, stateMachine.$($metadata.CamelName))"
+    return [pscustomobject]@{
+        Call = $call
+        Requirement = "stateMachine.$($metadata.CamelName)"
+    }
 }
 
-function Build-ChainedCommandExpression {
+function New-InstantBindingCommandExpression {
     param(
-        [Parameter(Mandatory = $true)][string[]]$CommandExpressions,
-        [Parameter(Mandatory = $true)][string]$Chain
+        [Parameter(Mandatory = $true)]$Command,
+        [Parameter(Mandatory = $true)]$Subsystems
     )
 
-    if ($CommandExpressions.Count -eq 0) {
-        throw "Binding must contain at least one command."
-    }
-    if ($CommandExpressions.Count -eq 1 -or $Chain -eq "single") {
-        return $CommandExpressions[0]
-    }
-    if ($Chain -ne "andThen" -and $Chain -ne "alongWith") {
-        throw "Unsupported binding chain '$Chain'. Accepted values: single, andThen, alongWith."
+    $commandCall = New-InstantBindingCommandCall $Command $Subsystems
+    return "new InstantCommand(() -> { $($commandCall.Call) }, $($commandCall.Requirement))"
+}
+
+function New-InstantBindingGroupExpression {
+    param(
+        [Parameter(Mandatory = $true)]$Commands,
+        [Parameter(Mandatory = $true)]$Subsystems
+    )
+
+    $commandCalls = @($Commands | ForEach-Object { New-InstantBindingCommandCall $_ $Subsystems })
+    $requirements = @($commandCalls | ForEach-Object { $_.Requirement } | Select-Object -Unique)
+    $calls = ($commandCalls | ForEach-Object { $_.Call }) -join " "
+    return "new InstantCommand(() -> { $calls }, $($requirements -join ', '))"
+}
+
+function New-BindingCommandExpression {
+    param(
+        [Parameter(Mandatory = $true)]$Command,
+        [Parameter(Mandatory = $true)]$Subsystems
+    )
+
+    $kind = Get-BindingCommandKind $Command
+    if ($kind -eq "function") {
+        return New-InstantBindingCommandExpression $Command $Subsystems
     }
 
-    $expression = $CommandExpressions[0]
-    for ($index = 1; $index -lt $CommandExpressions.Count; $index++) {
-        $expression = "$expression.$Chain($($CommandExpressions[$index]))"
+    $children = @(Get-JsonPropertyValue $Command "children" @())
+    if ($children.Count -eq 0) {
+        throw "Binding command group '$kind' must contain at least one child command."
     }
-    return $expression
+
+    $allInstantFunctions = @($children | Where-Object { (Get-BindingCommandKind $_) -eq "function" }).Count -eq $children.Count
+    if ($kind -eq "sequence" -and $allInstantFunctions) {
+        return New-InstantBindingGroupExpression $children $Subsystems
+    }
+
+    $childExpressions = @($children | ForEach-Object { New-BindingCommandExpression $_ $Subsystems })
+    if ($kind -eq "sequence") {
+        return "Commands.sequence($($childExpressions -join ', '))"
+    }
+
+    return "new ParallelRaceGroup($($childExpressions -join ', '))"
 }
 
 function Write-PowerButtonBindingsFile {
@@ -1421,7 +1464,9 @@ function Write-PowerButtonBindingsFile {
     $lines += "$GeneratedFileMarker"
     $lines += ""
     $lines += "import edu.wpi.first.wpilibj2.command.Command;"
+    $lines += "import edu.wpi.first.wpilibj2.command.Commands;"
     $lines += "import edu.wpi.first.wpilibj2.command.InstantCommand;"
+    $lines += "import edu.wpi.first.wpilibj2.command.ParallelRaceGroup;"
     $lines += "import edu.wpi.first.wpilibj2.command.button.CommandXboxController;"
     $lines += "import frc.robot.subsystems.StateMachine;"
     $lines += ""
@@ -1448,14 +1493,20 @@ function Write-PowerButtonBindingsFile {
             $bindingName
         }
         $variableName = "$(Convert-ToJavaIdentifier $bindingId 'binding')Command$bindingIndex"
-        $chain = (Get-JsonPropertyValue $binding "chain" "single").ToString()
         $controller = (Get-JsonPropertyValue $binding "controller" "driver").ToString()
         $input = (Get-JsonPropertyValue $binding "input" "a").ToString()
         $event = (Get-JsonPropertyValue $binding "event" "onTrue").ToString()
         $triggerExpression = Get-BindingTriggerExpression $controller $input
         $eventName = Get-BindingEventName $event
         $commandExpressions = @($commands | ForEach-Object { New-BindingCommandExpression $_ $Subsystems })
-        $commandExpression = Build-ChainedCommandExpression $commandExpressions $chain
+        $allInstantFunctions = @($commands | Where-Object { (Get-BindingCommandKind $_) -eq "function" }).Count -eq $commands.Count
+        $commandExpression = if ($allInstantFunctions) {
+            New-InstantBindingGroupExpression $commands $Subsystems
+        } elseif ($commandExpressions.Count -eq 1) {
+            $commandExpressions[0]
+        } else {
+            "Commands.sequence($($commandExpressions -join ', '))"
+        }
 
         $lines += ""
         $lines += "    Command $variableName = $commandExpression;"
@@ -1487,26 +1538,40 @@ function Update-BindingsFromJson {
         $constantsBySubsystemId[$metadata.Id] = @()
     }
 
+    $collectConstants = {
+        param($Command)
+
+        $kind = Get-BindingCommandKind $Command
+        if ($kind -ne "function") {
+            foreach ($child in @(Get-JsonPropertyValue $Command "children" @())) {
+                & $collectConstants $child
+            }
+            return
+        }
+
+        $subsystemId = (Get-JsonPropertyValue $Command "subsystemId" "").ToString()
+        $method = (Get-JsonPropertyValue $Command "method" "").ToString()
+        $subsystem = Find-SubsystemById $subsystems $subsystemId
+        if (-not (Get-BindingMethodNeedsValue $subsystem $method)) {
+            return
+        }
+        $constantProperty = Get-JsonPropertyValue $Command "constantName"
+        if ([string]::IsNullOrWhiteSpace($constantProperty)) {
+            throw "Binding command '$method' for subsystem '$($subsystem.name)' needs a constant name."
+        }
+        $value = Get-JsonPropertyValue $Command "value"
+        if ($null -eq $value) {
+            throw "Binding command '$method' for subsystem '$($subsystem.name)' needs a value."
+        }
+
+        $metadata = Get-SubsystemMetadata $subsystem
+        $constantName = Convert-ToJavaConstantName $constantProperty.ToString()
+        $constantsBySubsystemId[$metadata.Id] += "  public static final double $constantName = $(Format-JavaDoubleLiteral $value);"
+    }
+
     foreach ($binding in $bindings) {
         foreach ($command in @(Get-JsonPropertyValue $binding "commands" @())) {
-            $subsystemId = (Get-JsonPropertyValue $command "subsystemId" "").ToString()
-            $method = (Get-JsonPropertyValue $command "method" "").ToString()
-            $subsystem = Find-SubsystemById $subsystems $subsystemId
-            if (-not (Get-BindingMethodNeedsValue $subsystem $method)) {
-                continue
-            }
-            $constantProperty = Get-JsonPropertyValue $command "constantName"
-            if ([string]::IsNullOrWhiteSpace($constantProperty)) {
-                throw "Binding command '$method' for subsystem '$($subsystem.name)' needs a constant name."
-            }
-            $value = Get-JsonPropertyValue $command "value"
-            if ($null -eq $value) {
-                throw "Binding command '$method' for subsystem '$($subsystem.name)' needs a value."
-            }
-
-            $metadata = Get-SubsystemMetadata $subsystem
-            $constantName = Convert-ToJavaConstantName $constantProperty.ToString()
-            $constantsBySubsystemId[$metadata.Id] += "  public static final double $constantName = $(Format-JavaDoubleLiteral $value);"
+            & $collectConstants $command
         }
     }
 

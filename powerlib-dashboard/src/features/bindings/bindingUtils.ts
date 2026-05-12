@@ -19,7 +19,6 @@ export const inputOptions = [
   "back"
 ];
 export const eventOptions = ["onTrue", "onFalse", "whileTrue", "toggleOnTrue"] as const;
-export const chainOptions = ["single", "andThen", "alongWith"] as const;
 
 export function toBindingId(value: string) {
   return value
@@ -46,10 +45,20 @@ export function createEmptyBindingCommand(subsystems: GeneratedSubsystem[]): Bin
   const subsystemId = subsystems[0]?.id ?? "";
   const method = getMethodsForSubsystem(subsystems[0])[0]?.name ?? "";
   return {
+    kind: "function",
     subsystemId,
     method,
     constantName: "",
     value: 0
+  };
+}
+
+export function createEmptyBindingGroup(kind: "sequence" | "parallelRace", subsystems: GeneratedSubsystem[]): BindingCommand {
+  return {
+    kind,
+    subsystemId: "",
+    method: "",
+    children: [createEmptyBindingCommand(subsystems)]
   };
 }
 
@@ -62,7 +71,6 @@ export function createEmptyBindingForm(subsystems: GeneratedSubsystem[]): Bindin
     controller: "driver",
     input: "a",
     event: "onTrue",
-    chain: "single",
     commands: [createEmptyBindingCommand(subsystems)]
   };
 }
@@ -80,13 +88,7 @@ export function bindingToForm(binding: GeneratedBinding, index: number, subsyste
       binding.event === "onFalse" || binding.event === "whileTrue" || binding.event === "toggleOnTrue"
         ? binding.event
         : "onTrue",
-    chain: binding.chain === "andThen" || binding.chain === "alongWith" ? binding.chain : "single",
-    commands: commands.map((command) => ({
-      subsystemId: command.subsystemId ?? subsystems[0]?.id ?? "",
-      method: command.method ?? "",
-      constantName: command.constantName ?? "",
-      value: command.value ?? 0
-    }))
+    commands: commands.map((command) => normalizeCommand(command, subsystems))
   };
 }
 
@@ -97,13 +99,49 @@ export function formToBinding(form: BindingFormState): GeneratedBinding {
     controller: form.controller,
     input: form.input,
     event: form.event,
-    chain: form.commands.length <= 1 ? "single" : form.chain,
-    commands: form.commands.map((command) => ({
-      subsystemId: command.subsystemId,
-      method: command.method,
-      constantName: command.constantName?.trim() || undefined,
-      value: command.value === "" || command.value === undefined ? undefined : Number(command.value)
-    }))
+    commands: form.commands.map(commandToBinding)
+  };
+}
+
+export function normalizeCommand(command: BindingCommand, subsystems: GeneratedSubsystem[]): BindingCommand {
+  const kind = command.kind === "sequence" || command.kind === "parallelRace" ? command.kind : "function";
+  if (kind !== "function") {
+    return {
+      kind,
+      subsystemId: "",
+      method: "",
+      children: (command.children?.length ? command.children : [createEmptyBindingCommand(subsystems)]).map((child) =>
+        normalizeCommand(child, subsystems)
+      )
+    };
+  }
+
+  return {
+    kind,
+    subsystemId: command.subsystemId ?? subsystems[0]?.id ?? "",
+    method: command.method ?? "",
+    constantName: command.constantName ?? "",
+    value: command.value ?? 0
+  };
+}
+
+export function commandToBinding(command: BindingCommand): BindingCommand {
+  const kind = command.kind === "sequence" || command.kind === "parallelRace" ? command.kind : "function";
+  if (kind !== "function") {
+    return {
+      kind,
+      subsystemId: "",
+      method: "",
+      children: (command.children ?? []).map(commandToBinding)
+    };
+  }
+
+  return {
+    kind,
+    subsystemId: command.subsystemId,
+    method: command.method,
+    constantName: command.constantName?.trim() || undefined,
+    value: command.value === "" || command.value === undefined ? undefined : Number(command.value)
   };
 }
 
@@ -134,6 +172,9 @@ export function getMethodsForSubsystem(subsystem: GeneratedSubsystem | undefined
 }
 
 export function methodNeedsValue(subsystems: GeneratedSubsystem[], command: BindingCommand) {
+  if (command.kind === "sequence" || command.kind === "parallelRace") {
+    return false;
+  }
   const subsystem = subsystems.find((candidate) => candidate.id === command.subsystemId);
   return getMethodsForSubsystem(subsystem).some((method) => method.name === command.method && method.needsValue);
 }

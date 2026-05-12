@@ -1,12 +1,15 @@
 export type BindingController = "driver" | "operator";
 export type BindingEvent = "onTrue" | "onFalse" | "whileTrue" | "toggleOnTrue";
-export type BindingChain = "single" | "andThen" | "alongWith";
+
+export type BindingCommandKind = "function" | "sequence" | "parallelRace";
 
 export type BindingCommand = {
+  kind?: BindingCommandKind;
   subsystemId: string;
   method: string;
   constantName?: string;
   value?: number | string;
+  children?: BindingCommand[];
 };
 
 export type GeneratedBinding = {
@@ -15,7 +18,6 @@ export type GeneratedBinding = {
   controller?: BindingController;
   input?: string;
   event?: BindingEvent;
-  chain?: BindingChain;
   commands?: BindingCommand[];
 };
 
@@ -35,6 +37,5 @@ export type BindingFormState = {
   controller: BindingController;
   input: string;
   event: BindingEvent;
-  chain: BindingChain;
   commands: BindingCommand[];
 };
