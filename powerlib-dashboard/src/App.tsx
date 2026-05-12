@@ -304,6 +304,7 @@ function AppContent() {
       }
 
       await window.powerlib.updatePowerTool();
+      showToast("Started Power Tool update. The app will restart when it finishes.", "info");
     } catch (caught) {
       setPowerToolUpdating(false);
       setError(caught instanceof Error ? caught.message : "Could not start Power Tool update.");
@@ -314,6 +315,18 @@ function AppContent() {
     lib: "PowerLib library files",
     templates: "robot templates",
     vendordeps: "vendor dependencies"
+  };
+
+  const installSectionSuccessMessages: Record<string, string> = {
+    lib: "Updated PowerLib library files.",
+    templates: "Updated robot templates. Existing files were preserved when templates already existed.",
+    vendordeps: "Updated vendor dependencies."
+  };
+
+  const installSectionFailureMessages: Record<string, string> = {
+    lib: "Could not update PowerLib library files.",
+    templates: "Could not update robot templates.",
+    vendordeps: "Could not update vendor dependencies."
   };
 
   async function updateInstallSection(section: string) {
@@ -330,14 +343,13 @@ function AppContent() {
         throw new Error("PowerLib installer bridge is not available.");
       }
 
-      const result = await window.powerlib.updateInstallSection(section);
-      const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
-      showToast(output ? summarizeUpdateOutput(output) : `Updated ${label}.`, "success");
+      await window.powerlib.updateInstallSection(section);
+      showToast(installSectionSuccessMessages[section] ?? `Updated ${label}.`, "success");
       if (section === "templates" || section === "lib") {
         await loadSubsystems();
       }
     } catch (caught) {
-      showToast(caught instanceof Error ? caught.message : `Could not update ${label}.`, "error");
+      showToast(caught instanceof Error ? caught.message : installSectionFailureMessages[section] ?? `Could not update ${label}.`, "error");
     } finally {
       setInstallSectionUpdating(null);
     }
