@@ -31,8 +31,12 @@ import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
 import frc.powerlib.PowerRobotContainer;
+import frc.robot.constants.SimConstants;
 import frc.robot.constants.TunerConstants;
 import frc.robot.constants.TunerConstants.TunerSwerveDrivetrain;
+import org.ironmaple.simulation.SimulatedArena;
+import org.ironmaple.simulation.drivesims.SwerveDriveSimulation;
+import org.ironmaple.simulation.drivesims.configs.DriveTrainSimulationConfig;
 
 /**
  * Class that extends the Phoenix 6 SwerveDrivetrain class and implements Subsystem so it can easily
@@ -42,6 +46,7 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
   private static final double kSimLoopPeriod = 0.005; // 5 ms
   private Notifier m_simNotifier = null;
   private double m_lastSimTime;
+  private SwerveDriveSimulation m_driveSimulation = null;
   private final StructPublisher<Pose2d> posePublisher =
       NetworkTableInstance.getDefault().getStructTopic("Robot/Pose", Pose2d.struct).publish();
   private final StructArrayPublisher<SwerveModuleState> moduleStatePublisher =
@@ -161,7 +166,7 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
       SwerveDrivetrainConstants drivetrainConstants, SwerveModuleConstants<?, ?, ?>... modules) {
     super(drivetrainConstants, modules);
     if (Utils.isSimulation()) {
-      startSimThread();
+      initSim();
     }
     DRIVE_AT_ANGLE.HeadingController = HEADING_CONTROLLER;
     DRIVE_AT_ANGLE.HeadingController.enableContinuousInput(-Math.PI, Math.PI);
@@ -185,7 +190,7 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
       SwerveModuleConstants<?, ?, ?>... modules) {
     super(drivetrainConstants, odometryUpdateFrequency, modules);
     if (Utils.isSimulation()) {
-      startSimThread();
+      initSim();
     }
     DRIVE_AT_ANGLE.HeadingController = HEADING_CONTROLLER;
     DRIVE_AT_ANGLE.HeadingController.enableContinuousInput(-Math.PI, Math.PI);
@@ -220,7 +225,7 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
         visionStandardDeviation,
         modules);
     if (Utils.isSimulation()) {
-      startSimThread();
+      initSim();
     }
     DRIVE_AT_ANGLE.HeadingController = HEADING_CONTROLLER;
     DRIVE_AT_ANGLE.HeadingController.enableContinuousInput(-Math.PI, Math.PI);
@@ -336,6 +341,17 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
         "Swerve Speed Omega", speeds.omegaRadiansPerSecond, "radians per second");
   }
 
+  private void initSim() {
+    m_driveSimulation = new SwerveDriveSimulation(
+        DriveTrainSimulationConfig.Default()
+            .withRobotMass(Kilograms.of(SimConstants.ROBOT_MASS_KG))
+            .withBumperSize(
+                Meters.of(SimConstants.BUMPER_LENGTH_METERS),
+                Meters.of(SimConstants.BUMPER_WIDTH_METERS)),
+        new Pose2d());
+    startSimThread();
+  }
+
   private void startSimThread() {
     m_lastSimTime = Utils.getCurrentTimeSeconds();
 
@@ -347,8 +363,13 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
               double deltaTime = currentTime - m_lastSimTime;
               m_lastSimTime = currentTime;
 
+              SimulatedArena.getInstance().simulationPeriodic();
               /* use the measured time delta, get battery voltage from WPILib */
               updateSimState(deltaTime, RobotController.getBatteryVoltage());
+              /* keep odometry in sync with MapleeSim physics */
+              if (m_driveSimulation != null) {
+                resetPose(m_driveSimulation.getSimulatedDriveTrainPose());
+              }
             });
     m_simNotifier.startPeriodic(kSimLoopPeriod);
   }
