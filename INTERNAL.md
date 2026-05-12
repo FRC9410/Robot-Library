@@ -228,6 +228,43 @@ powershell -ExecutionPolicy Bypass -File E:\code\projects\Robot-Library\install.
 
 
 
+## Simulation (MapleeSim)
+
+The swerve drive template (`templates/replacements/src/main/java/frc/robot/subsystems/Swerve.java`) integrates MapleeSim physics simulation. When running in simulation mode, the robot has realistic mass, moment of inertia, and wheel-slip physics instead of teleporting to commanded speeds instantly.
+
+### How it works
+
+1. `Swerve.java` creates a `SwerveDriveSimulation` on startup in sim mode, seeded from `SimConstants`
+2. The 5 ms notifier ticks `SimulatedArena.getInstance().simulationPeriodic()` before Phoenix 6's `updateSimState()`
+3. After each physics tick, `resetPose()` syncs the odometry to MapleeSim's physics-based pose
+
+### Configuring simulation constants
+
+Open Power Tool and go to the **Simulation** tab. Fill in:
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| Robot Mass | 55 kg | Total weight including battery and bumpers |
+| Moment of Inertia | 6.0 kg·m² | Rotational inertia — rough estimate: mass × 0.1 |
+| Bumper Width | 0.9 m | Full robot width including bumpers |
+| Bumper Length | 0.9 m | Full robot length including bumpers |
+
+Click **Save**, then **File > Update Code**. The generator writes `src/main/java/frc/robot/constants/SimConstants.java` with those values.
+
+`SimConstants.java` is generated — do not edit it by hand. Edit `powerlib-sim-config.json` via the Simulation tab instead.
+
+### SimConfigJson parameter
+
+`generate-subsystem.ps1` accepts a `-SimConfigJson` parameter (default: `powerlib-sim-config.json`) pointing to the sim config file:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\power-tool\scripts\generate-subsystem.ps1 -UpdateSubsystems -SimConfigJson path\to\powerlib-sim-config.json
+```
+
+`SimConstants.java` is regenerated whenever `-UpdateSubsystems` is passed (i.e., every "Update Code" run from Power Tool).
+
+---
+
 ## Generate Subsystems
 
 After running the installer, you can generate subsystem configs and initialize predefined PowerLib subsystem types in `StateMachine`. The installer downloads the generator into `power-tool/scripts` and creates short Windows command wrappers there.
