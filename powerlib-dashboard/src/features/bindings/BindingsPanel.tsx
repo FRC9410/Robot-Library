@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useState } from "react";
 import {
   Box,
   Button,
@@ -14,7 +14,6 @@ import {
   Divider,
   FormControl,
   InputLabel,
-  Menu,
   MenuItem,
   Select,
   Stack,
@@ -66,8 +65,6 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
   const [constantOptions, setConstantOptions] = useState<BindingConstantOption[]>([]);
   const [deleteBindingOpen, setDeleteBindingOpen] = useState(false);
   const [selectedCommandPath, setSelectedCommandPath] = useState<number[] | null>(null);
-  const [addMenuAnchor, setAddMenuAnchor] = useState<HTMLElement | null>(null);
-  const [addMenuTargetPath, setAddMenuTargetPath] = useState<number[] | null>(null);
 
   async function loadBindings() {
     setDocument((current) => ({ ...current, loading: true, error: null }));
@@ -314,31 +311,26 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
     return createEmptyBindingCommand(subsystems);
   }
 
-  function openAddMenu(event: MouseEvent<HTMLElement>, targetPath: number[] | null) {
-    setAddMenuAnchor(event.currentTarget);
-    setAddMenuTargetPath(targetPath);
-  }
-
-  function closeAddMenu() {
-    setAddMenuAnchor(null);
-    setAddMenuTargetPath(null);
-  }
-
-  function addCommandFromMenu(kind: BindingCommandKind) {
-    insertCommandAtPath(addMenuTargetPath ?? [], createCommandByKind(kind));
-    closeAddMenu();
-  }
-
   function AddCommandMenuButton({ targetPath }: { targetPath: number[] | null }) {
     return (
-      <Button
-        startIcon={<AddIcon />}
-        variant="outlined"
-        onClick={(event) => openAddMenu(event, targetPath)}
-        sx={{ alignSelf: "flex-start" }}
-      >
-        Add Function/Command
-      </Button>
+      <FormControl size="small" sx={{ alignSelf: "flex-start", minWidth: 230 }}>
+        <Select
+          displayEmpty
+          value=""
+          renderValue={() => (
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center", color: "primary.main", fontWeight: 800 }}>
+              <AddIcon fontSize="small" />
+              <span>Add Function/Command</span>
+            </Stack>
+          )}
+          onChange={(event) => insertCommandAtPath(targetPath ?? [], createCommandByKind(event.target.value as BindingCommandKind))}
+        >
+          <MenuItem value="function">Function</MenuItem>
+          <MenuItem value="sequence">Sequential</MenuItem>
+          <MenuItem value="parallelRace">Parallel Race</MenuItem>
+          <MenuItem value="wait">Wait</MenuItem>
+        </Select>
+      </FormControl>
     );
   }
 
@@ -1079,27 +1071,6 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
                 </Button>
               </DialogActions>
             </Dialog>
-            <Menu
-              anchorEl={addMenuAnchor}
-              open={Boolean(addMenuAnchor)}
-              onClose={closeAddMenu}
-              anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-              transformOrigin={{ vertical: "top", horizontal: "left" }}
-              disablePortal
-              slotProps={{
-                paper: {
-                  sx: {
-                    mt: 0.5,
-                    minWidth: addMenuAnchor?.clientWidth ?? 180
-                  }
-                }
-              }}
-            >
-              <MenuItem onClick={() => addCommandFromMenu("function")}>Function</MenuItem>
-              <MenuItem onClick={() => addCommandFromMenu("sequence")}>Sequential</MenuItem>
-              <MenuItem onClick={() => addCommandFromMenu("parallelRace")}>Parallel Race</MenuItem>
-              <MenuItem onClick={() => addCommandFromMenu("wait")}>Wait</MenuItem>
-            </Menu>
           </>
         )}
       </Stack>
