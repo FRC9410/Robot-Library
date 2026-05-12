@@ -1,7 +1,7 @@
 export type BindingController = "driver" | "operator";
 export type BindingEvent = "onTrue" | "onFalse" | "whileTrue" | "toggleOnTrue";
 
-export type BindingCommandKind = "function" | "sequence" | "parallelRace";
+export type BindingCommandKind = "function" | "sequence" | "parallelRace" | "wait";
 
 export type BindingCommand = {
   kind?: BindingCommandKind;
@@ -10,6 +10,14 @@ export type BindingCommand = {
   constantName?: string;
   value?: number | string;
   children?: BindingCommand[];
+};
+
+export type BindingConstantOption = {
+  subsystemId: string;
+  subsystemName: string;
+  name: string;
+  value: string;
+  type: string;
 };
 
 export type GeneratedBinding = {

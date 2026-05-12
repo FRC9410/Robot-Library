@@ -26,6 +26,10 @@ declare global {
         path: string;
         bindings: unknown[];
       }>;
+      readBindingConstants: () => Promise<{
+        constants: unknown[];
+        error?: string;
+      }>;
       updateSubsystemCode: () => Promise<{
         stdout: string;
         stderr: string;

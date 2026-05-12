@@ -269,6 +269,73 @@ ipcMain.handle("powerlib:save-bindings", async (_event, bindings: unknown[]) => 
   };
 });
 
+ipcMain.handle("powerlib:read-binding-constants", async () => {
+  const constants: Array<{
+    subsystemId: string;
+    subsystemName: string;
+    name: string;
+    value: string;
+    type: string;
+  }> = [];
+
+  try {
+    let subsystemsPath = getSubsystemJsonCandidates()[0];
+    for (const candidate of getSubsystemJsonCandidates()) {
+      try {
+        await fs.access(candidate);
+        subsystemsPath = candidate;
+        break;
+      } catch {
+        // Keep looking.
+      }
+    }
+
+    const robotRoot = path.dirname(subsystemsPath);
+    const raw = await fs.readFile(subsystemsPath, "utf-8");
+    const parsed = JSON.parse(raw);
+    const subsystems = Array.isArray(parsed.subsystems) ? parsed.subsystems : [];
+
+    for (const subsystem of subsystems) {
+      const name = typeof subsystem?.name === "string" ? subsystem.name : "";
+      const subsystemId = typeof subsystem?.id === "string" ? subsystem.id : name;
+      const pascalName = name
+        .split(/[^a-zA-Z0-9]+/)
+        .filter(Boolean)
+        .map((part: string) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+        .join("");
+      if (!pascalName) {
+        continue;
+      }
+
+      const constantsFile = path.join(robotRoot, "src", "main", "java", "frc", "robot", "constants", `${pascalName}Constants.java`);
+      let content = "";
+      try {
+        content = await fs.readFile(constantsFile, "utf-8");
+      } catch {
+        continue;
+      }
+
+      const regex = /public\s+static\s+final\s+(double|int)\s+([A-Z][A-Z0-9_]*)\s*=\s*([^;]+);/g;
+      for (const match of content.matchAll(regex)) {
+        constants.push({
+          subsystemId,
+          subsystemName: name,
+          type: match[1],
+          name: match[2],
+          value: match[3].trim()
+        });
+      }
+    }
+
+    return { constants };
+  } catch (error) {
+    return {
+      constants,
+      error: error instanceof Error ? error.message : "Could not read subsystem constants."
+    };
+  }
+});
+
 ipcMain.handle("powerlib:update-subsystem-code", async () => {
   const robotRoot = getDetectedRobotRoot();
   const subsystemsPath = path.join(robotRoot, "powerlib-subsystems.json");

@@ -20,19 +20,26 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SaveIcon from "@mui/icons-material/Save";
 import type { GeneratedSubsystem } from "../subsystems/types";
-import type { BindingCommand, BindingCommandKind, BindingDocumentState, BindingFormState, GeneratedBinding } from "./types";
+import type {
+  BindingCommand,
+  BindingCommandKind,
+  BindingConstantOption,
+  BindingDocumentState,
+  BindingFormState,
+  GeneratedBinding
+} from "./types";
 import {
   bindingToForm,
   controllerOptions,
   createEmptyBindingCommand,
   createEmptyBindingGroup,
   createEmptyBindingForm,
+  createEmptyWaitCommand,
   eventOptions,
   formToBinding,
   getMethodsForSubsystem,
   inputOptions,
-  methodNeedsValue,
-  toConstantName
+  methodNeedsValue
 } from "./bindingUtils";
 
 type BindingsPanelProps = {
@@ -50,6 +57,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
   });
   const [form, setForm] = useState<BindingFormState | null>(null);
   const [saving, setSaving] = useState(false);
+  const [constantOptions, setConstantOptions] = useState<BindingConstantOption[]>([]);
 
   async function loadBindings() {
     setDocument((current) => ({ ...current, loading: true, error: null }));
@@ -71,6 +79,18 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
         loading: false,
         error: caught instanceof Error ? caught.message : "Could not load powerlib-bindings.json."
       }));
+    }
+  }
+
+  async function loadConstants() {
+    try {
+      if (!window.powerlib?.readBindingConstants) {
+        return;
+      }
+      const result = await window.powerlib.readBindingConstants();
+      setConstantOptions(result.constants as BindingConstantOption[]);
+    } catch {
+      setConstantOptions([]);
     }
   }
 
@@ -145,6 +165,9 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
       if (command.kind === "sequence" || command.kind === "parallelRace") {
         return !command.children?.length || hasInvalidCommands(command.children);
       }
+      if (command.kind === "wait") {
+        return !command.subsystemId;
+      }
       return !command.subsystemId || !command.method;
     });
   }
@@ -153,6 +176,9 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
     return commands.some((command) => {
       if (command.kind === "sequence" || command.kind === "parallelRace") {
         return hasInvalidCommandValues(command.children ?? []);
+      }
+      if (command.kind === "wait") {
+        return !command.constantName || command.value === undefined;
       }
       return methodNeedsValue(subsystems, command) && (!command.constantName || command.value === undefined);
     });
@@ -216,13 +242,19 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
   function convertCommandKindAtPath(path: number[], kind: BindingCommandKind) {
     updateCommands((commands) =>
       updateNodeAtPath(commands, path, (command) => {
-        const currentKind = command.kind === "sequence" || command.kind === "parallelRace" ? command.kind : "function";
+        const currentKind =
+          command.kind === "sequence" || command.kind === "parallelRace" || command.kind === "wait"
+            ? command.kind
+            : "function";
         if (currentKind === kind) {
           return command;
         }
         if (kind === "function") {
           const firstFunction = findFirstFunction(command.children ?? []);
           return firstFunction ?? createEmptyBindingCommand(subsystems);
+        }
+        if (kind === "wait") {
+          return createEmptyWaitCommand(subsystems);
         }
         return {
           kind,
@@ -236,7 +268,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
 
   function findFirstFunction(commands: BindingCommand[]): BindingCommand | null {
     for (const command of commands) {
-      if (command.kind !== "sequence" && command.kind !== "parallelRace") {
+      if (command.kind !== "sequence" && command.kind !== "parallelRace" && command.kind !== "wait") {
         return command;
       }
       const nested = findFirstFunction(command.children ?? []);
@@ -254,6 +286,9 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
     if (command.kind === "parallelRace") {
       return "Parallel Race";
     }
+    if (command.kind === "wait") {
+      return `Wait ${command.constantName || "seconds"}`;
+    }
     const subsystem = subsystems.find((candidate) => candidate.id === command.subsystemId);
     const valueText = methodNeedsValue(subsystems, command) ? ` ${command.constantName || "value"}` : "";
     return `${subsystem?.name ?? "Subsystem"}.${command.method || "method"}${valueText}`;
@@ -262,6 +297,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
   function renderCommandTree(commands: BindingCommand[], depth = 0) {
     return commands.map((command, index) => {
       const isGroup = command.kind === "sequence" || command.kind === "parallelRace";
+      const isWait = command.kind === "wait";
       return (
         <Box key={`${depth}-${index}`} sx={{ pl: depth === 0 ? 0 : 2, position: "relative" }}>
           <Stack
@@ -277,9 +313,9 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
           >
             <Chip
               size="small"
-              label={isGroup ? (command.kind === "parallelRace" ? "race" : "seq") : "fn"}
-              color={isGroup ? "primary" : "default"}
-              variant={isGroup ? "filled" : "outlined"}
+              label={isGroup ? (command.kind === "parallelRace" ? "race" : "seq") : isWait ? "wait" : "fn"}
+              color={isGroup || isWait ? "primary" : "default"}
+              variant={isGroup || isWait ? "filled" : "outlined"}
             />
             <Typography variant="body2" sx={{ fontWeight: isGroup ? 800 : 600 }}>
               {getCommandLabel(command)}
@@ -292,7 +328,10 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
   }
 
   function CommandKindSelect({ command, path }: { command: BindingCommand; path: number[] }) {
-    const kind = command.kind === "sequence" || command.kind === "parallelRace" ? command.kind : "function";
+    const kind =
+      command.kind === "sequence" || command.kind === "parallelRace" || command.kind === "wait"
+        ? command.kind
+        : "function";
     return (
       <FormControl size="small" sx={{ minWidth: 170 }}>
         <InputLabel>Command type</InputLabel>
@@ -302,6 +341,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
           onChange={(event) => convertCommandKindAtPath(path, event.target.value as BindingCommandKind)}
         >
           <MenuItem value="function">Function</MenuItem>
+          <MenuItem value="wait">Wait</MenuItem>
           <MenuItem value="sequence">Sequential</MenuItem>
           <MenuItem value="parallelRace">Parallel Race</MenuItem>
         </Select>
@@ -337,12 +377,36 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
                 <Button variant="outlined" onClick={() => insertCommandAtPath(path, createEmptyBindingGroup("parallelRace", subsystems))}>
                   New Parallel Race
                 </Button>
+                <Button variant="outlined" onClick={() => insertCommandAtPath(path, createEmptyWaitCommand(subsystems))}>
+                  New Wait
+                </Button>
               </Stack>
               <Stack spacing={2} sx={{ pl: { xs: 0, md: 2 }, borderLeft: { md: 1 }, borderColor: "divider" }}>
                 {(command.children ?? []).map((child, index) =>
                   renderCommandEditor(child, [...path, index], (command.children ?? []).length > 1)
                 )}
               </Stack>
+            </Stack>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    if (command.kind === "wait") {
+      return (
+        <Card key={path.join(".")} variant="outlined">
+          <CardContent>
+            <Stack spacing={2}>
+              <Stack direction="row" sx={{ alignItems: "center" }}>
+                <Typography sx={{ fontWeight: 800, flexGrow: 1 }}>Wait</Typography>
+                <CommandKindSelect command={command} path={path} />
+                {canDelete && (
+                  <Button color="error" startIcon={<DeleteIcon />} onClick={() => deleteCommandAtPath(path)}>
+                    Delete
+                  </Button>
+                )}
+              </Stack>
+              {renderConstantFields(command, path, "Seconds", true)}
             </Stack>
           </CardContent>
         </Card>
@@ -398,19 +462,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
                 </Select>
               </FormControl>
               {needsValue && (
-                <>
-                  <TextField
-                    label="Constant name"
-                    value={command.constantName ?? ""}
-                    onChange={(event) => updateCommandAtPath(path, { constantName: toConstantName(event.target.value) })}
-                  />
-                  <TextField
-                    label="Value"
-                    type="number"
-                    value={command.value ?? ""}
-                    onChange={(event) => updateCommandAtPath(path, { value: event.target.value })}
-                  />
-                </>
+                renderConstantFields(command, path, "Value", false)
               )}
             </Box>
           </Stack>
@@ -421,7 +473,63 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
 
   useEffect(() => {
     void loadBindings();
+    void loadConstants();
   }, []);
+
+  function renderConstantFields(command: BindingCommand, path: number[], valueLabel: string, showOwner: boolean) {
+    const subsystemConstants = constantOptions.filter((constant) => constant.subsystemId === command.subsystemId);
+    return (
+      <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" } }}>
+        {showOwner && (
+          <FormControl>
+            <InputLabel>Constant owner</InputLabel>
+            <Select
+              label="Constant owner"
+              value={command.subsystemId}
+              onChange={(event) => updateCommandAtPath(path, { subsystemId: event.target.value })}
+            >
+              {subsystems.map((candidate) => (
+                <MenuItem key={candidate.id ?? candidate.name} value={candidate.id ?? ""}>
+                  {candidate.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
+        <FormControl>
+          <InputLabel>Existing constant</InputLabel>
+          <Select
+            label="Existing constant"
+            value=""
+            onChange={(event) => {
+              const selected = subsystemConstants.find((constant) => constant.name === event.target.value);
+              if (selected) {
+                updateCommandAtPath(path, { constantName: selected.name, value: selected.value });
+              }
+            }}
+          >
+            <MenuItem value="">Select constant</MenuItem>
+            {subsystemConstants.map((constant) => (
+              <MenuItem key={constant.name} value={constant.name}>
+                {constant.name} = {constant.value}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <TextField
+          label="Constant name"
+          value={command.constantName ?? ""}
+          onChange={(event) => updateCommandAtPath(path, { constantName: event.target.value.toUpperCase() })}
+        />
+        <TextField
+          label={valueLabel}
+          type="number"
+          value={command.value ?? ""}
+          onChange={(event) => updateCommandAtPath(path, { value: event.target.value })}
+        />
+      </Box>
+    );
+  }
 
   return (
     <Box
@@ -533,6 +641,9 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
                   </Button>
                   <Button variant="outlined" onClick={() => insertCommandAtPath([], createEmptyBindingGroup("parallelRace", subsystems))}>
                     New Parallel Race
+                  </Button>
+                  <Button variant="outlined" onClick={() => insertCommandAtPath([], createEmptyWaitCommand(subsystems))}>
+                    New Wait
                   </Button>
                 </Stack>
                 <Card variant="outlined">

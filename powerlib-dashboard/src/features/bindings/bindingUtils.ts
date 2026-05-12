@@ -62,6 +62,16 @@ export function createEmptyBindingGroup(kind: "sequence" | "parallelRace", subsy
   };
 }
 
+export function createEmptyWaitCommand(subsystems: GeneratedSubsystem[]): BindingCommand {
+  return {
+    kind: "wait",
+    subsystemId: subsystems[0]?.id ?? "",
+    method: "",
+    constantName: "WAIT_SECONDS",
+    value: 1
+  };
+}
+
 export function createEmptyBindingForm(subsystems: GeneratedSubsystem[]): BindingFormState {
   return {
     mode: "create",
@@ -104,8 +114,11 @@ export function formToBinding(form: BindingFormState): GeneratedBinding {
 }
 
 export function normalizeCommand(command: BindingCommand, subsystems: GeneratedSubsystem[]): BindingCommand {
-  const kind = command.kind === "sequence" || command.kind === "parallelRace" ? command.kind : "function";
-  if (kind !== "function") {
+  const kind =
+    command.kind === "sequence" || command.kind === "parallelRace" || command.kind === "wait"
+      ? command.kind
+      : "function";
+  if (kind === "sequence" || kind === "parallelRace") {
     return {
       kind,
       subsystemId: "",
@@ -113,6 +126,15 @@ export function normalizeCommand(command: BindingCommand, subsystems: GeneratedS
       children: (command.children?.length ? command.children : [createEmptyBindingCommand(subsystems)]).map((child) =>
         normalizeCommand(child, subsystems)
       )
+    };
+  }
+  if (kind === "wait") {
+    return {
+      kind,
+      subsystemId: command.subsystemId ?? subsystems[0]?.id ?? "",
+      method: "",
+      constantName: command.constantName ?? "WAIT_SECONDS",
+      value: command.value ?? 1
     };
   }
 
@@ -126,13 +148,25 @@ export function normalizeCommand(command: BindingCommand, subsystems: GeneratedS
 }
 
 export function commandToBinding(command: BindingCommand): BindingCommand {
-  const kind = command.kind === "sequence" || command.kind === "parallelRace" ? command.kind : "function";
-  if (kind !== "function") {
+  const kind =
+    command.kind === "sequence" || command.kind === "parallelRace" || command.kind === "wait"
+      ? command.kind
+      : "function";
+  if (kind === "sequence" || kind === "parallelRace") {
     return {
       kind,
       subsystemId: "",
       method: "",
       children: (command.children ?? []).map(commandToBinding)
+    };
+  }
+  if (kind === "wait") {
+    return {
+      kind,
+      subsystemId: command.subsystemId,
+      method: "",
+      constantName: command.constantName?.trim() || undefined,
+      value: command.value === "" || command.value === undefined ? undefined : Number(command.value)
     };
   }
 
@@ -172,7 +206,7 @@ export function getMethodsForSubsystem(subsystem: GeneratedSubsystem | undefined
 }
 
 export function methodNeedsValue(subsystems: GeneratedSubsystem[], command: BindingCommand) {
-  if (command.kind === "sequence" || command.kind === "parallelRace") {
+  if (command.kind === "sequence" || command.kind === "parallelRace" || command.kind === "wait") {
     return false;
   }
   const subsystem = subsystems.find((candidate) => candidate.id === command.subsystemId);

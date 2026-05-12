@@ -1360,7 +1360,7 @@ function Get-BindingCommandKind {
     param([Parameter(Mandatory = $true)]$Command)
 
     $kind = (Get-JsonPropertyValue $Command "kind" "function").ToString()
-    if ($kind -eq "sequence" -or $kind -eq "parallelRace" -or $kind -eq "function") {
+    if ($kind -eq "sequence" -or $kind -eq "parallelRace" -or $kind -eq "function" -or $kind -eq "wait") {
         return $kind
     }
 
@@ -1400,6 +1400,24 @@ function New-InstantBindingCommandCall {
     }
 }
 
+function Get-BindingConstantReference {
+    param(
+        [Parameter(Mandatory = $true)]$Command,
+        [Parameter(Mandatory = $true)]$Subsystems,
+        [Parameter(Mandatory = $true)][string]$Description
+    )
+
+    $subsystemId = (Get-JsonPropertyValue $Command "subsystemId" "").ToString()
+    $subsystem = Find-SubsystemById $Subsystems $subsystemId
+    $metadata = Get-SubsystemMetadata $subsystem
+    $constantProperty = Get-JsonPropertyValue $Command "constantName"
+    if ([string]::IsNullOrWhiteSpace($constantProperty)) {
+        throw "$Description needs a constant name."
+    }
+    $constantName = Convert-ToJavaConstantName $constantProperty.ToString()
+    return "Constants.$($metadata.PascalName).$constantName"
+}
+
 function New-InstantBindingCommandExpression {
     param(
         [Parameter(Mandatory = $true)]$Command,
@@ -1432,15 +1450,13 @@ function New-BindingCommandExpression {
     if ($kind -eq "function") {
         return New-InstantBindingCommandExpression $Command $Subsystems
     }
+    if ($kind -eq "wait") {
+        return "Commands.waitSeconds($(Get-BindingConstantReference $Command $Subsystems 'Wait command'))"
+    }
 
     $children = @(Get-JsonPropertyValue $Command "children" @())
     if ($children.Count -eq 0) {
         throw "Binding command group '$kind' must contain at least one child command."
-    }
-
-    $allInstantFunctions = @($children | Where-Object { (Get-BindingCommandKind $_) -eq "function" }).Count -eq $children.Count
-    if ($kind -eq "sequence" -and $allInstantFunctions) {
-        return New-InstantBindingGroupExpression $children $Subsystems
     }
 
     $childExpressions = @($children | ForEach-Object { New-BindingCommandExpression $_ $Subsystems })
@@ -1543,6 +1559,23 @@ function Update-BindingsFromJson {
 
         $kind = Get-BindingCommandKind $Command
         if ($kind -ne "function") {
+            if ($kind -eq "wait") {
+                $subsystemId = (Get-JsonPropertyValue $Command "subsystemId" "").ToString()
+                $subsystem = Find-SubsystemById $subsystems $subsystemId
+                $constantProperty = Get-JsonPropertyValue $Command "constantName"
+                if ([string]::IsNullOrWhiteSpace($constantProperty)) {
+                    throw "Wait command needs a constant name."
+                }
+                $value = Get-JsonPropertyValue $Command "value"
+                if ($null -eq $value) {
+                    throw "Wait command needs a value."
+                }
+
+                $metadata = Get-SubsystemMetadata $subsystem
+                $constantName = Convert-ToJavaConstantName $constantProperty.ToString()
+                $constantsBySubsystemId[$metadata.Id] += "  public static final double $constantName = $(Format-JavaDoubleLiteral $value);"
+                return
+            }
             foreach ($child in @(Get-JsonPropertyValue $Command "children" @())) {
                 & $collectConstants $child
             }
