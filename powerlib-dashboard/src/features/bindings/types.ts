@@ -1,7 +1,7 @@
 export type BindingController = "driver" | "operator";
 export type BindingEvent = "onTrue" | "onFalse" | "whileTrue" | "toggleOnTrue";
 
-export type BindingCommandKind = "function" | "sequence" | "parallelRace" | "wait";
+export type BindingCommandKind = "function" | "sequence" | "parallel" | "parallelRace" | "wait";
 
 export type BindingCommand = {
   kind?: BindingCommandKind;

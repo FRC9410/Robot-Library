@@ -54,7 +54,7 @@ export function createEmptyBindingCommand(subsystems: GeneratedSubsystem[]): Bin
   };
 }
 
-export function createEmptyBindingGroup(kind: "sequence" | "parallelRace", subsystems: GeneratedSubsystem[]): BindingCommand {
+export function createEmptyBindingGroup(kind: "sequence" | "parallel" | "parallelRace", subsystems: GeneratedSubsystem[]): BindingCommand {
   return {
     kind,
     subsystemId: "",
@@ -117,10 +117,10 @@ export function formToBinding(form: BindingFormState): GeneratedBinding {
 
 export function normalizeCommand(command: BindingCommand, subsystems: GeneratedSubsystem[]): BindingCommand {
   const kind =
-    command.kind === "sequence" || command.kind === "parallelRace" || command.kind === "wait"
+    command.kind === "sequence" || command.kind === "parallel" || command.kind === "parallelRace" || command.kind === "wait"
       ? command.kind
       : "function";
-  if (kind === "sequence" || kind === "parallelRace") {
+  if (kind === "sequence" || kind === "parallel" || kind === "parallelRace") {
     return {
       kind,
       subsystemId: "",
@@ -153,10 +153,10 @@ export function normalizeCommand(command: BindingCommand, subsystems: GeneratedS
 
 export function commandToBinding(command: BindingCommand): BindingCommand {
   const kind =
-    command.kind === "sequence" || command.kind === "parallelRace" || command.kind === "wait"
+    command.kind === "sequence" || command.kind === "parallel" || command.kind === "parallelRace" || command.kind === "wait"
       ? command.kind
       : "function";
-  if (kind === "sequence" || kind === "parallelRace") {
+  if (kind === "sequence" || kind === "parallel" || kind === "parallelRace") {
     return {
       kind,
       subsystemId: "",
@@ -210,7 +210,7 @@ export function getMethodsForSubsystem(subsystem: GeneratedSubsystem | undefined
 }
 
 export function methodNeedsValue(subsystems: GeneratedSubsystem[], command: BindingCommand) {
-  if (command.kind === "sequence" || command.kind === "parallelRace" || command.kind === "wait") {
+  if (command.kind === "sequence" || command.kind === "parallel" || command.kind === "parallelRace" || command.kind === "wait") {
     return false;
   }
   const subsystem = subsystems.find((candidate) => candidate.id === command.subsystemId);

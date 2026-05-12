@@ -1360,7 +1360,7 @@ function Get-BindingCommandKind {
     param([Parameter(Mandatory = $true)]$Command)
 
     $kind = (Get-JsonPropertyValue $Command "kind" "function").ToString()
-    if ($kind -eq "sequence" -or $kind -eq "parallelRace" -or $kind -eq "function" -or $kind -eq "wait") {
+    if ($kind -eq "sequence" -or $kind -eq "parallel" -or $kind -eq "parallelRace" -or $kind -eq "function" -or $kind -eq "wait") {
         return $kind
     }
 
@@ -1428,6 +1428,16 @@ function New-InstantBindingCommandExpression {
     return "new InstantCommand(() -> { $($commandCall.Call) }, $($commandCall.Requirement))"
 }
 
+function New-RunBindingCommandExpression {
+    param(
+        [Parameter(Mandatory = $true)]$Command,
+        [Parameter(Mandatory = $true)]$Subsystems
+    )
+
+    $commandCall = New-InstantBindingCommandCall $Command $Subsystems
+    return "Commands.run(() -> { $($commandCall.Call) }, $($commandCall.Requirement))"
+}
+
 function New-InstantBindingGroupExpression {
     param(
         [Parameter(Mandatory = $true)]$Commands,
@@ -1438,6 +1448,27 @@ function New-InstantBindingGroupExpression {
     $requirements = @($commandCalls | ForEach-Object { $_.Requirement } | Select-Object -Unique)
     $calls = ($commandCalls | ForEach-Object { $_.Call }) -join " "
     return "new InstantCommand(() -> { $calls }, $($requirements -join ', '))"
+}
+
+function Test-BindingCommandGroupContainsKind {
+    param(
+        [Parameter(Mandatory = $true)]$Commands,
+        [Parameter(Mandatory = $true)][string]$Kind
+    )
+
+    foreach ($command in @($Commands)) {
+        $commandKind = Get-BindingCommandKind $command
+        if ($commandKind -eq $Kind) {
+            return $true
+        }
+        if ($commandKind -eq "sequence" -or $commandKind -eq "parallel" -or $commandKind -eq "parallelRace") {
+            if (Test-BindingCommandGroupContainsKind (Get-JsonPropertyValue $command "children" @()) $Kind) {
+                return $true
+            }
+        }
+    }
+
+    return $false
 }
 
 function New-BindingCommandExpression {
@@ -1459,11 +1490,23 @@ function New-BindingCommandExpression {
         throw "Binding command group '$kind' must contain at least one child command."
     }
 
-    $childExpressions = @($children | ForEach-Object { New-BindingCommandExpression $_ $Subsystems })
     if ($kind -eq "sequence") {
+        $childExpressions = @($children | ForEach-Object { New-BindingCommandExpression $_ $Subsystems })
         return "new SequentialCommandGroup($($childExpressions -join ', '))"
     }
+    if ($kind -eq "parallel") {
+        $childExpressions = @($children | ForEach-Object { New-BindingCommandExpression $_ $Subsystems })
+        return "new ParallelCommandGroup($($childExpressions -join ', '))"
+    }
 
+    $raceContainsWait = Test-BindingCommandGroupContainsKind $children "wait"
+    $childExpressions = @($children | ForEach-Object {
+        if ($raceContainsWait -and (Get-BindingCommandKind $_) -eq "function") {
+            New-RunBindingCommandExpression $_ $Subsystems
+        } else {
+            New-BindingCommandExpression $_ $Subsystems
+        }
+    })
     return "new ParallelRaceGroup($($childExpressions -join ', '))"
 }
 
@@ -1482,6 +1525,7 @@ function Write-PowerButtonBindingsFile {
     $lines += "import edu.wpi.first.wpilibj2.command.Command;"
     $lines += "import edu.wpi.first.wpilibj2.command.Commands;"
     $lines += "import edu.wpi.first.wpilibj2.command.InstantCommand;"
+    $lines += "import edu.wpi.first.wpilibj2.command.ParallelCommandGroup;"
     $lines += "import edu.wpi.first.wpilibj2.command.ParallelRaceGroup;"
     $lines += "import edu.wpi.first.wpilibj2.command.SequentialCommandGroup;"
     $lines += "import edu.wpi.first.wpilibj2.command.button.CommandXboxController;"

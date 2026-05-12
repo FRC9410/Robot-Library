@@ -188,7 +188,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
 
   function hasInvalidCommands(commands: BindingCommand[]): boolean {
     return commands.some((command) => {
-      if (command.kind === "sequence" || command.kind === "parallelRace") {
+      if (isCommandGroup(command)) {
         return !command.children?.length || hasInvalidCommands(command.children);
       }
       if (command.kind === "wait") {
@@ -200,7 +200,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
 
   function hasInvalidCommandValues(commands: BindingCommand[]): boolean {
     return commands.some((command) => {
-      if (command.kind === "sequence" || command.kind === "parallelRace") {
+      if (isCommandGroup(command)) {
         return hasInvalidCommandValues(command.children ?? []);
       }
       if (command.kind === "wait") {
@@ -217,6 +217,30 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
       }
       return { ...current, commands: updater(current.commands) };
     });
+  }
+
+  function isCommandGroup(command: BindingCommand) {
+    return command.kind === "sequence" || command.kind === "parallel" || command.kind === "parallelRace";
+  }
+
+  function getGroupLabel(command: BindingCommand) {
+    if (command.kind === "parallel") {
+      return "Parallel";
+    }
+    if (command.kind === "parallelRace") {
+      return "Parallel Race";
+    }
+    return "Sequential";
+  }
+
+  function getGroupChipLabel(command: BindingCommand) {
+    if (command.kind === "parallel") {
+      return "par";
+    }
+    if (command.kind === "parallelRace") {
+      return "race";
+    }
+    return "seq";
   }
 
   function updateCommandAtPath(path: number[], patch: Partial<BindingCommand>) {
@@ -280,10 +304,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
   function convertCommandKindAtPath(path: number[], kind: BindingCommandKind) {
     updateCommands((commands) =>
       updateNodeAtPath(commands, path, (command) => {
-        const currentKind =
-          command.kind === "sequence" || command.kind === "parallelRace" || command.kind === "wait"
-            ? command.kind
-            : "function";
+        const currentKind = isCommandGroup(command) || command.kind === "wait" ? command.kind : "function";
         if (currentKind === kind) {
           return command;
         }
@@ -306,7 +327,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
 
   function findFirstFunction(commands: BindingCommand[]): BindingCommand | null {
     for (const command of commands) {
-      if (command.kind !== "sequence" && command.kind !== "parallelRace" && command.kind !== "wait") {
+      if (!isCommandGroup(command) && command.kind !== "wait") {
         return command;
       }
       const nested = findFirstFunction(command.children ?? []);
@@ -318,7 +339,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
   }
 
   function createCommandByKind(kind: BindingCommandKind) {
-    if (kind === "sequence" || kind === "parallelRace") {
+    if (kind === "sequence" || kind === "parallel" || kind === "parallelRace") {
       return createEmptyBindingGroup(kind, subsystems);
     }
     if (kind === "wait") {
@@ -343,6 +364,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
         >
           <MenuItem value="function">Function</MenuItem>
           <MenuItem value="sequence">Sequential</MenuItem>
+          <MenuItem value="parallel">Parallel</MenuItem>
           <MenuItem value="parallelRace">Parallel Race</MenuItem>
           <MenuItem value="wait">Wait</MenuItem>
         </Select>
@@ -353,6 +375,9 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
   function getCommandLabel(command: BindingCommand) {
     if (command.kind === "sequence") {
       return "Sequential";
+    }
+    if (command.kind === "parallel") {
+      return "Parallel";
     }
     if (command.kind === "parallelRace") {
       return "Parallel Race";
@@ -452,7 +477,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
   function renderCommandTree(commands: BindingCommand[], depth = 0) {
     return commands.map((command, index) => {
       const path = [...argumentsPath(depth), index];
-      const isGroup = command.kind === "sequence" || command.kind === "parallelRace";
+      const isGroup = isCommandGroup(command);
       const isWait = command.kind === "wait";
       return (
         <Box key={`${depth}-${index}`} sx={{ pl: 2, position: "relative" }}>
@@ -480,7 +505,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
           >
             <Chip
               size="small"
-              label={isGroup ? (command.kind === "parallelRace" ? "race" : "seq") : isWait ? "wait" : "fn"}
+              label={isGroup ? getGroupChipLabel(command) : isWait ? "wait" : "fn"}
               color={isGroup || isWait ? "primary" : "default"}
               variant={isGroup || isWait ? "filled" : "outlined"}
             />
@@ -499,7 +524,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
   function renderCommandTreeAtPath(commands: BindingCommand[], parentPath: number[], depth = 0) {
     return commands.map((command, index) => {
       const path = [...parentPath, index];
-      const isGroup = command.kind === "sequence" || command.kind === "parallelRace";
+      const isGroup = isCommandGroup(command);
       const isWait = command.kind === "wait";
       return (
         <Box key={path.join(".")} sx={{ pl: 2, position: "relative" }}>
@@ -527,7 +552,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
           >
             <Chip
               size="small"
-              label={isGroup ? (command.kind === "parallelRace" ? "race" : "seq") : isWait ? "wait" : "fn"}
+              label={isGroup ? getGroupChipLabel(command) : isWait ? "wait" : "fn"}
               color={isGroup || isWait ? "primary" : "default"}
               variant={isGroup || isWait ? "filled" : "outlined"}
             />
@@ -540,10 +565,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
   }
 
   function CommandKindSelect({ command, path }: { command: BindingCommand; path: number[] }) {
-    const kind =
-      command.kind === "sequence" || command.kind === "parallelRace" || command.kind === "wait"
-        ? command.kind
-        : "function";
+    const kind = isCommandGroup(command) || command.kind === "wait" ? command.kind : "function";
     return (
       <FormControl size="small" sx={{ minWidth: 170 }}>
         <InputLabel>Command type</InputLabel>
@@ -555,6 +577,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
           <MenuItem value="function">Function</MenuItem>
           <MenuItem value="wait">Wait</MenuItem>
           <MenuItem value="sequence">Sequential</MenuItem>
+          <MenuItem value="parallel">Parallel</MenuItem>
           <MenuItem value="parallelRace">Parallel Race</MenuItem>
         </Select>
       </FormControl>
@@ -562,7 +585,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
   }
 
   function renderCommandEditor(command: BindingCommand, path: number[], canDelete: boolean) {
-    const isGroup = command.kind === "sequence" || command.kind === "parallelRace";
+    const isGroup = isCommandGroup(command);
     if (isGroup) {
       return (
         <Card key={path.join(".")} variant="outlined">
@@ -570,7 +593,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
             <Stack spacing={2}>
               <Stack direction="row" sx={{ alignItems: "center" }}>
                 <Typography sx={{ fontWeight: 800, flexGrow: 1 }}>
-                  {command.kind === "parallelRace" ? "Parallel Race" : "Sequential"}
+                  {getGroupLabel(command)}
                 </Typography>
                 <CommandKindSelect command={command} path={path} />
                 {canDelete && (
@@ -585,6 +608,9 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
                 </Button>
                 <Button variant="outlined" onClick={() => insertCommandAtPath(path, createEmptyBindingGroup("sequence", subsystems))}>
                   New Sequential
+                </Button>
+                <Button variant="outlined" onClick={() => insertCommandAtPath(path, createEmptyBindingGroup("parallel", subsystems))}>
+                  New Parallel
                 </Button>
                 <Button variant="outlined" onClick={() => insertCommandAtPath(path, createEmptyBindingGroup("parallelRace", subsystems))}>
                   New Parallel Race
@@ -705,19 +731,19 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
       return (
         <Stack spacing={2} sx={{ alignItems: "center", justifyContent: "center", minHeight: 260, textAlign: "center" }}>
           <Typography variant="h6">Select a command node</Typography>
-          <Typography color="text.secondary">Choose a function, wait, sequential, or parallel race node from the tree.</Typography>
+          <Typography color="text.secondary">Choose a function, wait, sequential, parallel, or parallel race node from the tree.</Typography>
         </Stack>
       );
     }
 
     const canDelete = Boolean(form && form.commands.length > 1) || path.length > 1;
-    const isGroup = command.kind === "sequence" || command.kind === "parallelRace";
+    const isGroup = isCommandGroup(command);
     if (isGroup) {
       return (
         <Stack spacing={2}>
           <Stack direction="row" sx={{ alignItems: "center", gap: 1 }}>
             <Typography variant="h6" sx={{ flexGrow: 1 }}>
-              {command.kind === "parallelRace" ? "Parallel Race" : "Sequential"}
+              {getGroupLabel(command)}
             </Typography>
             <CommandKindSelect command={command} path={path} />
             {canDelete && (
