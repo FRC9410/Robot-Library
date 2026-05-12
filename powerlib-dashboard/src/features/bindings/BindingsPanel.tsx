@@ -66,6 +66,22 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
   const [deleteBindingOpen, setDeleteBindingOpen] = useState(false);
   const [selectedCommandPath, setSelectedCommandPath] = useState<number[] | null>(null);
 
+  function sanitizeConstantNameInput(value: string) {
+    return value
+      .toUpperCase()
+      .replace(/\s+/g, "_")
+      .replace(/[^A-Z0-9_]/g, "_")
+      .replace(/_+/g, "_");
+  }
+
+  function sanitizeCommandsForSave(commands: BindingCommand[]): BindingCommand[] {
+    return commands.map((command) => ({
+      ...command,
+      constantName: command.constantName ? sanitizeConstantNameInput(command.constantName).replace(/^_+|_+$/g, "") : command.constantName,
+      children: command.children ? sanitizeCommandsForSave(command.children) : command.children
+    }));
+  }
+
   async function loadBindings() {
     setDocument((current) => ({ ...current, loading: true, error: null }));
     try {
@@ -119,7 +135,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
     if (!form) {
       return;
     }
-    const binding = formToBinding(form);
+    const binding = formToBinding({ ...form, commands: sanitizeCommandsForSave(form.commands) });
     if (!binding.name || !binding.id) {
       onToast("Binding name is required.", "error");
       return;
@@ -853,7 +869,7 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
           <TextField
             label="Constant name"
             value={command.constantName ?? ""}
-            onChange={(event) => updateCommandAtPath(path, { constantName: event.target.value.toUpperCase() })}
+            onChange={(event) => updateCommandAtPath(path, { constantName: sanitizeConstantNameInput(event.target.value) })}
           />
         )}
         {constantSource === "new" && (
