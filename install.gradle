@@ -217,6 +217,11 @@ def templateFiles = [
         replacement: true
     ),
     new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/simulation/PowerSimManager.java',
+        destination: 'src/main/java/frc/robot/simulation/PowerSimManager.java',
+        replacement: true
+    ),
+    new TemplateFile(
         source: 'replacements/src/main/java/frc/robot/utils/FieldUtils.java',
         destination: 'src/main/java/frc/robot/utils/FieldUtils.java',
         replacement: true

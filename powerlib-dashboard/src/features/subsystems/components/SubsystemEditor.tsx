@@ -2,6 +2,7 @@ import { Box, Button, Card, CardContent, CircularProgress, Divider, Stack, Typog
 import ConstructionIcon from "@mui/icons-material/Construction";
 import DeleteIcon from "@mui/icons-material/Delete";
 import InsightsIcon from "@mui/icons-material/Insights";
+import PrecisionManufacturingIcon from "@mui/icons-material/PrecisionManufacturing";
 import SaveIcon from "@mui/icons-material/Save";
 import type { SubsystemFormMotor, SubsystemFormState } from "../types";
 import { CancoderFields } from "./CancoderFields";
@@ -22,6 +23,7 @@ type SubsystemEditorProps = {
   onCancel: () => void;
   onDelete: () => void;
   onOpenCharacterization: () => void;
+  onOpenSimulation: () => void;
 };
 
 export function SubsystemEditor({
@@ -35,7 +37,8 @@ export function SubsystemEditor({
   onSave,
   onCancel,
   onDelete,
-  onOpenCharacterization
+  onOpenCharacterization,
+  onOpenSimulation
 }: SubsystemEditorProps) {
   return (
     <Stack sx={{ minHeight: 0 }}>
@@ -65,6 +68,11 @@ export function SubsystemEditor({
               <CancoderFields form={form} updateField={updateField} />
               <AbsolutePositionFields form={form} updateField={updateField} />
               <ControlConstantsGrid form={form} updateField={updateField} />
+              <Stack direction="row" sx={{ justifyContent: "flex-start" }}>
+                <Button startIcon={<PrecisionManufacturingIcon />} variant="outlined" onClick={onOpenSimulation}>
+                  Simulation Settings
+                </Button>
+              </Stack>
             </Stack>
           ) : (
             <Stack spacing={2} sx={{ alignItems: "center", justifyContent: "center", minHeight: 420, textAlign: "center" }}>

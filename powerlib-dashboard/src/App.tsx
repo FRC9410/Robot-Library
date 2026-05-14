@@ -45,8 +45,9 @@ import { ConnectionSettingsDialog } from "./features/networktables/ConnectionSet
 import { RobotPanel } from "./features/robot/RobotPanel";
 import { BindingsPanel } from "./features/bindings/BindingsPanel";
 import { SimulationPanel } from "./features/simulation/components/SimulationPanel";
-import type { SimConfig } from "./features/simulation/types";
-import { DEFAULT_SIM_CONFIG } from "./features/simulation/types";
+import { SimulationSettingsDialog, type SimulationTarget } from "./features/simulation/components/SimulationSettingsDialog";
+import type { DrivetrainSimConfig, SimConfig, SubsystemSimConfig } from "./features/simulation/types";
+import { DEFAULT_SIM_CONFIG, DEFAULT_SUBSYSTEM_SIM_CONFIG, normalizeSimConfig } from "./features/simulation/types";
 import type { AppView } from "./types/app";
 
 type ToastState = {
@@ -99,6 +100,7 @@ function AppContent() {
   const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(false);
   const [simConfig, setSimConfig] = useState<SimConfig>(DEFAULT_SIM_CONFIG);
   const [simSaving, setSimSaving] = useState(false);
+  const [simulationTarget, setSimulationTarget] = useState<SimulationTarget | null>(null);
   const updateSubsystemCodeRef = useRef<() => Promise<void>>(async () => {});
   const updateInstallSectionRef = useRef<(section: string) => Promise<void>>(async () => {});
   const updatePowerToolRef = useRef<() => Promise<void>>(async () => {});
@@ -280,14 +282,14 @@ function AppContent() {
     try {
       const result = await window.powerlib.readSimConfig();
       if (result.exists && result.config) {
-        setSimConfig(result.config as SimConfig);
+        setSimConfig(normalizeSimConfig(result.config));
       }
     } catch {
       // Fall back to defaults if the file doesn't exist yet.
     }
   }
 
-  async function handleSaveSimConfig(config: SimConfig) {
+  async function saveSimConfig(config: SimConfig, message: string) {
     if (!window.powerlib?.saveSimConfig) {
       showToast("PowerLib file bridge is not available.", "error");
       return;
@@ -297,12 +299,40 @@ function AppContent() {
     try {
       await window.powerlib.saveSimConfig(config);
       setSimConfig(config);
-      showToast("Saved simulation settings. Use File > Update Code to regenerate SimConstants.java.", "success");
+      showToast(message, "success");
+      setSimulationTarget(null);
     } catch (caught) {
       showToast(caught instanceof Error ? caught.message : "Could not save simulation config.", "error");
     } finally {
       setSimSaving(false);
     }
+  }
+
+  async function handleSaveDrivetrainSimConfig(config: DrivetrainSimConfig) {
+    await saveSimConfig(
+      {
+        ...simConfig,
+        drivetrain: config
+      },
+      "Saved drivetrain simulation settings. Use File > Update Code to regenerate SimConstants.java."
+    );
+  }
+
+  async function handleSaveSubsystemSimConfig(id: string, config: SubsystemSimConfig) {
+    await saveSimConfig(
+      {
+        ...simConfig,
+        subsystems: {
+          ...simConfig.subsystems,
+          [id]: config
+        }
+      },
+      "Saved subsystem simulation settings."
+    );
+  }
+
+  async function handleSaveGlobalSimConfig(config: SimConfig) {
+    await saveSimConfig(config, "Saved simulation settings. Use File > Update Code to regenerate sim constants.");
   }
 
   async function updateSubsystemCode() {
@@ -453,10 +483,8 @@ function AppContent() {
   }, [activeView, subsystemDocument.loading, subsystemDocument.path]);
 
   useEffect(() => {
-    if (activeView === "simulation") {
-      void loadSimConfig();
-    }
-  }, [activeView]);
+    void loadSimConfig();
+  }, []);
 
   function watchCharacterizationPrefix() {
     if (!subsystemForm?.name) {
@@ -540,17 +568,17 @@ function AppContent() {
               sx={{ minHeight: 44 }}
             />
             <Tab
-              icon={<DashboardIcon />}
-              iconPosition="start"
-              label="NetworkTables"
-              value="networktables"
-              sx={{ minHeight: 44 }}
-            />
-            <Tab
               icon={<PrecisionManufacturingIcon />}
               iconPosition="start"
               label="Simulation"
               value="simulation"
+              sx={{ minHeight: 44 }}
+            />
+            <Tab
+              icon={<DashboardIcon />}
+              iconPosition="start"
+              label="NetworkTables"
+              value="networktables"
               sx={{ minHeight: 44 }}
             />
           </Tabs>
@@ -596,6 +624,21 @@ function AppContent() {
         commands={characterizationCommands}
         onRunCommand={runCharacterizationCommand}
         onClose={() => setCharacterizationOpen(false)}
+      />
+
+      <SimulationSettingsDialog
+        open={simulationTarget !== null}
+        target={simulationTarget}
+        drivetrainConfig={simConfig.drivetrain}
+        subsystemConfig={
+          simulationTarget?.kind === "subsystem"
+            ? simConfig.subsystems[simulationTarget.id] ?? DEFAULT_SUBSYSTEM_SIM_CONFIG
+            : undefined
+        }
+        saving={simSaving}
+        onClose={() => setSimulationTarget(null)}
+        onSaveDrivetrain={(config) => void handleSaveDrivetrainSimConfig(config)}
+        onSaveSubsystem={(id, config) => void handleSaveSubsystemSimConfig(id, config)}
       />
 
       <Snackbar
@@ -649,6 +692,24 @@ function AppContent() {
                   setCharacterizationOpen(true);
                   watchCharacterizationPrefix();
                 }}
+                onOpenSimulation={() => {
+                  if (!subsystemForm?.id) {
+                    showToast("Save the subsystem before editing simulation settings.", "warning");
+                    return;
+                  }
+
+                  setSimulationTarget({
+                    kind: "subsystem",
+                    id: subsystemForm.id,
+                    label: subsystemForm.name || "Subsystem"
+                  });
+                }}
+                onOpenDrivetrainSimulation={() =>
+                  setSimulationTarget({
+                    kind: "drivetrain",
+                    label: "Swerve Drivetrain"
+                  })
+                }
               />
           )}
 
@@ -660,9 +721,10 @@ function AppContent() {
             <SimulationPanel
               config={simConfig}
               saving={simSaving}
-              onSave={(config) => void handleSaveSimConfig(config)}
+              onSave={(config) => void handleSaveGlobalSimConfig(config)}
             />
           )}
+
         </Stack>
       </Container>
     </Box>

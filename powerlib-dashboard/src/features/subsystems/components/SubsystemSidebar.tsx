@@ -10,6 +10,7 @@ import {
   Typography
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import PrecisionManufacturingIcon from "@mui/icons-material/PrecisionManufacturing";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import type { GeneratedSubsystem, SubsystemDocumentState, SubsystemFormState } from "../types";
 import { getMotorIdsSummary } from "../subsystemUtils";
@@ -20,9 +21,17 @@ type SubsystemSidebarProps = {
   onCreate: () => void;
   onRefresh: () => void;
   onSelect: (subsystem: GeneratedSubsystem, index: number) => void;
+  onOpenDrivetrainSimulation: () => void;
 };
 
-export function SubsystemSidebar({ document, form, onCreate, onRefresh, onSelect }: SubsystemSidebarProps) {
+export function SubsystemSidebar({
+  document,
+  form,
+  onCreate,
+  onRefresh,
+  onSelect,
+  onOpenDrivetrainSimulation
+}: SubsystemSidebarProps) {
   return (
     <Card variant="outlined" sx={{ minHeight: 0, overflow: "hidden" }}>
       <CardContent sx={{ height: "100%", overflowY: "auto" }}>
@@ -39,6 +48,33 @@ export function SubsystemSidebar({ document, form, onCreate, onRefresh, onSelect
             disabled={document.loading}
           >
             Refresh
+          </Button>
+
+          <Divider />
+
+          <Typography variant="subtitle2" color="text.secondary">
+            Built-In Simulation
+          </Typography>
+
+          <Button
+            fullWidth
+            startIcon={<PrecisionManufacturingIcon />}
+            variant="outlined"
+            color="inherit"
+            onClick={onOpenDrivetrainSimulation}
+            sx={{
+              justifyContent: "flex-start",
+              minHeight: 58,
+              textAlign: "left",
+              textTransform: "none"
+            }}
+          >
+            <Stack spacing={0.25} sx={{ minWidth: 0 }}>
+              <Typography sx={{ fontWeight: 700 }}>Swerve Drivetrain</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800 }}>
+                Robot mass, MOI, bumper size
+              </Typography>
+            </Stack>
           </Button>
 
           <Divider />

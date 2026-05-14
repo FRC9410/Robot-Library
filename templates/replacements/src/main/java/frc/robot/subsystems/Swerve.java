@@ -352,6 +352,10 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
     startSimThread();
   }
 
+  public SwerveDriveSimulation getDriveSimulation() {
+    return m_driveSimulation;
+  }
+
   private void startSimThread() {
     m_lastSimTime = Utils.getCurrentTimeSeconds();
 

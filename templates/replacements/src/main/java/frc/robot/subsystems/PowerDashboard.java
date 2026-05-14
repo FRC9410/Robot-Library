@@ -5,14 +5,18 @@
 package frc.robot.subsystems;
 
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import edu.wpi.first.wpilibj.RobotBase;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import frc.powerlib.PowerRobotContainer;
+import frc.robot.simulation.PowerSimManager;
 
 public class PowerDashboard extends SubsystemBase {
   private final StateMachine stateMachine;
+  private final PowerSimManager powerSimManager;
 
   public PowerDashboard(StateMachine stateMachine) {
     this.stateMachine = stateMachine;
+    this.powerSimManager = RobotBase.isSimulation() ? new PowerSimManager(stateMachine) : null;
     initCharacterizationRoutines();
   }
 
@@ -24,6 +28,10 @@ public class PowerDashboard extends SubsystemBase {
 
   @Override
   public void periodic() {
+    if (powerSimManager != null) {
+      powerSimManager.periodic();
+    }
+
     new java.util.HashMap<>(PowerRobotContainer.getAllData())
         .forEach((key, value) -> publishValue("PowerLib/Data/" + key, value));
   }

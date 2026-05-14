@@ -19,6 +19,8 @@ type SubsystemsPanelProps = {
   onCancel: () => void;
   onDelete: () => void;
   onOpenCharacterization: () => void;
+  onOpenSimulation: () => void;
+  onOpenDrivetrainSimulation: () => void;
 };
 
 export function SubsystemsPanel({
@@ -36,7 +38,9 @@ export function SubsystemsPanel({
   onSave,
   onCancel,
   onDelete,
-  onOpenCharacterization
+  onOpenCharacterization,
+  onOpenSimulation,
+  onOpenDrivetrainSimulation
 }: SubsystemsPanelProps) {
   return (
     <Box
@@ -49,7 +53,14 @@ export function SubsystemsPanel({
         overflow: { xs: "visible", md: "hidden" }
       }}
     >
-      <SubsystemSidebar document={document} form={form} onCreate={onCreate} onRefresh={onRefresh} onSelect={onSelect} />
+      <SubsystemSidebar
+        document={document}
+        form={form}
+        onCreate={onCreate}
+        onRefresh={onRefresh}
+        onSelect={onSelect}
+        onOpenDrivetrainSimulation={onOpenDrivetrainSimulation}
+      />
       <SubsystemEditor
         form={form}
         saving={saving}
@@ -62,6 +73,7 @@ export function SubsystemsPanel({
         onCancel={onCancel}
         onDelete={onDelete}
         onOpenCharacterization={onOpenCharacterization}
+        onOpenSimulation={onOpenSimulation}
       />
     </Box>
   );
