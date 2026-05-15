@@ -627,7 +627,7 @@ gradle.projectsLoaded {
                 boolean installVendordeps = findInstallChoice(project, installVendordepsPropertyName, 'Install vendor dependencies?', true)
                 boolean installTools = findBooleanProperty(project, installToolsPropertyName, true)
                 boolean installDashboard = installTools && findInstallChoice(project, installDashboardPropertyName, 'Download Power Tool source and run npm install?', true)
-                boolean installSkills = installTools && findInstallChoice(project, installSkillsPropertyName, 'Install PowerLib Claude skills to ~/.claude/skills/?', true)
+                boolean shouldInstallSkills = installTools && findInstallChoice(project, installSkillsPropertyName, 'Install PowerLib Claude skills to ~/.claude/skills/?', true)
                 boolean vendordepsOnly = installVendordeps && !installLib && !installTemplates && !installDashboard
                 boolean priorPowerLibInstall = hasPriorPowerLibInstall(project)
 
@@ -636,7 +636,7 @@ gradle.projectsLoaded {
                 logger.lifecycle("  Robot starter/template files: ${installTemplates}")
                 logger.lifecycle("  Vendor dependencies: ${installVendordeps}")
                 logger.lifecycle("  Power Tool and scripts: ${installDashboard}")
-                logger.lifecycle("  Claude skills: ${installSkills}")
+                logger.lifecycle("  Claude skills: ${shouldInstallSkills}")
 
                 if (installVendordeps) {
                     vendorDependencies.each { dependency ->
@@ -684,7 +684,7 @@ gradle.projectsLoaded {
                     deleteOldDashboardBuildScript(project)
                 }
 
-                if (installSkills) {
+                if (shouldInstallSkills) {
                     installSkills(project)
                 } else {
                     logger.lifecycle('Skipped Claude skills')
