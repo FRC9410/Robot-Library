@@ -497,7 +497,8 @@ def copyTemplateFile = { Project project, TemplateFile template, boolean writeTe
 def skillFiles = [
     'SKILL.md',
     'SimManager-template.md',
-    'Swerve-sim-thread-template.md'
+    'Swerve-sim-thread-template.md',
+    'MapleSimSwerveDrivetrain-template.md'
 ]
 
 def installSkills = { Project project ->

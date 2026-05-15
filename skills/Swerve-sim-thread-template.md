@@ -1,22 +1,26 @@
 # Swerve.java Sim Thread Replacement Template
 
-This file contains the exact changes to make to `Swerve.java` to replace the basic WPILib
-sim thread with `MapleSimSwerveDrivetrain`.
+All changes needed to wire MapleSim into the existing PowerLib Swerve.java.
 
 ---
 
-## 1. Add field declaration near the top of the Swerve class
+## 1. Add field declarations near the top of the Swerve class
 
-Find the existing line:
+Find:
 ```java
 private Notifier m_simNotifier = null;
+private double m_lastSimTime;
 ```
 
-Replace the block (including `m_lastSimTime`) with:
+Replace with:
 ```java
 private Notifier m_simNotifier = null;
 private double m_lastSimTime;
 private MapleSimSwerveDrivetrain mapleSimSwerveDrivetrain = null;
+private final StructPublisher<Pose2d> simPosePublisher =
+    NetworkTableInstance.getDefault()
+        .getStructTopic("Simulation/RobotPose", Pose2d.struct)
+        .publish();
 ```
 
 ---
@@ -45,10 +49,11 @@ private void startSimThread() {
 
     SimManager.initialize();
 
-    m_simNotifier = new Notifier(() -> {
-        mapleSimSwerveDrivetrain.update();
-        SimManager.update();
-    });
+    // Only call mapleSimSwerveDrivetrain::update here.
+    // MapleSimSwerveDrivetrain.update() already calls
+    // SimulatedArena.getInstance().simulationPeriodic() internally.
+    // Do NOT add SimManager.update() — it would double-tick the physics engine.
+    m_simNotifier = new Notifier(mapleSimSwerveDrivetrain::update);
     m_simNotifier.startPeriodic(kSimLoopPeriod);
 }
 ```
@@ -57,7 +62,7 @@ private void startSimThread() {
 
 ## 3. Add resetPose() override
 
-Add this method to the Swerve class (after the existing constructors, before periodic()):
+Add after the constructors, before periodic():
 
 ```java
 @Override
@@ -70,22 +75,42 @@ public void resetPose(Pose2d pose) {
 }
 ```
 
-Also add the Timer import if not already present:
+Also ensure this import exists:
 ```java
 import edu.wpi.first.wpilibj.Timer;
 ```
 
 ---
 
-## 4. Add all required imports to Swerve.java
+## 4. Add sim pose publishing to periodic()
 
-Add these imports at the top of the file alongside existing imports:
+Inside `periodic()`, add at the end guarded by a null check:
 
 ```java
-import org.ironmaple.simulation.SimulatedArena;
+if (mapleSimSwerveDrivetrain != null) {
+    simPosePublisher.set(
+        mapleSimSwerveDrivetrain.mapleSimDrive.getSimulatedDriveTrainPose());
+}
+```
+
+---
+
+## 5. Imports to ADD to Swerve.java
+
+```java
 import org.ironmaple.simulation.drivesims.MapleSimSwerveDrivetrain;
 import frc.robot.utils.simulation.SimManager;
 import edu.wpi.first.math.system.plant.DCMotor;
+import edu.wpi.first.networktables.StructPublisher;
+```
+
+## CRITICAL: Imports NOT to add
+
+Do NOT add any of these — `import static edu.wpi.first.units.Units.*` at line 3 already
+covers them. Adding them again causes duplicate import compiler warnings:
+
+```java
+// DO NOT ADD THESE:
 import static edu.wpi.first.units.Units.Seconds;
 import static edu.wpi.first.units.Units.Pounds;
 import static edu.wpi.first.units.Units.Inches;
@@ -106,7 +131,9 @@ import static edu.wpi.first.units.Units.Inches;
 
 ---
 
-## Full Example (Kraken X60 drive, Kraken X44 steer, 115 lbs, 30x30 bumper, COF 1.2)
+## Full startSimThread() Example
+
+Kraken X60 drive, Kraken X44 steer, 115 lbs, 30x30 bumper, COF 1.2:
 
 ```java
 private void startSimThread() {
@@ -128,10 +155,7 @@ private void startSimThread() {
 
     SimManager.initialize();
 
-    m_simNotifier = new Notifier(() -> {
-        mapleSimSwerveDrivetrain.update();
-        SimManager.update();
-    });
+    m_simNotifier = new Notifier(mapleSimSwerveDrivetrain::update);
     m_simNotifier.startPeriodic(kSimLoopPeriod);
 }
 ```
