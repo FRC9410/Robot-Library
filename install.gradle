@@ -502,7 +502,7 @@ def skillFiles = [
 
 def installSkills = { Project project ->
     String userHome = System.getProperty('user.home')
-    File skillsDir = new File(userHome, '.claude/skills')
+    File skillsDir = new File(userHome, '.claude/skills/powerlib-sim')
     skillsDir.mkdirs()
 
     File localInstallerRoot = findLocalInstallerRoot()
