@@ -1396,7 +1396,7 @@ function Ensure-BindingConstantsMarkers {
 function Rewrite-BindingConstantsBlock {
     param(
         [Parameter(Mandatory = $true)][string]$ConstantsPath,
-        [Parameter(Mandatory = $true)][string[]]$Entries
+        [AllowEmptyCollection()][string[]]$Entries = @()
     )
 
     Ensure-BindingConstantsMarkers $ConstantsPath
