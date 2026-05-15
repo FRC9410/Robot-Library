@@ -47,10 +47,11 @@ the real number (CAD, weighing the robot, measuring with a tape measure).
       c) Falcon 500
       d) NEO
 6. Steer motor type:
-      a) Falcon 500 (default for PowerLib)
+      a) Kraken X44 (default for PowerLib)
       b) Kraken X60
-      c) NEO 550
-      d) NEO
+      c) Falcon 500
+      d) NEO 550
+      e) NEO
 ```
 
 Values pulled automatically from existing `TunerConstants.java` (do NOT ask the user for these):
@@ -157,6 +158,7 @@ Tell the user which files were written, and remind them:
 |-----------------|------------------------------|
 | Kraken X60      | `DCMotor.getKrakenX60(1)`    |
 | Kraken X60 FOC  | `DCMotor.getKrakenX60Foc(1)` |
+| Kraken X44      | `DCMotor.getKrakenX44(1)`    |
 | Falcon 500      | `DCMotor.getFalcon500(1)`    |
 | NEO             | `DCMotor.getNEO(1)`          |
 | NEO 550         | `DCMotor.getNeo550(1)`       |

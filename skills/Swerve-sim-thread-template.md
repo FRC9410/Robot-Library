@@ -99,13 +99,14 @@ import static edu.wpi.first.units.Units.Inches;
 |-----------------|------------------------------|
 | Kraken X60      | `DCMotor.getKrakenX60(1)`    |
 | Kraken X60 FOC  | `DCMotor.getKrakenX60Foc(1)` |
+| Kraken X44      | `DCMotor.getKrakenX44(1)`    |
 | Falcon 500      | `DCMotor.getFalcon500(1)`    |
 | NEO             | `DCMotor.getNEO(1)`          |
 | NEO 550         | `DCMotor.getNeo550(1)`       |
 
 ---
 
-## Full Example (Kraken X60 drive, Falcon 500 steer, 115 lbs, 30x30 bumper, COF 1.2)
+## Full Example (Kraken X60 drive, Kraken X44 steer, 115 lbs, 30x30 bumper, COF 1.2)
 
 ```java
 private void startSimThread() {
@@ -115,7 +116,7 @@ private void startSimThread() {
         Inches.of(30),
         Inches.of(30),
         DCMotor.getKrakenX60(1),
-        DCMotor.getFalcon500(1),
+        DCMotor.getKrakenX44(1),
         1.2,
         getModuleLocations(),
         getPigeon2(),
