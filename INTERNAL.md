@@ -249,9 +249,9 @@ Open Power Tool and go to the **Simulation** tab. Fill in:
 | Bumper Width | 0.9 m | Full robot width including bumpers |
 | Bumper Length | 0.9 m | Full robot length including bumpers |
 
-Click **Save**, then **File > Update Code**. The generator writes `src/main/java/frc/robot/constants/SimConstants.java` with those values.
+Click **Save**, then **File > Update Code**. The install provides a default `src/main/java/frc/robot/constants/SimConstants.java` so the starter template builds immediately, and the generator rewrites it with those values.
 
-`SimConstants.java` is generated — do not edit it by hand. Edit `powerlib-sim-config.json` via the Simulation tab instead.
+`SimConstants.java` is managed by PowerLib. Do not edit it by hand. Edit `powerlib-sim-config.json` via the Simulation tab instead.
 
 ### SimConfigJson parameter
 

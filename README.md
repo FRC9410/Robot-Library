@@ -54,19 +54,24 @@ These robot starter/template files are written into the robot project. On the fi
 
 ```text
 src/main/java/frc/robot/Constants.java
+src/main/java/frc/robot/PowerButtonBindings.java
 src/main/java/frc/robot/RobotContainer.java
 src/main/java/frc/robot/commands/SwerveDriveCommand.java
 src/main/java/frc/robot/constants/CanBusConstants.java
 src/main/java/frc/robot/constants/LEDConstants.java
 src/main/java/frc/robot/constants/LocationConstants.java
 src/main/java/frc/robot/constants/OIConstants.java
+src/main/java/frc/robot/constants/SimConstants.java
 src/main/java/frc/robot/constants/TunerConstants.java
 src/main/java/frc/robot/constants/VisionConstants.java
 src/main/java/frc/robot/subsystems/LED.java
+src/main/java/frc/robot/subsystems/PowerDashboard.java
 src/main/java/frc/robot/subsystems/StateMachine.java
 src/main/java/frc/robot/subsystems/Swerve.java
 src/main/java/frc/robot/subsystems/Vision.java
+src/main/java/frc/robot/simulation/PowerSimManager.java
 src/main/java/frc/robot/utils/FieldUtils.java
+src/main/deploy/pathplanner/settings.json
 ```
 
 The installer creates temporary backups before replacing files. Successful installs delete those backups by default.

@@ -172,6 +172,11 @@ def templateFiles = [
         replacement: true
     ),
     new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/constants/SimConstants.java',
+        destination: 'src/main/java/frc/robot/constants/SimConstants.java',
+        replacement: true
+    ),
+    new TemplateFile(
         source: 'replacements/src/main/java/frc/robot/constants/TunerConstants.java',
         destination: 'src/main/java/frc/robot/constants/TunerConstants.java',
         replacement: true
