@@ -70,6 +70,39 @@ Read this section before generating any file. These are verified against the act
 .withSwerveModule(new SwerveModuleSimulationConfig(...))
 ```
 
+`SwerveModuleSimulationConfig` constructor — 9 parameters (verified via javap):
+```java
+new SwerveModuleSimulationConfig(
+    DCMotor,           // drive motor
+    DCMotor,           // steer motor
+    double,            // drive gear ratio
+    double,            // steer gear ratio
+    Voltage,           // drive friction voltage  — use kDriveFrictionVoltage from TunerConstants
+    Voltage,           // steer friction voltage  — use kSteerFrictionVoltage from TunerConstants
+    Distance,          // wheel radius
+    MomentOfInertia,   // steer MOI              — use kSteerInertia from TunerConstants
+    double)            // wheel COF
+```
+
+Do NOT use a 6-parameter form — it does not exist in 0.4.0-beta.
+
+Example using PowerLib TunerConstants values:
+```java
+.withSwerveModule(new SwerveModuleSimulationConfig(
+    DCMotor.getKrakenX60(1),
+    DCMotor.getKrakenX44(1),
+    5.4,                           // kDriveGearRatio
+    12.1,                          // kSteerGearRatio
+    Volts.of(0.2),                 // kDriveFrictionVoltage
+    Volts.of(0.2),                 // kSteerFrictionVoltage
+    Meters.of(0.0508),             // wheel radius (2 inches)
+    KilogramSquareMeters.of(0.01), // kSteerInertia
+    1.2))                          // wheel COF
+```
+
+Note: `KilogramSquareMeters.of(...)` and `Volts.of(...)` are covered by
+`import static edu.wpi.first.units.Units.*` — do NOT add explicit measure imports.
+
 `GamePieceInfo` record — 7 fields, not 4:
 ```java
 public record GamePieceInfo(
@@ -200,7 +233,10 @@ DriveTrainSimulationConfig config = DriveTrainSimulationConfig.Default()
         {{STEER_MOTOR_EXPRESSION}},
         {{DRIVE_GEAR_RATIO}},   // from TunerConstants: kDriveGearRatio
         {{STEER_GEAR_RATIO}},   // from TunerConstants: kSteerGearRatio
+        Volts.of(0.2),          // kDriveFrictionVoltage from TunerConstants
+        Volts.of(0.2),          // kSteerFrictionVoltage from TunerConstants
         Meters.of(0.0508),      // wheel radius hardcoded — WheelRadius is Distance not double
+        KilogramSquareMeters.of(0.01), // kSteerInertia from TunerConstants
         {{WHEEL_COF}}));
 ```
 
@@ -245,7 +281,10 @@ public class MapleSimSwerveDrivetrain {
                 {{STEER_MOTOR_EXPRESSION}},
                 {{DRIVE_GEAR_RATIO}},
                 {{STEER_GEAR_RATIO}},
-                Meters.of(0.0508),
+                Volts.of(0.2),             // kDriveFrictionVoltage from TunerConstants
+                Volts.of(0.2),             // kSteerFrictionVoltage from TunerConstants
+                Meters.of(0.0508),         // wheel radius (2 inches)
+                KilogramSquareMeters.of(0.01), // kSteerInertia from TunerConstants
                 {{WHEEL_COF}}));
 
         // Initial pose — NOT new Pose2d() which places robot outside the field at (0,0)
@@ -447,6 +486,9 @@ private void startSimThread() {
         m_lastSimTime = currentTime;
         updateSimState(deltaTime, RobotController.getBatteryVoltage());
     });
+    // Initialize m_lastSimTime before starting — omitting this leaves it at 0.0
+    // causing a huge deltaTime on the first tick equal to robot uptime in seconds
+    m_lastSimTime = Utils.getCurrentTimeSeconds();
     m_simNotifier.startPeriodic(kSimLoopPeriod);
 }
 ```
@@ -503,9 +545,16 @@ Add `simulationPeriodic()` — this is where arena physics ticks at 20ms:
 ```java
 @Override
 public void simulationPeriodic() {
-    robotContainer.getStateMachine().drivetrain.simulationPeriodic();
+    // Field name is m_robotContainer not robotContainer — check your Robot.java declaration
+    m_robotContainer.getStateMachine().drivetrain.simulationPeriodic();
 }
 ```
+
+IMPORTANT: The field name depends on your Robot.java. Check how `RobotContainer` is declared:
+- If `private final RobotContainer m_robotContainer` → use `m_robotContainer`
+- If `private final RobotContainer robotContainer` → use `robotContainer`
+
+Read Robot.java before writing this line.
 
 In `autonomousInit()`:
 ```java
