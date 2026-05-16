@@ -193,13 +193,20 @@ Tell the user:
 For each game piece, ask:
 ```
 1. Name (e.g. "Ball", "Note", "Coral")
-2. Shape: a) Cylinder (radius in inches)  b) Box (length x width in inches)
+2. Shape:
+      a) Cylinder — diameter in inches (FRC game pieces are usually described by diameter)
+      b) Box — length x width in inches
 3. Height in inches
 4. Mass in kg
 5. Linear damping (default: 0.8)
 6. Angular damping (default: 0.8)
 7. Coefficient of restitution (default: 0.3)
 8. Spawn locations as (x, y) pairs in meters separated by |
+   If the user does not provide spawn locations, use these defaults and tell the user:
+   (2.0, 2.5) | (2.0, 5.5) | (4.0, 4.0) | (6.0, 2.5) | (6.0, 5.5)
+
+NOTE: The user gives DIAMETER for cylinders. Always compute radius = diameter / 2 before
+passing to Circle(). Example: user says 5.91 in diameter → Circle(Inches.of(2.955).in(Meters)).
 ```
 
 ---
@@ -356,9 +363,7 @@ import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.networktables.StructArrayPublisher;
-import static edu.wpi.first.units.Units.Kilograms;
-import static edu.wpi.first.units.Units.Inches;
-import static edu.wpi.first.units.Units.Meters;
+import static edu.wpi.first.units.Units.*;
 
 public class SimManager {
 
@@ -468,6 +473,10 @@ private final StructPublisher<Pose2d> simPosePublisher =
 
 ```java
 private void startSimThread() {
+    // Initialize m_lastSimTime first — must happen before the Notifier fires.
+    // Leaving it at 0.0 causes a massive deltaTime on the first tick equal to robot uptime.
+    m_lastSimTime = Utils.getCurrentTimeSeconds();
+
     // 3 parameters only — CTRE base class handles motor/encoder sim internally
     mapleSimSwerveDrivetrain = new MapleSimSwerveDrivetrain(
         getModuleLocations(),
@@ -486,9 +495,6 @@ private void startSimThread() {
         m_lastSimTime = currentTime;
         updateSimState(deltaTime, RobotController.getBatteryVoltage());
     });
-    // Initialize m_lastSimTime before starting — omitting this leaves it at 0.0
-    // causing a huge deltaTime on the first tick equal to robot uptime in seconds
-    m_lastSimTime = Utils.getCurrentTimeSeconds();
     m_simNotifier.startPeriodic(kSimLoopPeriod);
 }
 ```
@@ -524,14 +530,19 @@ if (mapleSimSwerveDrivetrain != null) {
 }
 ```
 
-### Imports to add (do NOT add Seconds/Pounds/Inches — Units.* covers them)
+### Imports to add
+
+Before adding any import, check the existing Swerve.java imports. Several may already be
+present — adding duplicates causes compiler warnings. Only add imports that are not already there:
 
 ```java
 import frc.robot.utils.simulation.MapleSimSwerveDrivetrain;
 import frc.robot.utils.simulation.SimManager;
-import edu.wpi.first.networktables.StructPublisher;
+import edu.wpi.first.networktables.StructPublisher;  // may already exist — check first
 import edu.wpi.first.wpilibj.Timer;
 ```
+
+Do NOT add `Seconds`, `Pounds`, or `Inches` — `Units.*` already covers them.
 
 Write to:
 `src/main/java/frc/robot/subsystems/Swerve.java`
@@ -540,21 +551,23 @@ Write to:
 
 ## Step 7: Update Robot.java
 
+Before writing anything, read these three files to verify the full access chain:
+1. `Robot.java` — find the field name for `RobotContainer` (e.g. `m_robotContainer`)
+2. `RobotContainer.java` — verify `getStateMachine()` exists and returns `StateMachine`
+3. `StateMachine.java` — verify `drivetrain` is a public field of type `Swerve`
+
+Do not assume the chain is always `getStateMachine().drivetrain` — trace it from the source.
+
 Add `simulationPeriodic()` — this is where arena physics ticks at 20ms:
 
 ```java
 @Override
 public void simulationPeriodic() {
-    // Field name is m_robotContainer not robotContainer — check your Robot.java declaration
-    m_robotContainer.getStateMachine().drivetrain.simulationPeriodic();
+    // Replace {{ROBOT_CONTAINER_FIELD}} with the actual field name from Robot.java
+    // Replace the chain with whatever path leads to the Swerve instance
+    {{ROBOT_CONTAINER_FIELD}}.getStateMachine().drivetrain.simulationPeriodic();
 }
 ```
-
-IMPORTANT: The field name depends on your Robot.java. Check how `RobotContainer` is declared:
-- If `private final RobotContainer m_robotContainer` → use `m_robotContainer`
-- If `private final RobotContainer robotContainer` → use `robotContainer`
-
-Read Robot.java before writing this line.
 
 In `autonomousInit()`:
 ```java
@@ -568,6 +581,9 @@ if (RobotBase.isSimulation()) SimManager.resetField();
 
 In `robotPeriodic()`:
 ```java
+// publishPoses() goes here rather than simulationPeriodic() so NT publishing
+// runs every 20ms robot loop regardless of sim configuration details.
+// The isSimulation() guard prevents it running on real hardware.
 if (RobotBase.isSimulation()) SimManager.publishPoses();
 ```
 
