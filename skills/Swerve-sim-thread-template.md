@@ -1,10 +1,8 @@
 # Swerve.java Sim Thread Replacement Template
 
-All changes needed to wire MapleSim into the existing PowerLib Swerve.java.
-
 ---
 
-## 1. Add field declarations near the top of the Swerve class
+## 1. Add field declarations
 
 Find:
 ```java
@@ -27,32 +25,29 @@ private final StructPublisher<Pose2d> simPosePublisher =
 
 ## 2. Replace startSimThread() entirely
 
-Remove the old method and replace with:
-
 ```java
 private void startSimThread() {
     mapleSimSwerveDrivetrain = new MapleSimSwerveDrivetrain(
-        Seconds.of(kSimLoopPeriod),
-        Pounds.of({{ROBOT_WEIGHT_LBS}}),
-        Inches.of({{BUMPER_LENGTH_IN}}),
-        Inches.of({{BUMPER_WIDTH_IN}}),
+        kSimLoopPeriod,
+        {{ROBOT_WEIGHT_LBS}},
+        {{BUMPER_LENGTH_IN}},
+        {{BUMPER_WIDTH_IN}},
         {{DRIVE_MOTOR_EXPRESSION}},
         {{STEER_MOTOR_EXPRESSION}},
         {{WHEEL_COF}},
         getModuleLocations(),
         getPigeon2(),
         getModules(),
+        // These two suppliers fix MapleSim heading divergence after rotation
+        () -> getState().Speeds,
+        () -> getState().Pose.getRotation(),
         TunerConstants.FrontLeft,
         TunerConstants.FrontRight,
         TunerConstants.BackLeft,
         TunerConstants.BackRight);
 
-    SimManager.initialize();
-
-    // Only call mapleSimSwerveDrivetrain::update here.
-    // MapleSimSwerveDrivetrain.update() already calls
-    // SimulatedArena.getInstance().simulationPeriodic() internally.
-    // Do NOT add SimManager.update() — it would double-tick the physics engine.
+    // 5ms notifier — only CTRE motor sim, NOT SimulatedArena
+    // SimulatedArena.simulationPeriodic() runs in Robot.simulationPeriodic() at 20ms
     m_simNotifier = new Notifier(mapleSimSwerveDrivetrain::update);
     m_simNotifier.startPeriodic(kSimLoopPeriod);
 }
@@ -60,57 +55,64 @@ private void startSimThread() {
 
 ---
 
-## 3. Add resetPose() override
+## 3. Add simulationPeriodic() method
 
-Add after the constructors, before periodic():
+This is called from `Robot.simulationPeriodic()` at 20ms — the correct rate for
+`SimulatedArena.simulationPeriodic()`. Do NOT call this from the 5ms Notifier.
+
+```java
+public void simulationPeriodic() {
+    if (mapleSimSwerveDrivetrain != null) {
+        mapleSimSwerveDrivetrain.simulationPeriodic();
+    }
+}
+```
+
+---
+
+## 4. Add resetPose() override
 
 ```java
 @Override
 public void resetPose(Pose2d pose) {
     if (mapleSimSwerveDrivetrain != null) {
-        mapleSimSwerveDrivetrain.mapleSimDrive.setSimulationWorldPose(pose);
+        mapleSimSwerveDrivetrain.setSimulationWorldPose(pose);
     }
     Timer.delay(0.05);
     super.resetPose(pose);
 }
 ```
 
-Also ensure this import exists:
-```java
-import edu.wpi.first.wpilibj.Timer;
-```
-
 ---
 
-## 4. Add sim pose publishing to periodic()
+## 5. Add sim pose publishing to periodic()
 
-Inside `periodic()`, add at the end guarded by a null check:
+At the end of `periodic()`:
 
 ```java
 if (mapleSimSwerveDrivetrain != null) {
-    simPosePublisher.set(
-        mapleSimSwerveDrivetrain.mapleSimDrive.getSimulatedDriveTrainPose());
+    simPosePublisher.set(mapleSimSwerveDrivetrain.getSimulatedDriveTrainPose());
 }
 ```
 
 ---
 
-## 5. Imports to ADD to Swerve.java
+## 6. Imports to ADD
 
 ```java
-import org.ironmaple.simulation.drivesims.MapleSimSwerveDrivetrain;
-import frc.robot.utils.simulation.SimManager;
+import frc.robot.utils.simulation.MapleSimSwerveDrivetrain;
 import edu.wpi.first.math.system.plant.DCMotor;
 import edu.wpi.first.networktables.StructPublisher;
+import edu.wpi.first.wpilibj.Timer;
 ```
 
 ## CRITICAL: Imports NOT to add
 
-Do NOT add any of these — `import static edu.wpi.first.units.Units.*` at line 3 already
-covers them. Adding them again causes duplicate import compiler warnings:
+`import static edu.wpi.first.units.Units.*` at line 3 already covers everything.
+Do NOT add these — they cause duplicate import compiler warnings:
 
 ```java
-// DO NOT ADD THESE:
+// DO NOT ADD:
 import static edu.wpi.first.units.Units.Seconds;
 import static edu.wpi.first.units.Units.Pounds;
 import static edu.wpi.first.units.Units.Inches;
@@ -133,27 +135,27 @@ import static edu.wpi.first.units.Units.Inches;
 
 ## Full startSimThread() Example
 
-Kraken X60 drive, Kraken X44 steer, 115 lbs, 30x30 bumper, COF 1.2:
+Kraken X60 drive, Kraken X44 steer, 115 lbs, 30x28 bumper, COF 1.2:
 
 ```java
 private void startSimThread() {
     mapleSimSwerveDrivetrain = new MapleSimSwerveDrivetrain(
-        Seconds.of(kSimLoopPeriod),
-        Pounds.of(115),
-        Inches.of(30),
-        Inches.of(30),
+        kSimLoopPeriod,
+        115,
+        30,
+        28,
         DCMotor.getKrakenX60(1),
         DCMotor.getKrakenX44(1),
         1.2,
         getModuleLocations(),
         getPigeon2(),
         getModules(),
+        () -> getState().Speeds,
+        () -> getState().Pose.getRotation(),
         TunerConstants.FrontLeft,
         TunerConstants.FrontRight,
         TunerConstants.BackLeft,
         TunerConstants.BackRight);
-
-    SimManager.initialize();
 
     m_simNotifier = new Notifier(mapleSimSwerveDrivetrain::update);
     m_simNotifier.startPeriodic(kSimLoopPeriod);
