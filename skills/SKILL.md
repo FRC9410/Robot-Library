@@ -190,13 +190,16 @@ Ask the user for each value below as a numbered list:
 Tell the user:
 > "Define the game pieces for this season. Enter 'done' when finished."
 
-For each game piece, ask:
+For each game piece, ask for ALL of the following. Do not proceed to code generation until
+every field has been explicitly provided — if any field is missing, ask a follow-up question
+for that specific field before continuing.
+
 ```
 1. Name (e.g. "Ball", "Note", "Coral")
 2. Shape:
-      a) Cylinder — diameter in inches (FRC game pieces are usually described by diameter)
+      a) Cylinder — size (see NOTE below)
       b) Box — length x width in inches
-3. Height in inches
+3. Height — REQUIRED. Ask explicitly if not provided. Accept inches or meters.
 4. Mass in kg
 5. Linear damping (default: 0.8)
 6. Angular damping (default: 0.8)
@@ -204,10 +207,21 @@ For each game piece, ask:
 8. Spawn locations as (x, y) pairs in meters separated by |
    If the user does not provide spawn locations, use these defaults and tell the user:
    (2.0, 2.5) | (2.0, 5.5) | (4.0, 4.0) | (6.0, 2.5) | (6.0, 5.5)
-
-NOTE: The user gives DIAMETER for cylinders. Always compute radius = diameter / 2 before
-passing to Circle(). Example: user says 5.91 in diameter → Circle(Inches.of(2.955).in(Meters)).
 ```
+
+CYLINDER SIZE NOTE — accept any of these formats and convert appropriately:
+- Diameter in inches → radius = diameter / 2 → `new Circle(Inches.of(radius).in(Meters))`
+- Radius in inches → `new Circle(Inches.of(radius).in(Meters))`
+- Radius in meters → `new Circle(radiusMeters)` directly, no conversion needed
+
+If the user's response is ambiguous (e.g. just a number with no unit), ask whether it is
+radius or diameter and whether it is inches or meters before generating code.
+
+HEIGHT NOTE — accept inches or meters:
+- Inches → `Inches.of(value)`
+- Meters → `Meters.of(value)`
+
+If height is not in the user's initial response, ask for it before proceeding.
 
 ---
 
@@ -230,6 +244,18 @@ handles all of that internally via `updateSimState()`.
 
 ### DriveTrainSimulationConfig
 
+IMPORTANT: Before generating this file, read TunerConstants.java and extract the literal
+values for these fields. They are ALL declared `private static final` and cannot be
+referenced externally as `TunerConstants.kXxx`. Never emit `TunerConstants.kDriveGearRatio`
+or similar — it will not compile. Always hardcode the values you read from the file.
+
+Fields to extract from TunerConstants.java:
+- `kDriveGearRatio` — private static final double
+- `kSteerGearRatio` — private static final double
+- `kDriveFrictionVoltage` — private static final Voltage (e.g. `Volts.of(0.2)`)
+- `kSteerFrictionVoltage` — private static final Voltage (e.g. `Volts.of(0.2)`)
+- `kSteerInertia` — private static final MomentOfInertia (e.g. `KilogramSquareMeters.of(0.01)`)
+
 ```java
 DriveTrainSimulationConfig config = DriveTrainSimulationConfig.Default()
     .withRobotMass(Pounds.of({{ROBOT_WEIGHT_LBS}}))
@@ -238,12 +264,12 @@ DriveTrainSimulationConfig config = DriveTrainSimulationConfig.Default()
     .withSwerveModule(new SwerveModuleSimulationConfig(
         {{DRIVE_MOTOR_EXPRESSION}},
         {{STEER_MOTOR_EXPRESSION}},
-        {{DRIVE_GEAR_RATIO}},   // from TunerConstants: kDriveGearRatio
-        {{STEER_GEAR_RATIO}},   // from TunerConstants: kSteerGearRatio
-        Volts.of(0.2),          // kDriveFrictionVoltage from TunerConstants
-        Volts.of(0.2),          // kSteerFrictionVoltage from TunerConstants
-        Meters.of(0.0508),      // wheel radius hardcoded — WheelRadius is Distance not double
-        KilogramSquareMeters.of(0.01), // kSteerInertia from TunerConstants
+        {{DRIVE_GEAR_RATIO_VALUE}},            // hardcoded from kDriveGearRatio
+        {{STEER_GEAR_RATIO_VALUE}},            // hardcoded from kSteerGearRatio
+        Volts.of({{DRIVE_FRICTION_VOLTAGE}}),  // hardcoded from kDriveFrictionVoltage
+        Volts.of({{STEER_FRICTION_VOLTAGE}}),  // hardcoded from kSteerFrictionVoltage
+        Meters.of(0.0508),                     // wheel radius hardcoded — WheelRadius is Distance not double
+        KilogramSquareMeters.of({{STEER_INERTIA_VALUE}}), // hardcoded from kSteerInertia
         {{WHEEL_COF}}));
 ```
 
@@ -286,12 +312,12 @@ public class MapleSimSwerveDrivetrain {
             .withSwerveModule(new SwerveModuleSimulationConfig(
                 {{DRIVE_MOTOR_EXPRESSION}},
                 {{STEER_MOTOR_EXPRESSION}},
-                {{DRIVE_GEAR_RATIO}},
-                {{STEER_GEAR_RATIO}},
-                Volts.of(0.2),             // kDriveFrictionVoltage from TunerConstants
-                Volts.of(0.2),             // kSteerFrictionVoltage from TunerConstants
-                Meters.of(0.0508),         // wheel radius (2 inches)
-                KilogramSquareMeters.of(0.01), // kSteerInertia from TunerConstants
+                {{DRIVE_GEAR_RATIO_VALUE}},            // hardcoded from TunerConstants kDriveGearRatio (private)
+                {{STEER_GEAR_RATIO_VALUE}},            // hardcoded from TunerConstants kSteerGearRatio (private)
+                Volts.of({{DRIVE_FRICTION_VOLTAGE}}),  // hardcoded from TunerConstants kDriveFrictionVoltage (private)
+                Volts.of({{STEER_FRICTION_VOLTAGE}}),  // hardcoded from TunerConstants kSteerFrictionVoltage (private)
+                Meters.of(0.0508),                     // wheel radius (2 inches)
+                KilogramSquareMeters.of({{STEER_INERTIA_VALUE}}), // hardcoded from TunerConstants kSteerInertia (private)
                 {{WHEEL_COF}}));
 
         // Initial pose — NOT new Pose2d() which places robot outside the field at (0,0)
