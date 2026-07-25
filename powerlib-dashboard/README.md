@@ -26,7 +26,7 @@ The target selector includes robot IP, roboRIO mDNS, local simulation, loopback,
 Use the prefix explorer to watch areas like:
 
 ```text
-/SmartDashboard/
+/PowerLib/
 /Shuffleboard/
 /LiveWindow/
 /FMSInfo/

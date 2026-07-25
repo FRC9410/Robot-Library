@@ -23,7 +23,7 @@ type RobotPanelProps = {
   topics: NtTopicSnapshot[];
 };
 
-const dataPrefix = "/SmartDashboard/PowerLib/Data/";
+const dataPrefix = "/PowerLib/Data/";
 
 function toPascalCase(value: string) {
   return value

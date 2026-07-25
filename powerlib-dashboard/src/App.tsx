@@ -103,9 +103,9 @@ function AppContent() {
     }
 
     const characterizationName = getCharacterizationName(subsystemForm.name);
-    const prefix = `/SmartDashboard/PowerLib/Characterization/${characterizationName}/`;
+    const prefix = `/PowerLib/Characterization/${characterizationName}/`;
     return topics
-      .filter((topic) => topic.name.startsWith(prefix) && topic.name.endsWith("/.type") && topic.value === "Command")
+      .filter((topic) => topic.name.startsWith(prefix) && topic.name.endsWith("/.type") && topic.value === "PowerLibCommand")
       .map((topic) => {
         const baseTopic = topic.name.slice(0, -"/.type".length);
         const label = baseTopic.slice(prefix.length);
@@ -418,7 +418,7 @@ function AppContent() {
       return;
     }
 
-    const prefix = `/SmartDashboard/PowerLib/Characterization/${getCharacterizationName(subsystemForm.name)}/`;
+    const prefix = `/PowerLib/Characterization/${getCharacterizationName(subsystemForm.name)}/`;
     if (status === "connected" || status === "connecting") {
       clientRef.current.watchPrefix(prefix, upsertTopic);
     }
@@ -428,8 +428,8 @@ function AppContent() {
     setError(null);
 
     try {
-      clientRef.current.publish(`${command.baseTopic}/running`, "boolean", true);
-      upsertTopic({ name: `${command.baseTopic}/running`, type: "boolean", value: true });
+      clientRef.current.publish(`${command.baseTopic}/request`, "boolean", true);
+      upsertTopic({ name: `${command.baseTopic}/request`, type: "boolean", value: true });
       showToast(`Started ${command.label}.`, "success");
     } catch (caught) {
       showToast(caught instanceof Error ? caught.message : "Could not start characterization command.", "error");

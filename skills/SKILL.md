@@ -38,6 +38,13 @@ Do NOT create a second `StateMachine` in `Robot.java`. `RobotContainer` should o
 `StateMachine`; `Robot.java` should reach the drivetrain through `m_robotContainer.getStateMachine()`
 or the equivalent chain traced from the actual project.
 
+## NetworkTables Logging Rule
+
+Use raw NetworkTables APIs for all generated logging/publishing. Do NOT import or use
+`SmartDashboard`, and do NOT publish generated data under `/SmartDashboard`. Simulation-only
+topics should stay under `/Simulation/...`; PowerLib dashboard data and commands, if touched,
+belong under `/PowerLib/...`.
+
 ---
 
 ## KNOWN CLASS / API FACTS FOR MAPLE-SIM 0.4.0-BETA
@@ -458,6 +465,9 @@ public class SimManager {
     }
 }
 ```
+
+Do not use `SmartDashboard` for these publishers; create raw NetworkTables publishers from
+`NetworkTableInstance.getDefault()`.
 
 ### Filling in the game piece sections
 

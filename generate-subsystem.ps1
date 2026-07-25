@@ -1059,6 +1059,116 @@ function Write-CharacterizationFile {
     return $outputFile
 }
 
+function Ensure-PowerDashboardRawNetworkTablesSupport {
+    param([Parameter(Mandatory = $true)][string]$PowerDashboardPath)
+
+    $content = Get-Content -Path $PowerDashboardPath -Raw
+    if ($content.Contains("registerCharacterizationCommand(") -and -not $content.Contains("SmartDashboard")) {
+        return
+    }
+
+    $rawPowerDashboard = @'
+// Copyright (c) FIRST and other WPILib contributors.
+// Open Source Software; you can modify and/or share it under the terms of
+// the WPILib BSD license file in the root directory of this project.
+
+package frc.robot.subsystems;
+
+import edu.wpi.first.networktables.NetworkTable;
+import edu.wpi.first.networktables.NetworkTableEntry;
+import edu.wpi.first.networktables.NetworkTableInstance;
+import edu.wpi.first.wpilibj2.command.Command;
+import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import frc.powerlib.PowerRobotContainer;
+import java.util.HashMap;
+import java.util.Map;
+
+public class PowerDashboard extends SubsystemBase {
+  private final StateMachine stateMachine;
+  private final NetworkTable dataTable =
+      NetworkTableInstance.getDefault().getTable("PowerLib").getSubTable("Data");
+  private final NetworkTable characterizationTable =
+      NetworkTableInstance.getDefault().getTable("PowerLib").getSubTable("Characterization");
+  private final Map<String, CharacterizationCommandBinding> characterizationCommands = new HashMap<>();
+
+  public PowerDashboard(StateMachine stateMachine) {
+    this.stateMachine = stateMachine;
+    initCharacterizationRoutines();
+  }
+
+  private void initCharacterizationRoutines() {
+    // POWERLIB GENERATED CHARACTERIZATION START - DO NOT DELETE
+    // POWERLIB GENERATED CHARACTERIZATION END - DO NOT DELETE
+  }
+
+  @Override
+  public void periodic() {
+    new java.util.HashMap<>(PowerRobotContainer.getAllData())
+        .forEach(this::publishValue);
+    pollCharacterizationCommands();
+  }
+
+  private void publishValue(String key, Object value) {
+    NetworkTableEntry entry = dataTable.getEntry(key);
+    if (value instanceof Boolean) {
+      entry.setBoolean((Boolean) value);
+      return;
+    }
+
+    if (value instanceof Number) {
+      entry.setDouble(((Number) value).doubleValue());
+      return;
+    }
+
+    entry.setString(value == null ? "" : value.toString());
+  }
+
+  private void registerCharacterizationCommand(String subsystemName, String commandName, Command command) {
+    NetworkTable commandTable = characterizationTable.getSubTable(subsystemName).getSubTable(commandName);
+    NetworkTableEntry requestEntry = commandTable.getEntry("request");
+    NetworkTableEntry runningEntry = commandTable.getEntry("running");
+
+    commandTable.getEntry(".type").setString("PowerLibCommand");
+    commandTable.getEntry("name").setString(commandName);
+    requestEntry.setBoolean(false);
+    runningEntry.setBoolean(false);
+    characterizationCommands.put(
+        subsystemName + "/" + commandName,
+        new CharacterizationCommandBinding(command, requestEntry, runningEntry));
+  }
+
+  private void pollCharacterizationCommands() {
+    characterizationCommands.values().forEach(
+        binding -> {
+          if (binding.requestEntry.getBoolean(false)) {
+            binding.requestEntry.setBoolean(false);
+            if (!binding.command.isScheduled()) {
+              binding.command.schedule();
+            }
+          }
+
+          binding.runningEntry.setBoolean(binding.command.isScheduled());
+        });
+  }
+
+  private static class CharacterizationCommandBinding {
+    private final Command command;
+    private final NetworkTableEntry requestEntry;
+    private final NetworkTableEntry runningEntry;
+
+    private CharacterizationCommandBinding(
+        Command command, NetworkTableEntry requestEntry, NetworkTableEntry runningEntry) {
+      this.command = command;
+      this.requestEntry = requestEntry;
+      this.runningEntry = runningEntry;
+    }
+  }
+}
+'@
+
+    Set-Content -Path $PowerDashboardPath -Value $rawPowerDashboard -Encoding ascii
+}
+
 function Rewrite-PowerDashboardCharacterizationBlock {
     param(
         [Parameter(Mandatory = $true)][string]$PowerDashboardPath,
@@ -1098,10 +1208,10 @@ function Rewrite-PowerDashboardCharacterizationBlock {
         $metadata = Get-SubsystemMetadata $subsystem
         $fieldName = "$($metadata.CamelName)Characterization"
         $entries += "    var $fieldName = new $($metadata.PascalName)Characterization(stateMachine.$($metadata.CamelName));"
-        $entries += "    SmartDashboard.putData(`"PowerLib/Characterization/$($metadata.PascalName)/Quasistatic Forward`", $fieldName.quasistaticForward());"
-        $entries += "    SmartDashboard.putData(`"PowerLib/Characterization/$($metadata.PascalName)/Quasistatic Reverse`", $fieldName.quasistaticReverse());"
-        $entries += "    SmartDashboard.putData(`"PowerLib/Characterization/$($metadata.PascalName)/Dynamic Forward`", $fieldName.dynamicForward());"
-        $entries += "    SmartDashboard.putData(`"PowerLib/Characterization/$($metadata.PascalName)/Dynamic Reverse`", $fieldName.dynamicReverse());"
+        $entries += "    registerCharacterizationCommand(`"$($metadata.PascalName)`", `"Quasistatic Forward`", $fieldName.quasistaticForward());"
+        $entries += "    registerCharacterizationCommand(`"$($metadata.PascalName)`", `"Quasistatic Reverse`", $fieldName.quasistaticReverse());"
+        $entries += "    registerCharacterizationCommand(`"$($metadata.PascalName)`", `"Dynamic Forward`", $fieldName.dynamicForward());"
+        $entries += "    registerCharacterizationCommand(`"$($metadata.PascalName)`", `"Dynamic Reverse`", $fieldName.dynamicReverse());"
     }
 
     $start = $content.IndexOf($CharacterizationStartMarker) + $CharacterizationStartMarker.Length
@@ -1705,6 +1815,7 @@ function Update-SubsystemsFromJson {
 
     Rewrite-ConstantsBlock $constantsBarrel $subsystems
     Rewrite-StateMachineBlock $stateMachineFile $subsystems
+    Ensure-PowerDashboardRawNetworkTablesSupport $powerDashboardFile
     Rewrite-PowerDashboardCharacterizationBlock $powerDashboardFile $subsystems
     Remove-DeletedGeneratedFiles $subsystems
     Remove-StaleCharacterizationFiles $subsystems
