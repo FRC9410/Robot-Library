@@ -7,6 +7,7 @@ import {
   getWritableTopicType,
   isTunableTopic,
   parseDraftValue,
+  tuningModeRequestTopicName,
   topicValueToDraft,
   tuningModeTopicName
 } from "../networktables/tuningUtils";
@@ -87,7 +88,9 @@ export function TuningPanel() {
     return topics.filter(isTunableTopic).sort((left, right) => left.name.localeCompare(right.name));
   }, [topics]);
   const tuningModeTopic = topics.find((topic) => topic.name === tuningModeTopicName);
+  const tuningModeRequestTopic = topics.find((topic) => topic.name === tuningModeRequestTopicName);
   const tuningModeEnabled = tuningModeTopic?.value === true;
+  const tuningModeRequested = tuningModeRequestTopic?.value === true;
 
   async function applyTunableTopic(topic: NtTopicSnapshot, type: NtTopicType, value: NtPrimitive) {
     try {
@@ -135,6 +138,9 @@ export function TuningPanel() {
               {tuningModeEnabled
                 ? "Tuning mode is on: applied values can change subsystem gains and generated command targets live."
                 : "Tuning mode is off: applied values are staged in NetworkTables, but robot code uses generated constants/defaults."}
+              {tuningModeRequestTopic && tuningModeRequested !== tuningModeEnabled
+                ? ` Requested mode is ${tuningModeRequested ? "on" : "off"}; waiting for robot acknowledgement.`
+                : ""}
             </Alert>
             {panelError && (
               <Alert severity="error" onClose={() => setPanelError(null)}>

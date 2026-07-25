@@ -44,7 +44,7 @@ import { UpdateCodeDialog } from "./features/subsystems/components/UpdateCodeDia
 import { NetworkTablesPanel } from "./features/networktables/NetworkTablesPanel";
 import { NetworkTablesProvider, useNetworkTables } from "./features/networktables/NetworkTablesContext";
 import { ConnectionSettingsDialog } from "./features/networktables/ConnectionSettingsDialog";
-import { tuningModeTopicName } from "./features/networktables/tuningUtils";
+import { tuningModeRequestTopicName, tuningModeTopicName } from "./features/networktables/tuningUtils";
 import { RobotPanel } from "./features/robot/RobotPanel";
 import { BindingsPanel } from "./features/bindings/BindingsPanel";
 import { TuningPanel } from "./features/tuning/TuningPanel";
@@ -108,7 +108,9 @@ function AppContent() {
   const updateInstallSectionRef = useRef<(section: string) => Promise<void>>(async () => {});
   const updatePowerToolRef = useRef<() => Promise<void>>(async () => {});
   const tuningModeTopic = topics.find((topic) => topic.name === tuningModeTopicName);
-  const tuningModeEnabled = tuningModeTopic?.value === true;
+  const tuningModeRequestTopic = topics.find((topic) => topic.name === tuningModeRequestTopicName);
+  const tuningModeEnabled =
+    tuningModeRequestTopic?.value === true || (!tuningModeRequestTopic && tuningModeTopic?.value === true);
 
   const characterizationCommands = useMemo<CharacterizationCommand[]>(() => {
     if (!subsystemForm?.name) {
@@ -391,7 +393,20 @@ function AppContent() {
 
   async function setTuningModeEnabled(enabled: boolean) {
     try {
-      await clientRef.current.publish(tuningModeTopicName, "boolean", enabled);
+      const results = await Promise.allSettled([
+        clientRef.current.publish(tuningModeRequestTopicName, "boolean", enabled),
+        clientRef.current.publish(tuningModeTopicName, "boolean", enabled)
+      ]);
+      if (results.every((result) => result.status === "rejected")) {
+        const firstFailure = results[0];
+        throw firstFailure.status === "rejected" ? firstFailure.reason : new Error("Could not update tuning mode.");
+      }
+      upsertTopic({
+        name: tuningModeRequestTopicName,
+        type: "boolean",
+        value: enabled,
+        lastChangedTime: Date.now()
+      });
       upsertTopic({
         name: tuningModeTopicName,
         type: "boolean",

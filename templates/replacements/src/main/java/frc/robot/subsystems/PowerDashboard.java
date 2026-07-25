@@ -26,6 +26,7 @@ public class PowerDashboard extends SubsystemBase {
   private final NetworkTable tuningTable =
       NetworkTableInstance.getDefault().getTable("PowerLib").getSubTable("Tuning");
   private final NetworkTableEntry tuningEnabledEntry = tuningTable.getEntry("Enabled");
+  private final NetworkTableEntry tuningRequestedEntry = tuningTable.getEntry("RequestedEnabled");
   private final NetworkTable characterizationTable =
       NetworkTableInstance.getDefault().getTable("PowerLib").getSubTable("Characterization");
   private final Map<String, CharacterizationCommandBinding> characterizationCommands = new HashMap<>();
@@ -57,10 +58,10 @@ public class PowerDashboard extends SubsystemBase {
     }
 
     nextTuningModeSyncTime = now + TUNING_MODE_SYNC_INTERVAL_SECONDS;
-    if (!tuningEnabledEntry.exists()) {
-      tuningEnabledEntry.setBoolean(PowerRobotContainer.isTuningEnabled());
-    }
-    PowerRobotContainer.setTuningEnabled(tuningEnabledEntry.getBoolean(false));
+    boolean currentEnabled = PowerRobotContainer.isTuningEnabled();
+    boolean requestedEnabled = tuningRequestedEntry.getBoolean(currentEnabled);
+    PowerRobotContainer.setTuningEnabled(requestedEnabled);
+    tuningEnabledEntry.setBoolean(requestedEnabled);
   }
 
   private void publishSubsystemData() {

@@ -2,6 +2,7 @@ import type { NtPrimitive, NtTopicSnapshot, NtTopicType } from "../../networktab
 import { stringifyValue } from "../subsystems/subsystemUtils";
 
 export const tuningModeTopicName = "/PowerLib/Tuning/Enabled";
+export const tuningModeRequestTopicName = "/PowerLib/Tuning/RequestedEnabled";
 export const tunablePathMarker = "/Variables/";
 
 export function getWritableTopicType(topic: NtTopicSnapshot): NtTopicType | null {
