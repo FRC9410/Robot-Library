@@ -24,6 +24,25 @@ const typeInfoByType = {
   string: NetworkTablesTypeInfos.kString
 } as const;
 
+const publishGraceMs = 250;
+
+function isAnnounceTimeoutError(error: unknown) {
+  return error instanceof Error && error.message.includes("was not announced within 3 seconds");
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function waitForPublisher(topic: NetworkTablesTopic<NtPrimitive>, timeoutMs: number) {
+  const startedAt = Date.now();
+  while (!topic.publisher && Date.now() - startedAt < timeoutMs) {
+    await delay(25);
+  }
+
+  return topic.publisher;
+}
+
 export class PowerLibNt4Client {
   private nt: NetworkTables | null = null;
   private topics = new Map<string, NetworkTablesTopic<NtPrimitive>>();
@@ -84,7 +103,30 @@ export class PowerLibNt4Client {
     const topic =
       this.topics.get(name) ?? this.nt.createTopic<NtPrimitive>(name, typeInfoByType[type], value);
     this.topics.set(name, topic);
-    await topic.publish();
+    if (!topic.publisher) {
+      let publishError: unknown = null;
+      const publishPromise = topic.publish().catch((error: unknown) => {
+        publishError = error;
+      });
+      await Promise.race([publishPromise, delay(publishGraceMs)]);
+
+      if (publishError && !isAnnounceTimeoutError(publishError)) {
+        throw publishError;
+      }
+
+      if (!topic.publisher && topic.pubuid !== undefined) {
+        (topic as unknown as { _publisher: boolean })._publisher = true;
+      }
+
+      if (!topic.publisher) {
+        await publishPromise;
+      }
+
+      if (!topic.publisher && publishError) {
+        throw publishError;
+      }
+    }
+
     topic.setValue(value);
   }
 
