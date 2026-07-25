@@ -5,8 +5,10 @@
 package frc.powerlib.subsystems;
 
 import com.ctre.phoenix6.CANBus;
+import com.ctre.phoenix6.configs.MotorOutputConfigs;
 import com.ctre.phoenix6.controls.Follower;
 import com.ctre.phoenix6.hardware.TalonFX;
+import com.ctre.phoenix6.signals.InvertedValue;
 import com.ctre.phoenix6.signals.MotorAlignmentValue;
 import com.ctre.phoenix6.signals.NeutralModeValue;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
@@ -129,7 +131,7 @@ public abstract class PowerSubsystem extends SubsystemBase {
       leaderCanId = canId;
     }
     TalonFX motor = createTalonFx(canId, neutralMode);
-    motor.setInverted(isInverted);
+    applyMotorOutputConfig(motor, isInverted, neutralMode);
     motorsByCanId.put(canId, motor);
     return motor;
   }
@@ -288,8 +290,18 @@ public abstract class PowerSubsystem extends SubsystemBase {
 
     TalonFX motor = getMotorById(canId);
     if (motor != null) {
-      motor.setInverted(reversed);
+      boolean brakeMode = brakeModeByCanId.getOrDefault(canId, true);
+      applyMotorOutputConfig(motor, reversed, brakeMode ? NeutralModeValue.Brake : NeutralModeValue.Coast);
     }
+  }
+
+  private static void applyMotorOutputConfig(
+      TalonFX motor, boolean reversed, NeutralModeValue neutralMode) {
+    MotorOutputConfigs motorOutputConfigs = new MotorOutputConfigs();
+    motorOutputConfigs.Inverted =
+        reversed ? InvertedValue.Clockwise_Positive : InvertedValue.CounterClockwise_Positive;
+    motorOutputConfigs.NeutralMode = neutralMode;
+    motor.getConfigurator().apply(motorOutputConfigs);
   }
 
   public boolean isMotorRunning (int id) {
