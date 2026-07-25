@@ -26,6 +26,17 @@ declare global {
         path: string;
         bindings: unknown[];
       }>;
+      readTuningSelection: () => Promise<{
+        exists: boolean;
+        path: string;
+        selectedTopics: string[];
+        error?: string;
+      }>;
+      saveTuningSelection: (selectedTopics: string[]) => Promise<{
+        exists: boolean;
+        path: string;
+        selectedTopics: string[];
+      }>;
       readBindingConstants: () => Promise<{
         constants: unknown[];
         error?: string;

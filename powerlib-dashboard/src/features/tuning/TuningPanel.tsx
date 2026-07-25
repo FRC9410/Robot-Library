@@ -1,5 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Box, Button, Card, CardContent, Chip, Stack, TextField, Typography } from "@mui/material";
+import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Checkbox,
+  Chip,
+  Stack,
+  TextField,
+  Typography
+} from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import type { NtPrimitive, NtTopicSnapshot, NtTopicType } from "../../networktables/nt4Client";
 import { SaveTunedValuesDialog } from "../networktables/SaveTunedValuesDialog";
 import { useNetworkTables } from "../networktables/NetworkTablesContext";
@@ -12,6 +27,23 @@ import {
   tuningModeTopicName
 } from "../networktables/tuningUtils";
 
+type TuningOwnerKind = "subsystem" | "command";
+
+type TuningOwner = {
+  kind: TuningOwnerKind;
+  ownerName: string;
+};
+
+type ParsedTunableTopic = TuningOwner & {
+  variableKey: string;
+};
+
+type TuningOwnerGroup = TuningOwner & {
+  topics: NtTopicSnapshot[];
+};
+
+type ExpandedSections = Record<TuningOwnerKind, boolean>;
+
 type TunableVariableRowProps = {
   disabled: boolean;
   draft: string;
@@ -20,6 +52,114 @@ type TunableVariableRowProps = {
   onDraftChange: (topicName: string, draft: string) => void;
   onRequestApply: () => void;
 };
+
+type TuningSidebarProps = {
+  commandOwners: TuningOwnerGroup[];
+  expandedSections: ExpandedSections;
+  getPendingCount: (topics: NtTopicSnapshot[]) => number;
+  onToggleSection: (kind: TuningOwnerKind, expanded: boolean) => void;
+  onToggleTopicSelection: (topicName: string, selected: boolean) => void;
+  pendingTopicNames: Set<string>;
+  selectedTopicNames: Set<string>;
+  subsystemOwners: TuningOwnerGroup[];
+};
+
+const subsystemVariablesPrefix = "/PowerLib/Subsystems/";
+const commandVariablesPrefix = "/PowerLib/Commands/";
+
+function getOwnerKey(owner: TuningOwner) {
+  return `${owner.kind}:${owner.ownerName}`;
+}
+
+function getOwnerLabel(kind: TuningOwnerKind) {
+  return kind === "subsystem" ? "Subsystem" : "Command";
+}
+
+function normalizeSelectedTopicNames(topicNames: string[]) {
+  return Array.from(new Set(topicNames.map((topicName) => topicName.trim()).filter(Boolean))).sort((left, right) =>
+    left.localeCompare(right)
+  );
+}
+
+function parseTunableTopic(topic: NtTopicSnapshot): ParsedTunableTopic | null {
+  const candidates: Array<{ kind: TuningOwnerKind; prefix: string }> = [
+    { kind: "subsystem", prefix: subsystemVariablesPrefix },
+    { kind: "command", prefix: commandVariablesPrefix }
+  ];
+
+  for (const candidate of candidates) {
+    if (!topic.name.startsWith(candidate.prefix)) {
+      continue;
+    }
+
+    const [ownerName, section, ...variableParts] = topic.name
+      .slice(candidate.prefix.length)
+      .split("/")
+      .filter(Boolean);
+    if (!ownerName || section !== "Variables" || variableParts.length === 0) {
+      return null;
+    }
+
+    return {
+      kind: candidate.kind,
+      ownerName,
+      variableKey: variableParts.join("/")
+    };
+  }
+
+  return null;
+}
+
+function getVariableDisplayName(topic: NtTopicSnapshot) {
+  return parseTunableTopic(topic)?.variableKey ?? topic.name;
+}
+
+function formatSidebarValue(topic: NtTopicSnapshot) {
+  const value = topicValueToDraft(topic.value);
+  return value.trim().length === 0 ? "—" : value;
+}
+
+function buildOwnerGroups(tunableTopics: NtTopicSnapshot[]) {
+  const groups: Record<TuningOwnerKind, Map<string, TuningOwnerGroup>> = {
+    subsystem: new Map(),
+    command: new Map()
+  };
+
+  tunableTopics.forEach((topic) => {
+    const parsed = parseTunableTopic(topic);
+    if (!parsed) {
+      return;
+    }
+
+    const ownerGroups = groups[parsed.kind];
+    const group = ownerGroups.get(parsed.ownerName) ?? {
+      kind: parsed.kind,
+      ownerName: parsed.ownerName,
+      topics: []
+    };
+    group.topics.push(topic);
+    ownerGroups.set(parsed.ownerName, group);
+  });
+
+  return {
+    subsystems: [...groups.subsystem.values()]
+      .map((group) => ({
+        ...group,
+        topics: [...group.topics].sort((left, right) =>
+          getVariableDisplayName(left).localeCompare(getVariableDisplayName(right))
+        )
+      }))
+      .sort((left, right) => left.ownerName.localeCompare(right.ownerName)),
+    commands: [...groups.command.values()]
+      .map((group) => ({
+        ...group,
+        topics: [...group.topics].sort((left, right) =>
+          getVariableDisplayName(left).localeCompare(getVariableDisplayName(right))
+        )
+      }))
+      .sort((left, right) => left.ownerName.localeCompare(right.ownerName))
+  };
+}
 
 function TunableVariableRow({
   disabled,
@@ -30,6 +170,7 @@ function TunableVariableRow({
   onRequestApply
 }: TunableVariableRowProps) {
   const type = getWritableTopicType(topic);
+  const parsed = parseTunableTopic(topic);
 
   if (!type) {
     return null;
@@ -40,12 +181,23 @@ function TunableVariableRow({
     <Box
       sx={{
         alignItems: "start",
+        border: "1px solid",
+        borderColor: error ? "error.main" : "divider",
+        borderRadius: 1.5,
         display: "grid",
         gap: 1,
-        gridTemplateColumns: { xs: "1fr", md: "minmax(260px, 1fr) 96px minmax(160px, 240px)" }
+        gridTemplateColumns: { xs: "1fr", md: "minmax(260px, 1fr) 96px minmax(160px, 240px)" },
+        p: 1.25
       }}
     >
-      <Typography sx={{ fontFamily: "monospace", overflowWrap: "anywhere", pt: 1 }}>{topic.name}</Typography>
+      <Stack spacing={0.25} sx={{ minWidth: 0, pt: 0.5 }}>
+        <Typography sx={{ fontFamily: "monospace", fontWeight: 800, overflowWrap: "anywhere" }}>
+          {getVariableDisplayName(topic)}
+        </Typography>
+        <Typography color="text.secondary" sx={{ overflowWrap: "anywhere" }} variant="caption">
+          {parsed ? `${getOwnerLabel(parsed.kind)} / ${parsed.ownerName}` : "Tunable"} · {topic.name}
+        </Typography>
+      </Stack>
       <Box sx={{ pt: 0.75 }}>
         <Chip label={writableType} size="small" variant="outlined" />
       </Box>
@@ -66,22 +218,230 @@ function TunableVariableRow({
   );
 }
 
+function TuningSidebarTopicRow({
+  pending,
+  selected,
+  topic,
+  onToggle
+}: {
+  pending: boolean;
+  selected: boolean;
+  topic: NtTopicSnapshot;
+  onToggle: (topicName: string, selected: boolean) => void;
+}) {
+  return (
+    <Box
+      component="label"
+      sx={{
+        alignItems: "flex-start",
+        border: "1px solid",
+        borderColor: selected ? "primary.main" : "divider",
+        borderRadius: 1.25,
+        cursor: "pointer",
+        display: "grid",
+        gap: 0.75,
+        gridTemplateColumns: "auto minmax(0, 1fr) auto",
+        px: 0.75,
+        py: 0.5,
+        transition: "border-color 120ms ease, background-color 120ms ease",
+        ...(selected
+          ? {
+              bgcolor: "rgba(255, 204, 0, 0.08)"
+            }
+          : {
+              "&:hover": {
+                bgcolor: "action.hover"
+              }
+            })
+      }}
+    >
+      <Checkbox
+        checked={selected}
+        size="small"
+        sx={{ mt: -0.25, p: 0.25 }}
+        onChange={(event) => onToggle(topic.name, event.target.checked)}
+      />
+      <Stack spacing={0.15} sx={{ minWidth: 0 }}>
+        <Typography noWrap variant="body2" sx={{ fontFamily: "monospace", fontWeight: 800 }}>
+          {getVariableDisplayName(topic)}
+        </Typography>
+        <Typography noWrap color="text.secondary" variant="caption" sx={{ fontFamily: "monospace" }}>
+          {formatSidebarValue(topic)}
+        </Typography>
+      </Stack>
+      {pending && <Chip color="warning" label="pending" size="small" variant="outlined" />}
+    </Box>
+  );
+}
+
+function TuningSidebar({
+  commandOwners,
+  expandedSections,
+  getPendingCount,
+  onToggleSection,
+  onToggleTopicSelection,
+  pendingTopicNames,
+  selectedTopicNames,
+  subsystemOwners
+}: TuningSidebarProps) {
+  function renderOwnerList(kind: TuningOwnerKind, owners: TuningOwnerGroup[]) {
+    if (owners.length === 0) {
+      return (
+        <Typography color="text.secondary" sx={{ py: 2, textAlign: "center" }}>
+          No {kind === "subsystem" ? "subsystem" : "command"} variables yet.
+        </Typography>
+      );
+    }
+
+    return (
+      <Stack spacing={1.25}>
+        {owners.map((group) => {
+          const pendingCount = getPendingCount(group.topics);
+
+          return (
+            <Box key={getOwnerKey(group)}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 0.75, minWidth: 0 }}>
+                <Typography noWrap sx={{ flexGrow: 1, fontWeight: 900 }}>
+                  {group.ownerName}
+                </Typography>
+                <Chip label={group.topics.length} size="small" variant="outlined" />
+                {pendingCount > 0 && <Chip color="warning" label={pendingCount} size="small" variant="outlined" />}
+              </Stack>
+              <Stack spacing={0.65}>
+                {group.topics.map((topic) => (
+                  <TuningSidebarTopicRow
+                    key={topic.name}
+                    pending={pendingTopicNames.has(topic.name)}
+                    selected={selectedTopicNames.has(topic.name)}
+                    topic={topic}
+                    onToggle={onToggleTopicSelection}
+                  />
+                ))}
+              </Stack>
+            </Box>
+          );
+        })}
+      </Stack>
+    );
+  }
+
+  return (
+    <Card variant="outlined" sx={{ minHeight: 0, overflow: "hidden" }}>
+      <CardContent sx={{ height: "100%", overflowY: "auto" }}>
+        <Stack spacing={1.5}>
+          <Box>
+            <Typography variant="subtitle2" color="text.secondary">
+              Tuning Picker
+            </Typography>
+            <Typography color="text.secondary" variant="caption">
+              Check variables to pin them into the list on the right.
+            </Typography>
+          </Box>
+
+          <Accordion
+            disableGutters
+            expanded={expandedSections.subsystem}
+            onChange={(_, expanded) => onToggleSection("subsystem", expanded)}
+          >
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                <Typography sx={{ fontWeight: 800 }}>Subsystems</Typography>
+                <Chip label={subsystemOwners.length} size="small" />
+              </Stack>
+            </AccordionSummary>
+            <AccordionDetails>{renderOwnerList("subsystem", subsystemOwners)}</AccordionDetails>
+          </Accordion>
+
+          <Accordion
+            disableGutters
+            expanded={expandedSections.command}
+            onChange={(_, expanded) => onToggleSection("command", expanded)}
+          >
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                <Typography sx={{ fontWeight: 800 }}>Commands</Typography>
+                <Chip label={commandOwners.length} size="small" />
+              </Stack>
+            </AccordionSummary>
+            <AccordionDetails>{renderOwnerList("command", commandOwners)}</AccordionDetails>
+          </Accordion>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function TuningPanel() {
   const { clientRef, status, topics, upsertTopic } = useNetworkTables();
   const [saveValuesOpen, setSaveValuesOpen] = useState(false);
   const [panelError, setPanelError] = useState<string | null>(null);
+  const [selectionError, setSelectionError] = useState<string | null>(null);
+  const [selectionPath, setSelectionPath] = useState<string | null>(null);
+  const [selectionLoading, setSelectionLoading] = useState(false);
+  const [selectedTopicNames, setSelectedTopicNames] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [rowErrors, setRowErrors] = useState<Record<string, string | null>>({});
   const [applying, setApplying] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<ExpandedSections>({
+    subsystem: true,
+    command: false
+  });
   const lastTopicDraftsRef = useRef<Record<string, string>>({});
+  const selectionSaveSequenceRef = useRef(0);
 
   const tunableTopics = useMemo(() => {
     return topics.filter(isTunableTopic).sort((left, right) => left.name.localeCompare(right.name));
   }, [topics]);
+  const tunableTopicMap = useMemo(() => new Map(tunableTopics.map((topic) => [topic.name, topic])), [tunableTopics]);
+  const ownerGroups = useMemo(() => buildOwnerGroups(tunableTopics), [tunableTopics]);
+  const selectedTopicNameSet = useMemo(() => new Set(selectedTopicNames), [selectedTopicNames]);
+  const selectedTopics = useMemo(() => {
+    return selectedTopicNames
+      .map((topicName) => tunableTopicMap.get(topicName))
+      .filter((topic): topic is NtTopicSnapshot => Boolean(topic));
+  }, [selectedTopicNames, tunableTopicMap]);
+  const unavailableSelectionCount = selectedTopicNames.length - selectedTopics.length;
   const tuningModeTopic = topics.find((topic) => topic.name === tuningModeTopicName);
   const tuningModeRequestTopic = topics.find((topic) => topic.name === tuningModeRequestTopicName);
   const tuningModeEnabled = tuningModeTopic?.value === true;
   const tuningModeRequested = tuningModeRequestTopic?.value === true;
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadSelection() {
+      if (!window.powerlib?.readTuningSelection) {
+        return;
+      }
+
+      setSelectionLoading(true);
+      try {
+        const result = await window.powerlib.readTuningSelection();
+        if (!active) {
+          return;
+        }
+
+        setSelectionPath(result.path);
+        setSelectedTopicNames(normalizeSelectedTopicNames(result.selectedTopics));
+        setSelectionError(result.error ?? null);
+      } catch (caught) {
+        if (!active) {
+          return;
+        }
+        const message = caught instanceof Error ? caught.message : String(caught);
+        setSelectionError(`Could not read tuning selection: ${message}`);
+      } finally {
+        if (active) {
+          setSelectionLoading(false);
+        }
+      }
+    }
+
+    void loadSelection();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const nextTopicDrafts = Object.fromEntries(
@@ -114,27 +474,99 @@ export function TuningPanel() {
     lastTopicDraftsRef.current = nextTopicDrafts;
   }, [tunableTopics]);
 
-  const pendingTopics = useMemo(() => {
+  const allPendingTopics = useMemo(() => {
     return tunableTopics.filter((topic) => {
       const baseline = topicValueToDraft(topic.value);
       return (drafts[topic.name] ?? baseline) !== baseline;
     });
   }, [drafts, tunableTopics]);
 
+  const selectedPendingTopics = useMemo(() => {
+    return selectedTopics.filter((topic) => {
+      const baseline = topicValueToDraft(topic.value);
+      return (drafts[topic.name] ?? baseline) !== baseline;
+    });
+  }, [drafts, selectedTopics]);
+
+  const selectedPendingTopicNames = useMemo(
+    () => new Set(selectedPendingTopics.map((topic) => topic.name)),
+    [selectedPendingTopics]
+  );
+
+  function getPendingCount(ownerTopics: NtTopicSnapshot[]) {
+    return ownerTopics.filter((topic) => selectedPendingTopicNames.has(topic.name)).length;
+  }
+
   function updateDraft(topicName: string, draft: string) {
     setDrafts((current) => ({ ...current, [topicName]: draft }));
     setRowErrors((current) => ({ ...current, [topicName]: null }));
   }
 
+  function updateExpandedSection(kind: TuningOwnerKind, expanded: boolean) {
+    setExpandedSections((current) => {
+      const otherKind: TuningOwnerKind = kind === "subsystem" ? "command" : "subsystem";
+      if (!expanded && !current[otherKind]) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [kind]: expanded
+      };
+    });
+  }
+
+  async function persistSelectedTopicNames(nextTopicNames: string[]) {
+    const normalizedTopicNames = normalizeSelectedTopicNames(nextTopicNames);
+    setSelectedTopicNames(normalizedTopicNames);
+
+    if (!window.powerlib?.saveTuningSelection) {
+      setSelectionError("Tuning selection can only be saved from the Power Tool desktop app.");
+      return;
+    }
+
+    const saveSequence = selectionSaveSequenceRef.current + 1;
+    selectionSaveSequenceRef.current = saveSequence;
+
+    try {
+      const result = await window.powerlib.saveTuningSelection(normalizedTopicNames);
+      if (selectionSaveSequenceRef.current !== saveSequence) {
+        return;
+      }
+
+      setSelectionPath(result.path);
+      setSelectedTopicNames(normalizeSelectedTopicNames(result.selectedTopics));
+      setSelectionError(null);
+    } catch (caught) {
+      if (selectionSaveSequenceRef.current !== saveSequence) {
+        return;
+      }
+
+      const message = caught instanceof Error ? caught.message : String(caught);
+      setSelectionError(`Could not save tuning selection: ${message}`);
+    }
+  }
+
+  function toggleTopicSelection(topicName: string, selected: boolean) {
+    const nextTopicNames = new Set(selectedTopicNames);
+    if (selected) {
+      nextTopicNames.add(topicName);
+    } else {
+      nextTopicNames.delete(topicName);
+    }
+
+    void persistSelectedTopicNames([...nextTopicNames]);
+  }
+
   async function applyPendingChanges() {
-    if (status !== "connected" || applying || pendingTopics.length === 0) {
+    if (status !== "connected" || applying || selectedPendingTopics.length === 0) {
       return;
     }
 
     const nextErrors: Record<string, string | null> = {};
     const changes: Array<{ topic: NtTopicSnapshot; type: NtTopicType; value: NtPrimitive }> = [];
 
-    pendingTopics.forEach((topic) => {
+    selectedPendingTopics.forEach((topic) => {
       const type = getWritableTopicType(topic);
       if (!type) {
         return;
@@ -190,75 +622,125 @@ export function TuningPanel() {
 
   return (
     <Stack spacing={2}>
-      <Card variant="outlined">
-        <CardContent>
-          <Stack spacing={1.5}>
-            <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ alignItems: { md: "center" } }}>
-              <Box sx={{ flexGrow: 1 }}>
-                <Typography variant="h6">Tuning</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Apply stages command and subsystem values in NetworkTables. Save Values writes selected changes back
-                  to JSON so Update Code can regenerate them later.
-                </Typography>
-              </Box>
-              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                <Chip label={`${pendingTopics.length} pending`} size="small" variant="outlined" />
-                <Button
-                  disabled={status !== "connected" || applying || pendingTopics.length === 0}
-                  onClick={() => void applyPendingChanges()}
-                  size="small"
-                  variant="contained"
-                >
-                  {applying ? "Applying" : "Apply Changes"}
-                </Button>
-                <Button
-                  disabled={tunableTopics.length === 0 || !window.powerlib?.readSubsystems || !window.powerlib?.readBindings}
-                  onClick={() => setSaveValuesOpen(true)}
-                  size="small"
-                  variant="outlined"
-                >
-                  Save Values
-                </Button>
+      <Box
+        sx={{
+          display: "grid",
+          gap: 2,
+          gridTemplateColumns: { xs: "1fr", md: "360px 1fr" },
+          height: { xs: "auto", md: "calc(100vh - 150px)" },
+          minHeight: { md: 520 },
+          overflow: { xs: "visible", md: "hidden" }
+        }}
+      >
+        <TuningSidebar
+          commandOwners={ownerGroups.commands}
+          expandedSections={expandedSections}
+          getPendingCount={getPendingCount}
+          pendingTopicNames={selectedPendingTopicNames}
+          selectedTopicNames={selectedTopicNameSet}
+          subsystemOwners={ownerGroups.subsystems}
+          onToggleSection={updateExpandedSection}
+          onToggleTopicSelection={toggleTopicSelection}
+        />
+
+        <Card variant="outlined" sx={{ minHeight: 0, overflow: "hidden" }}>
+          <CardContent sx={{ height: "100%", overflowY: "auto" }}>
+            <Stack spacing={1.5}>
+              <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ alignItems: { md: "center" } }}>
+                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+                    <Typography variant="h6">Selected Tunables</Typography>
+                    <Chip label={`${selectedTopics.length} shown`} size="small" variant="outlined" />
+                    {unavailableSelectionCount > 0 && (
+                      <Chip color="warning" label={`${unavailableSelectionCount} offline`} size="small" />
+                    )}
+                  </Stack>
+                  <Typography variant="body2" color="text.secondary">
+                    Checked variables appear here as one edit list. Checkboxes save immediately
+                    {selectionPath ? ` to ${selectionPath}` : " to the tuning selection JSON"}.
+                  </Typography>
+                </Box>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                  {selectionLoading && <Chip label="loading selection" size="small" variant="outlined" />}
+                  <Chip label={`${selectedPendingTopics.length} pending`} size="small" variant="outlined" />
+                  {allPendingTopics.length > selectedPendingTopics.length && (
+                    <Chip
+                      color="warning"
+                      label={`${allPendingTopics.length - selectedPendingTopics.length} hidden pending`}
+                      size="small"
+                      variant="outlined"
+                    />
+                  )}
+                  <Button
+                    disabled={status !== "connected" || applying || selectedPendingTopics.length === 0}
+                    onClick={() => void applyPendingChanges()}
+                    size="small"
+                    variant="contained"
+                  >
+                    {applying ? "Applying" : "Apply Changes"}
+                  </Button>
+                  <Button
+                    disabled={
+                      tunableTopics.length === 0 || !window.powerlib?.readSubsystems || !window.powerlib?.readBindings
+                    }
+                    onClick={() => setSaveValuesOpen(true)}
+                    size="small"
+                    variant="outlined"
+                  >
+                    Save Values
+                  </Button>
+                </Stack>
               </Stack>
+
+              <Alert severity={tuningModeEnabled ? "warning" : "info"} variant="outlined">
+                {tuningModeEnabled
+                  ? "Tuning mode is on: applied values can change subsystem gains and generated command targets live."
+                  : "Tuning mode is off: applied values are staged in NetworkTables, but robot code uses generated constants/defaults."}
+                {tuningModeRequestTopic && tuningModeRequested !== tuningModeEnabled
+                  ? ` Requested mode is ${tuningModeRequested ? "on" : "off"}; waiting for robot acknowledgement.`
+                  : ""}
+              </Alert>
+              {selectionError && (
+                <Alert severity="error" onClose={() => setSelectionError(null)}>
+                  {selectionError}
+                </Alert>
+              )}
+              {panelError && (
+                <Alert severity="error" onClose={() => setPanelError(null)}>
+                  {panelError}
+                </Alert>
+              )}
+              {unavailableSelectionCount > 0 && (
+                <Alert severity="info" variant="outlined">
+                  {unavailableSelectionCount} saved selection{unavailableSelectionCount === 1 ? " is" : "s are"} not
+                  currently published. It will reappear automatically when robot code publishes that variable again.
+                </Alert>
+              )}
+
+              {selectedTopics.length > 0 ? (
+                <Stack spacing={1}>
+                  {selectedTopics.map((topic) => (
+                    <TunableVariableRow
+                      key={topic.name}
+                      disabled={status !== "connected" || applying}
+                      draft={drafts[topic.name] ?? topicValueToDraft(topic.value)}
+                      error={rowErrors[topic.name] ?? null}
+                      topic={topic}
+                      onDraftChange={updateDraft}
+                      onRequestApply={() => void applyPendingChanges()}
+                    />
+                  ))}
+                </Stack>
+              ) : (
+                <Alert severity="info" variant="outlined">
+                  Check variables in the sidebar to build your tuning list. Generated subsystem control values and
+                  generated command values will appear there while robot code is running.
+                </Alert>
+              )}
             </Stack>
-
-            <Alert severity={tuningModeEnabled ? "warning" : "info"} variant="outlined">
-              {tuningModeEnabled
-                ? "Tuning mode is on: applied values can change subsystem gains and generated command targets live."
-                : "Tuning mode is off: applied values are staged in NetworkTables, but robot code uses generated constants/defaults."}
-              {tuningModeRequestTopic && tuningModeRequested !== tuningModeEnabled
-                ? ` Requested mode is ${tuningModeRequested ? "on" : "off"}; waiting for robot acknowledgement.`
-                : ""}
-            </Alert>
-            {panelError && (
-              <Alert severity="error" onClose={() => setPanelError(null)}>
-                {panelError}
-              </Alert>
-            )}
-
-            {tunableTopics.length > 0 ? (
-              <Stack spacing={1}>
-                {tunableTopics.map((topic) => (
-                  <TunableVariableRow
-                    key={topic.name}
-                    disabled={status !== "connected" || applying}
-                    draft={drafts[topic.name] ?? topicValueToDraft(topic.value)}
-                    error={rowErrors[topic.name] ?? null}
-                    topic={topic}
-                    onDraftChange={updateDraft}
-                    onRequestApply={() => void applyPendingChanges()}
-                  />
-                ))}
-              </Stack>
-            ) : (
-              <Alert severity="info" variant="outlined">
-                No live tunable variables are published yet. Generated subsystem control values and generated command
-                values will appear here while robot code is running.
-              </Alert>
-            )}
-          </Stack>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </Box>
 
       <SaveTunedValuesDialog open={saveValuesOpen} topics={topics} onClose={() => setSaveValuesOpen(false)} />
     </Stack>

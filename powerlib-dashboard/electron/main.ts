@@ -110,6 +110,33 @@ function getBindingsJsonCandidates() {
   );
 }
 
+function getTuningSelectionJsonCandidates() {
+  const robotRoot = getDetectedRobotRoot();
+  return Array.from(
+    new Set([
+      path.resolve(robotRoot, "powerlib-tuning-selection.json"),
+      path.resolve(process.cwd(), "powerlib-tuning-selection.json"),
+      path.resolve(process.cwd(), "..", "powerlib-tuning-selection.json"),
+      path.resolve(app.getAppPath(), "powerlib-tuning-selection.json"),
+      path.resolve(app.getAppPath(), "..", "powerlib-tuning-selection.json")
+    ])
+  );
+}
+
+function normalizeSelectedTopicNames(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      value
+        .filter((topicName): topicName is string => typeof topicName === "string" && topicName.trim().length > 0)
+        .map((topicName) => topicName.trim())
+    )
+  ).sort((left, right) => left.localeCompare(right));
+}
+
 function getRobotRoot(subsystemsJsonPath: string) {
   return path.dirname(subsystemsJsonPath);
 }
@@ -279,6 +306,62 @@ ipcMain.handle("powerlib:save-bindings", async (_event, bindings: unknown[]) => 
     exists: true,
     path: targetPath,
     bindings: document.bindings
+  };
+});
+
+ipcMain.handle("powerlib:read-tuning-selection", async () => {
+  for (const candidate of getTuningSelectionJsonCandidates()) {
+    try {
+      const raw = await fs.readFile(candidate, "utf-8");
+      const parsed = JSON.parse(raw);
+      return {
+        exists: true,
+        path: candidate,
+        selectedTopics: normalizeSelectedTopicNames(Array.isArray(parsed) ? parsed : parsed?.selectedTopics)
+      };
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+      if (code !== "ENOENT") {
+        return {
+          exists: false,
+          path: candidate,
+          selectedTopics: [],
+          error: error instanceof Error ? error.message : "Could not read powerlib-tuning-selection.json."
+        };
+      }
+    }
+  }
+
+  return {
+    exists: false,
+    path: getTuningSelectionJsonCandidates()[0],
+    selectedTopics: []
+  };
+});
+
+ipcMain.handle("powerlib:save-tuning-selection", async (_event, selectedTopics: unknown) => {
+  let targetPath = getTuningSelectionJsonCandidates()[0];
+
+  for (const candidate of getTuningSelectionJsonCandidates()) {
+    try {
+      await fs.access(candidate);
+      targetPath = candidate;
+      break;
+    } catch {
+      // Keep looking. If none exist, write to the installed robot root candidate.
+    }
+  }
+
+  const document = {
+    version: 1,
+    selectedTopics: normalizeSelectedTopicNames(selectedTopics)
+  };
+
+  await fs.writeFile(targetPath, `${JSON.stringify(document, null, 2)}\n`, "utf-8");
+  return {
+    exists: true,
+    path: targetPath,
+    selectedTopics: document.selectedTopics
   };
 });
 
