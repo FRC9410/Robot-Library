@@ -4,33 +4,39 @@ description: >
   Use this skill whenever a Team 9410 PowerLib robot project needs MapleSim simulation set up,
   configured, or regenerated from scratch. Triggers on any mention of "sim setup", "simulation",
   "maple sim", "SimManager", "game pieces in sim", or "set up sim" in the context of the Robot-Library
-  / PowerLib codebase. This skill guides the user through collecting all required physical robot values
-  and game piece definitions, then generates MapleSimSwerveDrivetrain.java, SimManager.java, updates
-  Swerve.java and Robot.java, and writes a sim-config.md reference doc.
+  / PowerLib codebase. This skill guides the user through collecting robot physical values,
+  researching FRC season game piece details and starting positions when a year is specified,
+  then generates MapleSimSwerveDrivetrain.java, SimManager.java, updates Swerve.java,
+  RobotContainer.java, and Robot.java, and writes a sim-config.md reference doc.
 ---
 
 # PowerLib Sim Setup Skill
 
-This skill collects robot physical properties and game piece definitions from the user, then generates
-all MapleSim integration files for a Team 9410 PowerLib robot project.
+This skill collects robot physical properties, researches or collects game piece definitions,
+then generates all MapleSim integration files for a Team 9410 PowerLib robot project.
 
 ## What Gets Generated / Modified
 
 | File | Action |
 |------|--------|
-| `gradle.properties` | Created — pins Gradle to WPILib JDK 17 |
-| `src/main/java/frc/robot/utils/simulation/MapleSimSwerveDrivetrain.java` | Created — MapleSim physics wrapper, correct API, damping fix, heading sync |
-| `src/main/java/frc/robot/utils/simulation/SimManager.java` | Created — correct GamePieceInfo 7-field API, Pose3d publishing |
-| `src/main/java/frc/robot/subsystems/Swerve.java` | Modified — startSimThread(), sim pose publisher |
-| `src/main/java/frc/robot/Robot.java` | Modified — simulationPeriodic(), resetField(), publishPoses() |
-| `sim-config.md` | Created — reference doc |
+| `gradle.properties` | Created - pins Gradle to WPILib JDK 17 |
+| `src/main/java/frc/robot/utils/simulation/MapleSimSwerveDrivetrain.java` | Created - MapleSim physics wrapper, correct API, damping fix, heading sync |
+| `src/main/java/frc/robot/utils/simulation/SimManager.java` | Created - correct GamePieceInfo 7-field API, Pose3d publishing |
+| `src/main/java/frc/robot/subsystems/Swerve.java` | Modified - startSimThread(), sim pose publisher, CTRE/MapleSim initial pose sync |
+| `src/main/java/frc/robot/RobotContainer.java` | Modified when needed - ensure StateMachine/default drive command wiring and getStateMachine() access |
+| `src/main/java/frc/robot/Robot.java` | Modified - simulationPeriodic(), resetField(), publishPoses(), uses RobotContainer-owned drivetrain |
+| `sim-config.md` | Created - reference doc |
 
 ## What Does NOT Change
 
-- `StateMachine.java` — no static block needed (see Problem 2 note below)
+- `StateMachine.java` - no static block needed (see Problem 2 note below)
 - `VelocitySubsystemIOSim`, `PositionSubsystemIOSim`, `AbsolutePositionSubsystemIOSim`
 - All other PowerLib library files
-- `RobotContainer.java`, constants files
+- constants files
+
+Do NOT create a second `StateMachine` in `Robot.java`. `RobotContainer` should own the
+`StateMachine`; `Robot.java` should reach the drivetrain through `m_robotContainer.getStateMachine()`
+or the equivalent chain traced from the actual project.
 
 ---
 
@@ -50,8 +56,8 @@ Read this section before generating any file. These are verified against the act
 - `org.ironmaple.simulation.gamepieces.GamePieceOnFieldSimulation.GamePieceInfo` (nested record)
 
 ### Classes that DO NOT exist in the vendordep
-- `org.ironmaple.simulation.drivesims.MapleSimSwerveDrivetrain` — does NOT exist
-- `org.ironmaple.simulation.drivesims.CTRESwerveDrivetrainSimulation` — does NOT exist
+- `org.ironmaple.simulation.drivesims.MapleSimSwerveDrivetrain` - does NOT exist
+- `org.ironmaple.simulation.drivesims.CTRESwerveDrivetrainSimulation` - does NOT exist
 - There is NO `regulateModuleConstantsForSimulation()` method anywhere in the library
 
 ### Key API signatures (verified from source)
@@ -70,21 +76,21 @@ Read this section before generating any file. These are verified against the act
 .withSwerveModule(new SwerveModuleSimulationConfig(...))
 ```
 
-`SwerveModuleSimulationConfig` constructor — 9 parameters (verified via javap):
+`SwerveModuleSimulationConfig` constructor - 9 parameters (verified via javap):
 ```java
 new SwerveModuleSimulationConfig(
     DCMotor,           // drive motor
     DCMotor,           // steer motor
     double,            // drive gear ratio
     double,            // steer gear ratio
-    Voltage,           // drive friction voltage  — use kDriveFrictionVoltage from TunerConstants
-    Voltage,           // steer friction voltage  — use kSteerFrictionVoltage from TunerConstants
+    Voltage,           // drive friction voltage  - use kDriveFrictionVoltage from TunerConstants
+    Voltage,           // steer friction voltage  - use kSteerFrictionVoltage from TunerConstants
     Distance,          // wheel radius
-    MomentOfInertia,   // steer MOI              — use kSteerInertia from TunerConstants
+    MomentOfInertia,   // steer MOI              - use kSteerInertia from TunerConstants
     double)            // wheel COF
 ```
 
-Do NOT use a 6-parameter form — it does not exist in 0.4.0-beta.
+Do NOT use a 6-parameter form - it does not exist in 0.4.0-beta.
 
 Example using PowerLib TunerConstants values:
 ```java
@@ -101,13 +107,13 @@ Example using PowerLib TunerConstants values:
 ```
 
 Note: `KilogramSquareMeters.of(...)` and `Volts.of(...)` are covered by
-`import static edu.wpi.first.units.Units.*` — do NOT add explicit measure imports.
+`import static edu.wpi.first.units.Units.*` - do NOT add explicit measure imports.
 
-`GamePieceInfo` record — 7 fields, not 4:
+`GamePieceInfo` record - 7 fields, not 4:
 ```java
 public record GamePieceInfo(
     String type,
-    Convex shape,           // dyn4j Convex — use new Circle(radiusMeters) or new Rectangle(l, w)
+    Convex shape,           // dyn4j Convex - use new Circle(radiusMeters) or new Rectangle(l, w)
     Distance gamePieceHeight,
     Mass gamePieceMass,
     double linearDamping,
@@ -120,7 +126,7 @@ public record GamePieceInfo(
 public synchronized Pose3d[] getGamePiecesArrayByType(String type)
 ```
 
-### CTRE internal sim — do NOT duplicate
+### CTRE internal sim - do NOT duplicate
 
 `SwerveDrivetrain` (the CTRE base class that `Swerve` extends) already creates an internal
 `SimSwerveDrivetrain` field (`m_simDrive`) and calls `m_simDrive.update(...)` inside
@@ -133,12 +139,12 @@ double-simulate all CTRE motor states. The wrapper only owns `SwerveDriveSimulat
 ### WheelRadius type
 
 `TunerConstants.FrontLeft.WheelRadius` is declared as `Distance` (e.g. `Inches.of(2)`),
-not a raw `double`. Do NOT wrap it in `Meters.of(...)` — that would fail to compile since
+not a raw `double`. Do NOT wrap it in `Meters.of(...)` - that would fail to compile since
 `Meters.of()` takes a `double` not a `Distance`.
 
 Instead, hardcode the wheel radius from the known value in TunerConstants:
 ```java
-Meters.of(0.0508)  // 2 inches — matches TunerConstants kWheelRadius = Inches.of(2)
+Meters.of(0.0508)  // 2 inches - matches TunerConstants kWheelRadius = Inches.of(2)
 ```
 
 Or read the double value:
@@ -165,7 +171,7 @@ Without this, Java 26 causes `Could not create task ':test' > Type T not present
 Ask the user for each value below as a numbered list:
 
 ```
-1. Robot weight in pounds (typical: 100–130 lbs)
+1. Robot weight in pounds (typical: 100-130 lbs)
 2. Bumper length in inches (outside edge to outside edge, front-to-back)
 3. Bumper width in inches (outside edge to outside edge, side-to-side)
 4. Wheel COF (default: 1.2 for Colsons, 1.5 for grippy treads)
@@ -185,21 +191,46 @@ Ask the user for each value below as a numbered list:
 
 ---
 
-## Step 3: Collect Game Piece Definitions
+## Step 3: Research or Collect Game Piece Definitions
+
+First determine the season context:
+- If the user provides an FRC year/season, research that year's game piece before asking them
+  for physical details.
+- If the user names a game piece but no year, ask for the season year unless the game piece
+  details are already unambiguous from context.
+- If the user explicitly wants custom/non-FRC game pieces, skip research and collect details manually.
+
+When researching, use web search and prefer sources in this order:
+1. Official FIRST game manual, field drawings, field CAD, Team Updates, or season page.
+2. Official WPILib, AdvantageScope, or field-coordinate references when locating starting positions.
+3. Team or community sources only when official sources do not provide dimensions, mass, or layout.
+
+For every researched game piece, extract:
+- Name/type
+- Shape approximation for MapleSim: cylinder/circle footprint or box/rectangle footprint
+- Diameter/radius or length/width
+- Height/thickness
+- Mass
+- Field starting locations or staged locations, converted to WPILib field coordinates in meters
+- Source URLs used for the values
+
+If sources conflict, tell the user what conflicted and ask which value to use. If official sources
+give dimensions/mass but not easy spawn coordinates, use the default positions below and say so.
+Only ask the user for fields that are missing, ambiguous, or intentionally custom.
 
 Tell the user:
 > "Define the game pieces for this season. Enter 'done' when finished."
 
-For each game piece, ask for ALL of the following. Do not proceed to code generation until
-every field has been explicitly provided — if any field is missing, ask a follow-up question
-for that specific field before continuing.
+For manually entered or still-missing game piece details, ask only for the needed fields below.
+Do not proceed to code generation until every field is known from research, defaults, or user input.
+If any required field is missing, ask a follow-up question for that specific field before continuing.
 
 ```
 1. Name (e.g. "Ball", "Note", "Coral")
 2. Shape:
-      a) Cylinder — size (see NOTE below)
-      b) Box — length x width in inches
-3. Height — REQUIRED. Ask explicitly if not provided. Accept inches or meters.
+      a) Cylinder - size (see NOTE below)
+      b) Box - length x width in inches
+3. Height - REQUIRED. Ask explicitly if not provided. Accept inches or meters.
 4. Mass in kg
 5. Linear damping (default: 0.8)
 6. Angular damping (default: 0.8)
@@ -209,17 +240,17 @@ for that specific field before continuing.
    (2.0, 2.5) | (2.0, 5.5) | (4.0, 4.0) | (6.0, 2.5) | (6.0, 5.5)
 ```
 
-CYLINDER SIZE NOTE — accept any of these formats and convert appropriately:
-- Diameter in inches → radius = diameter / 2 → `new Circle(Inches.of(radius).in(Meters))`
-- Radius in inches → `new Circle(Inches.of(radius).in(Meters))`
-- Radius in meters → `new Circle(radiusMeters)` directly, no conversion needed
+CYLINDER SIZE NOTE - accept any of these formats and convert appropriately:
+- Diameter in inches -> radius = diameter / 2 -> `new Circle(Inches.of(radius).in(Meters))`
+- Radius in inches -> `new Circle(Inches.of(radius).in(Meters))`
+- Radius in meters -> `new Circle(radiusMeters)` directly, no conversion needed
 
 If the user's response is ambiguous (e.g. just a number with no unit), ask whether it is
 radius or diameter and whether it is inches or meters before generating code.
 
-HEIGHT NOTE — accept inches or meters:
-- Inches → `Inches.of(value)`
-- Meters → `Meters.of(value)`
+HEIGHT NOTE - accept inches or meters:
+- Inches -> `Inches.of(value)`
+- Meters -> `Meters.of(value)`
 
 If height is not in the user's initial response, ask for it before proceeding.
 
@@ -230,7 +261,7 @@ If height is not in the user's initial response, ask for it before proceeding.
 This is a project-local wrapper class. It does NOT exist in the MapleSim vendordep.
 Generate the full file from scratch using the template below.
 
-### Constructor — 3 parameters only
+### Constructor - 3 parameters only
 
 ```java
 public MapleSimSwerveDrivetrain(
@@ -239,7 +270,7 @@ public MapleSimSwerveDrivetrain(
     Supplier<Rotation2d> headingSupplier)
 ```
 
-Do NOT add Pigeon2, SwerveModule[], or SwerveModuleConstants[] — the CTRE base class
+Do NOT add Pigeon2, SwerveModule[], or SwerveModuleConstants[] - the CTRE base class
 handles all of that internally via `updateSimState()`.
 
 ### DriveTrainSimulationConfig
@@ -247,14 +278,14 @@ handles all of that internally via `updateSimState()`.
 IMPORTANT: Before generating this file, read TunerConstants.java and extract the literal
 values for these fields. They are ALL declared `private static final` and cannot be
 referenced externally as `TunerConstants.kXxx`. Never emit `TunerConstants.kDriveGearRatio`
-or similar — it will not compile. Always hardcode the values you read from the file.
+or similar - it will not compile. Always hardcode the values you read from the file.
 
 Fields to extract from TunerConstants.java:
-- `kDriveGearRatio` — private static final double
-- `kSteerGearRatio` — private static final double
-- `kDriveFrictionVoltage` — private static final Voltage (e.g. `Volts.of(0.2)`)
-- `kSteerFrictionVoltage` — private static final Voltage (e.g. `Volts.of(0.2)`)
-- `kSteerInertia` — private static final MomentOfInertia (e.g. `KilogramSquareMeters.of(0.01)`)
+- `kDriveGearRatio` - private static final double
+- `kSteerGearRatio` - private static final double
+- `kDriveFrictionVoltage` - private static final Voltage (e.g. `Volts.of(0.2)`)
+- `kSteerFrictionVoltage` - private static final Voltage (e.g. `Volts.of(0.2)`)
+- `kSteerInertia` - private static final MomentOfInertia (e.g. `KilogramSquareMeters.of(0.01)`)
 
 ```java
 DriveTrainSimulationConfig config = DriveTrainSimulationConfig.Default()
@@ -268,7 +299,7 @@ DriveTrainSimulationConfig config = DriveTrainSimulationConfig.Default()
         {{STEER_GEAR_RATIO_VALUE}},            // hardcoded from kSteerGearRatio
         Volts.of({{DRIVE_FRICTION_VOLTAGE}}),  // hardcoded from kDriveFrictionVoltage
         Volts.of({{STEER_FRICTION_VOLTAGE}}),  // hardcoded from kSteerFrictionVoltage
-        Meters.of(0.0508),                     // wheel radius hardcoded — WheelRadius is Distance not double
+        Meters.of(0.0508),                     // wheel radius hardcoded - WheelRadius is Distance not double
         KilogramSquareMeters.of({{STEER_INERTIA_VALUE}}), // hardcoded from kSteerInertia
         {{WHEEL_COF}}));
 ```
@@ -320,11 +351,11 @@ public class MapleSimSwerveDrivetrain {
                 KilogramSquareMeters.of({{STEER_INERTIA_VALUE}}), // hardcoded from TunerConstants kSteerInertia (private)
                 {{WHEEL_COF}}));
 
-        // Initial pose — NOT new Pose2d() which places robot outside the field at (0,0)
+        // Initial pose - NOT new Pose2d() which places robot outside the field at (0,0)
         mapleSimDrive = new SwerveDriveSimulation(config,
             new Pose2d(2.0, 4.025, new Rotation2d(0)));
 
-        // Zero damping — default of 1.4 fights setRobotSpeeds() making robot barely move
+        // Zero damping - default of 1.4 fights setRobotSpeeds() making robot barely move
         mapleSimDrive.setLinearDamping(0);
         mapleSimDrive.setAngularDamping(0);
 
@@ -333,7 +364,7 @@ public class MapleSimSwerveDrivetrain {
 
     /**
      * Called from Robot.simulationPeriodic() at 20ms.
-     * SimulatedArena.simulationPeriodic() runs 5 sub-ticks — calling at 200Hz = 40x real time.
+     * SimulatedArena.simulationPeriodic() runs 5 sub-ticks - calling at 200Hz = 40x real time.
      * setRobotSpeeds() takes FIELD-RELATIVE speeds. Applied before and after tick.
      * Uses CTRE heading to prevent MapleSim heading from diverging after rotation.
      */
@@ -366,8 +397,8 @@ public class MapleSimSwerveDrivetrain {
 ```
 
 TunerConstants gear ratio values to use:
-- `kDriveGearRatio` — look for `private static final double kDriveGearRatio` in TunerConstants
-- `kSteerGearRatio` — look for `private static final double kSteerGearRatio` in TunerConstants
+- `kDriveGearRatio` - look for `private static final double kDriveGearRatio` in TunerConstants
+- `kSteerGearRatio` - look for `private static final double kSteerGearRatio` in TunerConstants
 
 Write to:
 `src/main/java/frc/robot/utils/simulation/MapleSimSwerveDrivetrain.java`
@@ -396,11 +427,11 @@ public class SimManager {
     // Type name constants
     {{GAME_PIECE_TYPE_CONSTANTS}}
 
-    // GamePieceInfo — ALWAYS 7 fields: type, shape, height, mass, linearDamping, angularDamping, restitution
+    // GamePieceInfo - ALWAYS 7 fields: type, shape, height, mass, linearDamping, angularDamping, restitution
     // Shape is a dyn4j Convex: new Circle(radiusMeters) or new Rectangle(lengthMeters, widthMeters)
     {{GAME_PIECE_INFO_CONSTANTS}}
 
-    // Publishers — getGamePiecesArrayByType() returns Pose3d[] NOT Pose2d[]
+    // Publishers - getGamePiecesArrayByType() returns Pose3d[] NOT Pose2d[]
     {{GAME_PIECE_PUBLISHERS}}
 
     private SimManager() {}
@@ -450,7 +481,7 @@ private static final GamePieceInfo CORAL_INFO = new GamePieceInfo(
     0.8, 0.8, 0.3);
 ```
 
-Publisher (Pose3d — not Pose2d):
+Publisher (Pose3d - not Pose2d):
 ```java
 private static StructArrayPublisher<Pose3d> ballPosesPublisher;
 ```
@@ -499,15 +530,19 @@ private final StructPublisher<Pose2d> simPosePublisher =
 
 ```java
 private void startSimThread() {
-    // Initialize m_lastSimTime first — must happen before the Notifier fires.
+    // Initialize m_lastSimTime first - must happen before the Notifier fires.
     // Leaving it at 0.0 causes a massive deltaTime on the first tick equal to robot uptime.
     m_lastSimTime = Utils.getCurrentTimeSeconds();
 
-    // 3 parameters only — CTRE base class handles motor/encoder sim internally
+    // 3 parameters only - CTRE base class handles motor/encoder sim internally
     mapleSimSwerveDrivetrain = new MapleSimSwerveDrivetrain(
         getModuleLocations(),
         () -> getState().Speeds,
         () -> getState().Pose.getRotation());
+
+    // Align CTRE odometry with MapleSim's non-origin starting pose. Without this,
+    // AdvantageScope can show the robot at the field corner or controls can appear disconnected.
+    super.resetPose(mapleSimSwerveDrivetrain.getSimulatedDriveTrainPose());
 
     SimManager.initialize();
 
@@ -559,16 +594,16 @@ if (mapleSimSwerveDrivetrain != null) {
 ### Imports to add
 
 Before adding any import, check the existing Swerve.java imports. Several may already be
-present — adding duplicates causes compiler warnings. Only add imports that are not already there:
+present - adding duplicates causes compiler warnings. Only add imports that are not already there:
 
 ```java
 import frc.robot.utils.simulation.MapleSimSwerveDrivetrain;
 import frc.robot.utils.simulation.SimManager;
-import edu.wpi.first.networktables.StructPublisher;  // may already exist — check first
+import edu.wpi.first.networktables.StructPublisher;  // may already exist - check first
 import edu.wpi.first.wpilibj.Timer;
 ```
 
-Do NOT add `Seconds`, `Pounds`, or `Inches` — `Units.*` already covers them.
+Do NOT add `Seconds`, `Pounds`, or `Inches` - `Units.*` already covers them.
 
 Write to:
 `src/main/java/frc/robot/subsystems/Swerve.java`
@@ -578,13 +613,26 @@ Write to:
 ## Step 7: Update Robot.java
 
 Before writing anything, read these three files to verify the full access chain:
-1. `Robot.java` — find the field name for `RobotContainer` (e.g. `m_robotContainer`)
-2. `RobotContainer.java` — verify `getStateMachine()` exists and returns `StateMachine`
-3. `StateMachine.java` — verify `drivetrain` is a public field of type `Swerve`
+1. `Robot.java` - find the field name for `RobotContainer` (e.g. `m_robotContainer`)
+2. `RobotContainer.java` - verify `getStateMachine()` exists and returns `StateMachine`
+3. `StateMachine.java` - verify `drivetrain` is a public field of type `Swerve`
 
-Do not assume the chain is always `getStateMachine().drivetrain` — trace it from the source.
+Do not assume the chain is always `getStateMachine().drivetrain` - trace it from the source.
 
-Add `simulationPeriodic()` — this is where arena physics ticks at 20ms:
+If active `RobotContainer.java` is the bare WPILib skeleton or does not expose the drivetrain chain,
+update it before changing `Robot.java`:
+- Implement `PowerRobotContainer` if the project uses PowerLib dashboard data.
+- Create a single `private final StateMachine stateMachine = new StateMachine();`.
+- Create driver/operator `CommandXboxController` fields from `Constants.OI`.
+- Call `PowerButtonBindings.configure(driverController, operatorController, stateMachine);`.
+- Set the default swerve command:
+  `stateMachine.drivetrain.setDefaultCommand(new SwerveDriveCommand(stateMachine.drivetrain, driverController));`
+- Add `public StateMachine getStateMachine() { return stateMachine; }`.
+
+Do not add `private final StateMachine m_stateMachine = new StateMachine();` to `Robot.java`.
+That creates a second drivetrain: commands bind to one instance while simulation advances another.
+
+Add `simulationPeriodic()` - this is where arena physics ticks at 20ms:
 
 ```java
 @Override
@@ -628,6 +676,7 @@ Write to:
 Write to project root. Include:
 - Table of robot physical values entered
 - Table of game piece definitions (all 7 GamePieceInfo fields)
+- Source URLs for researched game piece dimensions, mass, and spawn positions when research was used
 - `gradle.properties` must point to WPILib JDK 17
 - How to run: `./gradlew simulateJava`
 - AdvantageScope: subscribe to `Simulation/RobotPose` (Pose2d) and
@@ -635,7 +684,7 @@ Write to project root. Include:
 - Physics timing: arena at 20ms in `Robot.simulationPeriodic()`,
   CTRE motor sim at 5ms in Swerve Notifier
 - `MapleSimSwerveDrivetrain.java` is project-local, not a library class
-- No `regulateModuleConstantsForSimulation()` — that method does not exist in 0.4.0-beta
+- No `regulateModuleConstantsForSimulation()` - that method does not exist in 0.4.0-beta
 
 ---
 
@@ -643,10 +692,11 @@ Write to project root. Include:
 
 Tell the user which files were written and remind them:
 - Run `./gradlew build` to verify
-- Robot spawns at (2.0, 4.025) — inside the blue alliance half
+- Robot spawns at (2.0, 4.025) - inside the blue alliance half
 - `Simulation/RobotPose` = MapleSim ground-truth pose
 - `Simulation/{{Name}}Poses` = Pose3d array of game piece positions
-- StateMachine.java does NOT need a static block — `regulateModuleConstantsForSimulation()` does not exist
+- Robot.java should use the RobotContainer-owned drivetrain, not a separate StateMachine instance
+- StateMachine.java does NOT need a static block - `regulateModuleConstantsForSimulation()` does not exist
 
 ---
 

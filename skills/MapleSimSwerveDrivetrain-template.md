@@ -1,150 +1,90 @@
 # MapleSimSwerveDrivetrain.java Template
 
-## Class Name Correction
+This class is project-local. There is no MapleSim vendordep class named
+`org.ironmaple.simulation.drivesims.MapleSimSwerveDrivetrain`.
 
-There is NO class named `CTRESwerveDrivetrainSimulation` in maple-sim 0.4.0-beta.
+Do not create a second CTRE `SimSwerveDrivetrain` here. The CTRE base drivetrain already owns
+its internal motor/encoder sim and `Swerve.startSimThread()` calls `updateSimState()`.
 
-The two classes you need are:
-- `org.ironmaple.simulation.drivesims.SwerveDriveSimulation` — MapleSim physics engine
-- `com.ctre.phoenix6.swerve.SimSwerveDrivetrain` — CTRE motor/encoder state sim
+## Physics Timing
 
-Both are needed. They serve different purposes.
-
----
-
-## Physics Timing — Critical
-
-`SimulatedArena.simulationPeriodic()` runs 5 internal sub-ticks per call.
-
-- Called at 200 Hz (5ms Notifier): 1000 sub-ticks/second = 40x real time. Robot teleports.
-- Called at 50 Hz (20ms Robot.simulationPeriodic()): 250 sub-ticks/second = correct.
-
-CORRECT split:
-- `update()` — 5ms Notifier — only `ctreSimDrivetrain.update(...)` (CTRE motor sim)
-- `simulationPeriodic()` — Robot.simulationPeriodic() at 20ms — `SimulatedArena.getInstance().simulationPeriodic()`
-
----
+- CTRE motor sim: 5 ms Notifier in `Swerve.startSimThread()`.
+- MapleSim arena physics: 20 ms `Robot.simulationPeriodic()`.
+- `SimulatedArena.simulationPeriodic()` runs internal sub-ticks, so do not call it from the 5 ms Notifier.
 
 ## Full File Template
 
 ```java
 package frc.robot.utils.simulation;
 
-import com.ctre.phoenix6.hardware.Pigeon2;
-import com.ctre.phoenix6.sim.Pigeon2SimState;
-import com.ctre.phoenix6.swerve.SimSwerveDrivetrain;
-import com.ctre.phoenix6.swerve.SwerveModule;
-import com.ctre.phoenix6.swerve.SwerveModuleConstants;
-import org.ironmaple.simulation.SimulatedArena;
-import org.ironmaple.simulation.drivesims.SwerveDriveSimulation;
-import org.ironmaple.simulation.drivesims.configs.DriveTrainSimulationConfig;
-import org.ironmaple.simulation.drivesims.configs.SwerveModuleSimulationConfig;
+import static edu.wpi.first.units.Units.*;
+
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.math.system.plant.DCMotor;
-import edu.wpi.first.wpilibj.RobotController;
 import java.util.function.Supplier;
-import static edu.wpi.first.units.Units.*;
+import org.ironmaple.simulation.SimulatedArena;
+import org.ironmaple.simulation.drivesims.COTS;
+import org.ironmaple.simulation.drivesims.SwerveDriveSimulation;
+import org.ironmaple.simulation.drivesims.configs.DriveTrainSimulationConfig;
+import org.ironmaple.simulation.drivesims.configs.SwerveModuleSimulationConfig;
 
 public class MapleSimSwerveDrivetrain {
+  public final SwerveDriveSimulation mapleSimDrive;
+  private final Supplier<ChassisSpeeds> robotRelativeSpeedsSupplier;
+  private final Supplier<Rotation2d> headingSupplier;
 
-    public final SwerveDriveSimulation mapleSimDrive;
-    private final SimSwerveDrivetrain ctreSimDrivetrain;
-    private final SwerveModule<?, ?, ?>[] modules;
-    private final double simLoopPeriod;
-    private final Supplier<ChassisSpeeds> robotRelativeSpeedsSupplier;
-    private final Supplier<Rotation2d> headingSupplier;
+  public MapleSimSwerveDrivetrain(
+      Translation2d[] moduleLocations,
+      Supplier<ChassisSpeeds> robotRelativeSpeedsSupplier,
+      Supplier<Rotation2d> headingSupplier) {
+    this.robotRelativeSpeedsSupplier = robotRelativeSpeedsSupplier;
+    this.headingSupplier = headingSupplier;
 
-    public MapleSimSwerveDrivetrain(
-            double simLoopPeriod,
-            double robotWeightPounds,
-            double bumperLengthInches,
-            double bumperWidthInches,
-            DCMotor driveMotor,
-            DCMotor steerMotor,
-            double wheelCOF,
-            Translation2d[] moduleLocations,
-            Pigeon2 pigeon2,
-            SwerveModule<?, ?, ?>[] modules,
-            Supplier<ChassisSpeeds> robotRelativeSpeedsSupplier,
-            Supplier<Rotation2d> headingSupplier,
-            SwerveModuleConstants<?, ?, ?>... moduleConstants) {
+    DriveTrainSimulationConfig config =
+        DriveTrainSimulationConfig.Default()
+            .withRobotMass(Pounds.of({{ROBOT_WEIGHT_LBS}}))
+            .withBumperSize(Inches.of({{BUMPER_LENGTH_IN}}), Inches.of({{BUMPER_WIDTH_IN}}))
+            .withGyro(COTS.ofPigeon2())
+            .withSwerveModule(
+                new SwerveModuleSimulationConfig(
+                    {{DRIVE_MOTOR_EXPRESSION}},
+                    {{STEER_MOTOR_EXPRESSION}},
+                    {{DRIVE_GEAR_RATIO_VALUE}},
+                    {{STEER_GEAR_RATIO_VALUE}},
+                    Volts.of({{DRIVE_FRICTION_VOLTAGE}}),
+                    Volts.of({{STEER_FRICTION_VOLTAGE}}),
+                    Meters.of(0.0508),
+                    KilogramSquareMeters.of({{STEER_INERTIA_VALUE}}),
+                    {{WHEEL_COF}}));
 
-        this.simLoopPeriod = simLoopPeriod;
-        this.modules = modules;
-        this.robotRelativeSpeedsSupplier = robotRelativeSpeedsSupplier;
-        this.headingSupplier = headingSupplier;
+    mapleSimDrive =
+        new SwerveDriveSimulation(config, new Pose2d(2.0, 4.025, new Rotation2d(0)));
+    mapleSimDrive.setLinearDamping(0);
+    mapleSimDrive.setAngularDamping(0);
+    SimulatedArena.getInstance().addDriveTrainSimulation(mapleSimDrive);
+  }
 
-        // Build MapleSim drivetrain config
-        DriveTrainSimulationConfig config = DriveTrainSimulationConfig.Default()
-            .withRobotMass(Pounds.of(robotWeightPounds))
-            .withBumperSize(Inches.of(bumperLengthInches), Inches.of(bumperWidthInches))
-            .withSwerveModule(new SwerveModuleSimulationConfig(
-                driveMotor,
-                steerMotor,
-                moduleConstants[0].DriveMotorGearRatio,
-                moduleConstants[0].SteerMotorGearRatio,
-                // WheelRadius is a raw double (meters) — wrap as Distance
-                Meters.of(moduleConstants[0].WheelRadius),
-                wheelCOF));
+  public void simulationPeriodic() {
+    Rotation2d heading = headingSupplier.get();
+    Pose2d currentPose = mapleSimDrive.getSimulatedDriveTrainPose();
+    mapleSimDrive.setSimulationWorldPose(new Pose2d(currentPose.getTranslation(), heading));
 
-        mapleSimDrive = new SwerveDriveSimulation(config,
-            // Initial spawn pose — NOT new Pose2d() which is outside the field
-            new Pose2d(2.0, 4.025, new Rotation2d(0)));
+    ChassisSpeeds fieldRelative =
+        ChassisSpeeds.fromRobotRelativeSpeeds(robotRelativeSpeedsSupplier.get(), heading);
+    mapleSimDrive.setRobotSpeeds(fieldRelative);
+    SimulatedArena.getInstance().simulationPeriodic();
+    mapleSimDrive.setRobotSpeeds(fieldRelative);
+  }
 
-        // Zero damping — default of 1.4 fights setRobotSpeeds() and makes robot barely move
-        mapleSimDrive.setLinearDamping(0);
-        mapleSimDrive.setAngularDamping(0);
+  public Pose2d getSimulatedDriveTrainPose() {
+    return mapleSimDrive.getSimulatedDriveTrainPose();
+  }
 
-        SimulatedArena.getInstance().addDriveTrainSimulation(mapleSimDrive);
-
-        // CTRE sim for motor/encoder state updates
-        Pigeon2SimState pigeonSim = pigeon2.getSimState();
-        ctreSimDrivetrain = new SimSwerveDrivetrain(moduleLocations, pigeonSim, moduleConstants);
-    }
-
-    /**
-     * Called from the 5ms Notifier in Swerve.startSimThread().
-     * Only updates CTRE motor/encoder sim state. Does NOT tick SimulatedArena.
-     */
-    public void update() {
-        ctreSimDrivetrain.update(simLoopPeriod, RobotController.getBatteryVoltage(), modules);
-    }
-
-    /**
-     * Called from Robot.simulationPeriodic() at 20ms.
-     * Ticks SimulatedArena physics (5 sub-ticks = 250/second at 50Hz = correct real time).
-     * Uses CTRE heading to prevent MapleSim heading from diverging after rotation.
-     * Applies speeds both before and after the tick so damping cannot cancel them.
-     */
-    public void simulationPeriodic() {
-        // Use CTRE heading — MapleSim's internal heading diverges after rotation
-        Rotation2d heading = headingSupplier.get();
-        Pose2d currentPose = mapleSimDrive.getSimulatedDriveTrainPose();
-
-        // Sync MapleSim pose to CTRE heading
-        mapleSimDrive.setSimulationWorldPose(
-            new Pose2d(currentPose.getTranslation(), heading));
-
-        // setRobotSpeeds() takes FIELD-RELATIVE speeds, not robot-relative
-        ChassisSpeeds fieldRelative = ChassisSpeeds.fromRobotRelativeSpeeds(
-            robotRelativeSpeedsSupplier.get(), heading);
-
-        // Apply before tick so physics has the correct velocity
-        mapleSimDrive.setRobotSpeeds(fieldRelative);
-        SimulatedArena.getInstance().simulationPeriodic();
-        // Apply again after tick so the arena tick does not zero them out
-        mapleSimDrive.setRobotSpeeds(fieldRelative);
-    }
-
-    public Pose2d getSimulatedDriveTrainPose() {
-        return mapleSimDrive.getSimulatedDriveTrainPose();
-    }
-
-    public void setSimulationWorldPose(Pose2d pose) {
-        mapleSimDrive.setSimulationWorldPose(pose);
-    }
+  public void setSimulationWorldPose(Pose2d pose) {
+    mapleSimDrive.setSimulationWorldPose(pose);
+  }
 }
 ```

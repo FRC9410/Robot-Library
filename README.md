@@ -112,7 +112,7 @@ powershell -ExecutionPolicy Bypass -File .\power-tool\scripts\power-tool.ps1
 
 Power Tool includes NetworkTables tools and generated subsystem editing. Install builds the app once, then the launchers run the built Electron app with `npm start`. Its `node_modules` folder is created during install and should not be committed.
 
-Use `Update Power Tool` inside the app to download the latest Power Tool source, refresh the scripts, reinstall npm dependencies, and restart the app.
+Use `Update Power Tool` inside the app to download the latest Power Tool source, refresh the scripts and project-local skills, reinstall npm dependencies, and restart the app.
 
 ## PowerLib Skills
 

@@ -54,6 +54,18 @@ function Remove-DirectoryIfExists {
     }
 }
 
+function Copy-DirectoryContents {
+    param(
+        [Parameter(Mandatory = $true)][string]$Source,
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+
+    New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+    Get-ChildItem -LiteralPath $Source -Force | ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination $Destination -Recurse -Force
+    }
+}
+
 if ($ParentPid -gt 0) {
     try {
         $process = Get-Process -Id $ParentPid -ErrorAction Stop
@@ -83,11 +95,19 @@ try {
     }
 
     $sourceRoot = Split-Path -Parent $source
+    $sourceSkills = Join-Path $sourceRoot "skills"
+    $robotSkills = Join-Path $robotRoot "skills"
     Remove-DirectoryIfExists $toolRoot
     foreach ($legacyScriptPath in $legacyScriptPaths) {
         Remove-Item -LiteralPath $legacyScriptPath -Force -ErrorAction SilentlyContinue
     }
     Copy-Item -Path $source -Destination $toolRoot -Recurse
+    if (Test-Path $sourceSkills) {
+        Copy-DirectoryContents -Source $sourceSkills -Destination $robotSkills
+        Write-Host "PowerLib skills updated in $robotSkills"
+    } else {
+        Write-Warning "Skipped PowerLib skills update because no skills directory was found in the downloaded source."
+    }
     New-Item -ItemType Directory -Force -Path $scriptsRoot | Out-Null
 
     $latestUpdater = Join-Path $sourceRoot "update-power-tool.ps1"
