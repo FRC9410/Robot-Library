@@ -52,9 +52,7 @@ type ToastState = {
 };
 
 const networkTableWatchPrefixes = [
-  "/",
   "/PowerLib/",
-  "/Robot/",
   "/SmartDashboard/",
   "/Shuffleboard/",
   "/FMSInfo/",
