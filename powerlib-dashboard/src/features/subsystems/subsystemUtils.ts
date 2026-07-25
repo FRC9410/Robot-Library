@@ -135,13 +135,16 @@ export function textToNumber(value: string, fallback = 0) {
 
 export function formToSubsystem(form: SubsystemFormState, existing?: GeneratedSubsystem): GeneratedSubsystem {
   const id = form.id.trim() || toCamelCase(form.name);
-  const motors = form.motors.map((motor, index) => ({
-    role: index === 0 ? "leader" : motor.role,
-    id: textToNumber(motor.id, 0),
-    motorType: motor.motorType,
-    neutralMode: index === 0 ? form.neutralMode : undefined,
-    reversed: motor.reversed
-  }));
+  const motors = form.motors.map((motor, index) => {
+    const existingMotor = existing?.motors?.[index];
+    return {
+      role: index === 0 ? "leader" : motor.role,
+      id: textToNumber(motor.id, 0),
+      motorType: motor.motorType,
+      neutralMode: index === 0 ? form.neutralMode : existingMotor?.neutralMode,
+      reversed: motor.reversed
+    };
+  });
   const subsystem: GeneratedSubsystem = {
     ...existing,
     id,

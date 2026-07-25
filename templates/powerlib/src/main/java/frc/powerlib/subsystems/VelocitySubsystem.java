@@ -5,6 +5,7 @@
 package frc.powerlib.subsystems;
 
 import com.ctre.phoenix6.SignalLogger;
+import com.ctre.phoenix6.configs.FeedbackConfigs;
 import com.ctre.phoenix6.configs.MotionMagicConfigs;
 import com.ctre.phoenix6.configs.Slot0Configs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
@@ -36,6 +37,8 @@ public class VelocitySubsystem extends PowerSubsystem {
   private double kS;
   private double kV;
   private double kA;
+  private double sensorToMechanismRatio;
+  private double rotorToSensorRatio;
   private double motionMagicCruiseVelocity;
   private double motionMagicAcceleration;
   /**
@@ -70,6 +73,7 @@ public class VelocitySubsystem extends PowerSubsystem {
   @Override
   public void periodic() {
     io.updateInputs(inputs);
+    applyMotorTunableValues();
     applyTunableValues();
     SignalLogger.writeDouble(subsystemName + " Velocity", inputs.velocityRotationsPerSecond, "rotations per second");
     setSubsystemData("Velocity", inputs.velocityRotationsPerSecond);
@@ -90,6 +94,8 @@ public class VelocitySubsystem extends PowerSubsystem {
     config.Slot0.kI = leadConfig.kI();
     config.Slot0.kD = leadConfig.kD();
     config.Slot0.kG = leadConfig.kG();
+    config.Feedback.SensorToMechanismRatio = leadConfig.sensorToMechanismRatio();
+    config.Feedback.RotorToSensorRatio = leadConfig.rotorToSensorRatio();
     if (leadConfig.kS().isPresent()) {
       config.Slot0.kS = leadConfig.kS().get();
       config.Slot0.kV = leadConfig.kV().get();
@@ -113,9 +119,12 @@ public class VelocitySubsystem extends PowerSubsystem {
     kS = leadConfig.kS().orElse(0.0);
     kV = leadConfig.kV().orElse(0.0);
     kA = leadConfig.kA().orElse(0.0);
+    sensorToMechanismRatio = leadConfig.sensorToMechanismRatio();
+    rotorToSensorRatio = leadConfig.rotorToSensorRatio();
     motionMagicCruiseVelocity = motionMagicConfig.cruiseVelocity();
     motionMagicAcceleration = motionMagicConfig.acceleration();
 
+    registerSubsystemVariable("Control/FOCEnabled", focEnabled);
     registerSubsystemVariable("PID/kP", kP);
     registerSubsystemVariable("PID/kI", kI);
     registerSubsystemVariable("PID/kD", kD);
@@ -123,6 +132,9 @@ public class VelocitySubsystem extends PowerSubsystem {
     registerSubsystemVariable("Feedforward/kS", kS);
     registerSubsystemVariable("Feedforward/kV", kV);
     registerSubsystemVariable("Feedforward/kA", kA);
+    registerSubsystemVariable("Feedforward/Torque", torqueFeedForward);
+    registerSubsystemVariable("Ratios/SensorToMechanism", sensorToMechanismRatio);
+    registerSubsystemVariable("Ratios/RotorToSensor", rotorToSensorRatio);
     registerSubsystemVariable("MotionMagic/CruiseVelocity", motionMagicCruiseVelocity);
     registerSubsystemVariable("MotionMagic/Acceleration", motionMagicAcceleration);
   }
@@ -139,6 +151,7 @@ public class VelocitySubsystem extends PowerSubsystem {
     double nextKS = getSubsystemVariable("Feedforward/kS", kS);
     double nextKV = getSubsystemVariable("Feedforward/kV", kV);
     double nextKA = getSubsystemVariable("Feedforward/kA", kA);
+    double nextTorqueFeedForward = getSubsystemVariable("Feedforward/Torque", torqueFeedForward);
 
     if (changed(nextKP, kP)
         || changed(nextKI, kI)
@@ -166,6 +179,25 @@ public class VelocitySubsystem extends PowerSubsystem {
       kA = nextKA;
     }
 
+    if (changed(nextTorqueFeedForward, torqueFeedForward)) {
+      torqueFeedForward = nextTorqueFeedForward;
+    }
+
+    boolean nextFocEnabled = getSubsystemVariable("Control/FOCEnabled", focEnabled);
+    if (nextFocEnabled != focEnabled) {
+      focEnabled = nextFocEnabled;
+    }
+
+    double nextSensorToMechanismRatio =
+        getSubsystemVariable("Ratios/SensorToMechanism", sensorToMechanismRatio);
+    double nextRotorToSensorRatio = getSubsystemVariable("Ratios/RotorToSensor", rotorToSensorRatio);
+    if (changed(nextSensorToMechanismRatio, sensorToMechanismRatio)
+        || changed(nextRotorToSensorRatio, rotorToSensorRatio)) {
+      applyFeedbackRatios(velocityMotor, nextSensorToMechanismRatio, nextRotorToSensorRatio);
+      sensorToMechanismRatio = nextSensorToMechanismRatio;
+      rotorToSensorRatio = nextRotorToSensorRatio;
+    }
+
     double nextCruiseVelocity =
         getSubsystemVariable("MotionMagic/CruiseVelocity", motionMagicCruiseVelocity);
     double nextAcceleration = getSubsystemVariable("MotionMagic/Acceleration", motionMagicAcceleration);
@@ -182,6 +214,14 @@ public class VelocitySubsystem extends PowerSubsystem {
 
   private static boolean changed(double left, double right) {
     return Math.abs(left - right) > 1.0e-9;
+  }
+
+  private static void applyFeedbackRatios(
+      TalonFX motor, double sensorToMechanismRatio, double rotorToSensorRatio) {
+    FeedbackConfigs feedbackConfigs = new FeedbackConfigs();
+    feedbackConfigs.SensorToMechanismRatio = sensorToMechanismRatio;
+    feedbackConfigs.RotorToSensorRatio = rotorToSensorRatio;
+    motor.getConfigurator().apply(feedbackConfigs);
   }
 
   /**

@@ -9,6 +9,7 @@ import static edu.wpi.first.units.Units.Rotations;
 import com.ctre.phoenix6.BaseStatusSignal;
 import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.configs.CANcoderConfiguration;
+import com.ctre.phoenix6.configs.FeedbackConfigs;
 import com.ctre.phoenix6.configs.MotionMagicConfigs;
 import com.ctre.phoenix6.configs.Slot0Configs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
@@ -16,7 +17,6 @@ import com.ctre.phoenix6.controls.MotionMagicVoltage;
 import com.ctre.phoenix6.hardware.CANcoder;
 import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.signals.FeedbackSensorSourceValue;
-import com.ctre.phoenix6.signals.NeutralModeValue;
 import com.ctre.phoenix6.signals.SensorDirectionValue;
 import com.ctre.phoenix6.CANBus;
 import edu.wpi.first.wpilibj.RobotBase;
@@ -36,6 +36,7 @@ public class PositionSubsystem extends PowerSubsystem {
 
   /** Primary position-controlled motor (with fused CANcoder from config constructor). */
   protected TalonFX positionMotor;
+  private CANcoder cancoder;
   public final PositionSubsystemIO.Inputs inputs = new PositionSubsystemIO.Inputs();
   private final PositionSubsystemIO io;
   private String subsystemName;
@@ -45,8 +46,17 @@ public class PositionSubsystem extends PowerSubsystem {
   private double kI;
   private double kD;
   private double kG;
+  private double kS;
+  private double kV;
+  private double kA;
+  private int cancoderId;
+  private double cancoderMagnetOffsetRotations;
+  private double cancoderDiscontinuityPointRotations;
+  private double sensorToMechanismRatio;
+  private double rotorToSensorRatio;
   private double motionMagicCruiseVelocity;
   private double motionMagicAcceleration;
+  private double defaultPosition;
 
   /** Last commanded position setpoint in rotations. */
   private double setpointRotations;
@@ -64,15 +74,17 @@ public class PositionSubsystem extends PowerSubsystem {
   public PositionSubsystem(PositionSubsystemConfig config, PositionSubsystemIO io) {
     super(config.motorConfigs(), config.subsystemName());
     TalonFX leader = getLeaderMotor();
+    this.cancoder = new CANcoder(config.cancoderConfig().encoderId(), new CANBus(DEFAULT_CAN_BUS_NAME));
     if (leader != null) {
-      configureMotorWithCancoder(leader, config.leadConfig(), config.cancoderConfig(), config.motionMagicConfig(), config.defaultPosition());
+      configureMotorWithCancoder(leader, cancoder, config.leadConfig(), config.cancoderConfig(), config.motionMagicConfig(), config.defaultPosition());
       this.positionMotor = leader;
     }
     this.subsystemName = config.subsystemName();
     this.units = config.units();
     this.focEnabled = config.leadConfig().focEnabled();
+    this.cancoderId = config.cancoderConfig().encoderId();
     this.setpointRotations = config.defaultPosition().orElseGet(() -> leader != null ? leader.getPosition().getValueAsDouble() : 0.0);
-    initializeTunableState(config.leadConfig(), config.motionMagicConfig());
+    initializeTunableState(config.leadConfig(), config.cancoderConfig(), config.motionMagicConfig(), config.defaultPosition());
     this.io = io == null ? createDefaultIO() : io;
   }
 
@@ -83,6 +95,7 @@ public class PositionSubsystem extends PowerSubsystem {
   @Override
   public void periodic() {
     io.updateInputs(inputs);
+    applyMotorTunableValues();
     applyTunableValues();
     SignalLogger.writeDouble(subsystemName + " Position", inputs.positionRotations, units);
     setSubsystemData("Position", inputs.positionRotations);
@@ -97,26 +110,26 @@ public class PositionSubsystem extends PowerSubsystem {
    */
   private static void configureMotorWithCancoder(
       TalonFX motor,
+      CANcoder cancoder,
       LeadMotorConfig leadConfig,
       CancoderConfig cancoderConfig,
       MotionMagicConfig motionMagicConfig,
       Optional<Double> defaultPos) {
-    @SuppressWarnings("resource") // CANcoder is fused to motor, lifecycle tied to subsystem
-    CANcoder cancoder =
-        new CANcoder(cancoderConfig.encoderId(), new CANBus(DEFAULT_CAN_BUS_NAME));
-
-    CANcoderConfiguration encoderConfig = new CANcoderConfiguration();
-    encoderConfig.MagnetSensor.withAbsoluteSensorDiscontinuityPoint(
-        Rotations.of(cancoderConfig.discontinuityPointRotations()));
-    encoderConfig.MagnetSensor.SensorDirection = SensorDirectionValue.Clockwise_Positive;
-    encoderConfig.MagnetSensor.withMagnetOffset(Rotations.of(cancoderConfig.magnetOffsetRotations()));
-    cancoder.getConfigurator().apply(encoderConfig);
+    applyCancoderConfig(
+        cancoder,
+        cancoderConfig.magnetOffsetRotations(),
+        cancoderConfig.discontinuityPointRotations());
 
     TalonFXConfiguration talonConfig = new TalonFXConfiguration();
     talonConfig.Slot0.kP = leadConfig.kP();
     talonConfig.Slot0.kI = leadConfig.kI();
     talonConfig.Slot0.kD = leadConfig.kD();
     talonConfig.Slot0.kG = leadConfig.kG();
+    if (leadConfig.kS().isPresent()) {
+      talonConfig.Slot0.kS = leadConfig.kS().get();
+      talonConfig.Slot0.kV = leadConfig.kV().get();
+      talonConfig.Slot0.kA = leadConfig.kA().get();
+    }
     talonConfig.Feedback.FeedbackRemoteSensorID = cancoder.getDeviceID();
     talonConfig.Feedback.FeedbackSensorSource = FeedbackSensorSourceValue.FusedCANcoder;
     talonConfig.Feedback.SensorToMechanismRatio = leadConfig.sensorToMechanismRatio();
@@ -131,7 +144,6 @@ public class PositionSubsystem extends PowerSubsystem {
     motor.getConfigurator().apply(mmConfigs);
 
     BaseStatusSignal.setUpdateFrequencyForAll(100, cancoder.getPosition(), cancoder.getVelocity());
-    motor.setNeutralMode(NeutralModeValue.Brake);
 
     double targetPos = defaultPos.isEmpty() ?  motor.getPosition().getValueAsDouble() : defaultPos.get();
 
@@ -139,20 +151,40 @@ public class PositionSubsystem extends PowerSubsystem {
   }
 
   private void initializeTunableState(
-      LeadMotorConfig leadConfig, MotionMagicConfig motionMagicConfig) {
+      LeadMotorConfig leadConfig,
+      CancoderConfig cancoderConfig,
+      MotionMagicConfig motionMagicConfig,
+      Optional<Double> configuredDefaultPosition) {
     kP = leadConfig.kP();
     kI = leadConfig.kI();
     kD = leadConfig.kD();
     kG = leadConfig.kG();
+    kS = leadConfig.kS().orElse(0.0);
+    kV = leadConfig.kV().orElse(0.0);
+    kA = leadConfig.kA().orElse(0.0);
+    cancoderMagnetOffsetRotations = cancoderConfig.magnetOffsetRotations();
+    cancoderDiscontinuityPointRotations = cancoderConfig.discontinuityPointRotations();
+    sensorToMechanismRatio = leadConfig.sensorToMechanismRatio();
+    rotorToSensorRatio = leadConfig.rotorToSensorRatio();
     motionMagicCruiseVelocity = motionMagicConfig.cruiseVelocity();
     motionMagicAcceleration = motionMagicConfig.acceleration();
+    defaultPosition = configuredDefaultPosition.orElse(setpointRotations);
 
+    registerSubsystemVariable("Control/FOCEnabled", focEnabled);
     registerSubsystemVariable("PID/kP", kP);
     registerSubsystemVariable("PID/kI", kI);
     registerSubsystemVariable("PID/kD", kD);
     registerSubsystemVariable("PID/kG", kG);
+    registerSubsystemVariable("Feedforward/kS", kS);
+    registerSubsystemVariable("Feedforward/kV", kV);
+    registerSubsystemVariable("Feedforward/kA", kA);
+    registerSubsystemVariable("Cancoder/MagnetOffset", cancoderMagnetOffsetRotations);
+    registerSubsystemVariable("Cancoder/DiscontinuityPoint", cancoderDiscontinuityPointRotations);
+    registerSubsystemVariable("Ratios/SensorToMechanism", sensorToMechanismRatio);
+    registerSubsystemVariable("Ratios/RotorToSensor", rotorToSensorRatio);
     registerSubsystemVariable("MotionMagic/CruiseVelocity", motionMagicCruiseVelocity);
     registerSubsystemVariable("MotionMagic/Acceleration", motionMagicAcceleration);
+    registerSubsystemVariable("Position/Default", defaultPosition);
   }
 
   private void applyTunableValues() {
@@ -164,21 +196,59 @@ public class PositionSubsystem extends PowerSubsystem {
     double nextKI = getSubsystemVariable("PID/kI", kI);
     double nextKD = getSubsystemVariable("PID/kD", kD);
     double nextKG = getSubsystemVariable("PID/kG", kG);
+    double nextKS = getSubsystemVariable("Feedforward/kS", kS);
+    double nextKV = getSubsystemVariable("Feedforward/kV", kV);
+    double nextKA = getSubsystemVariable("Feedforward/kA", kA);
     if (changed(nextKP, kP)
         || changed(nextKI, kI)
         || changed(nextKD, kD)
-        || changed(nextKG, kG)) {
+        || changed(nextKG, kG)
+        || changed(nextKS, kS)
+        || changed(nextKV, kV)
+        || changed(nextKA, kA)) {
       Slot0Configs slot0 = new Slot0Configs();
       slot0.kP = nextKP;
       slot0.kI = nextKI;
       slot0.kD = nextKD;
       slot0.kG = nextKG;
+      slot0.kS = nextKS;
+      slot0.kV = nextKV;
+      slot0.kA = nextKA;
       positionMotor.getConfigurator().apply(slot0);
 
       kP = nextKP;
       kI = nextKI;
       kD = nextKD;
       kG = nextKG;
+      kS = nextKS;
+      kV = nextKV;
+      kA = nextKA;
+    }
+
+    double nextCancoderMagnetOffset =
+        getSubsystemVariable("Cancoder/MagnetOffset", cancoderMagnetOffsetRotations);
+    double nextCancoderDiscontinuityPoint =
+        getSubsystemVariable("Cancoder/DiscontinuityPoint", cancoderDiscontinuityPointRotations);
+    if (changed(nextCancoderMagnetOffset, cancoderMagnetOffsetRotations)
+        || changed(nextCancoderDiscontinuityPoint, cancoderDiscontinuityPointRotations)) {
+      applyCancoderConfig(cancoder, nextCancoderMagnetOffset, nextCancoderDiscontinuityPoint);
+      cancoderMagnetOffsetRotations = nextCancoderMagnetOffset;
+      cancoderDiscontinuityPointRotations = nextCancoderDiscontinuityPoint;
+    }
+
+    boolean nextFocEnabled = getSubsystemVariable("Control/FOCEnabled", focEnabled);
+    if (nextFocEnabled != focEnabled) {
+      focEnabled = nextFocEnabled;
+    }
+
+    double nextSensorToMechanismRatio =
+        getSubsystemVariable("Ratios/SensorToMechanism", sensorToMechanismRatio);
+    double nextRotorToSensorRatio = getSubsystemVariable("Ratios/RotorToSensor", rotorToSensorRatio);
+    if (changed(nextSensorToMechanismRatio, sensorToMechanismRatio)
+        || changed(nextRotorToSensorRatio, rotorToSensorRatio)) {
+      applyFeedbackRatios(positionMotor, cancoderId, nextSensorToMechanismRatio, nextRotorToSensorRatio);
+      sensorToMechanismRatio = nextSensorToMechanismRatio;
+      rotorToSensorRatio = nextRotorToSensorRatio;
     }
 
     double nextCruiseVelocity =
@@ -193,10 +263,35 @@ public class PositionSubsystem extends PowerSubsystem {
       motionMagicCruiseVelocity = nextCruiseVelocity;
       motionMagicAcceleration = nextAcceleration;
     }
+
+    double nextDefaultPosition = getSubsystemVariable("Position/Default", defaultPosition);
+    if (changed(nextDefaultPosition, defaultPosition)) {
+      defaultPosition = nextDefaultPosition;
+    }
   }
 
   private static boolean changed(double left, double right) {
     return Math.abs(left - right) > 1.0e-9;
+  }
+
+  private static void applyFeedbackRatios(
+      TalonFX motor, int cancoderId, double sensorToMechanismRatio, double rotorToSensorRatio) {
+    FeedbackConfigs feedbackConfigs = new FeedbackConfigs();
+    feedbackConfigs.FeedbackRemoteSensorID = cancoderId;
+    feedbackConfigs.FeedbackSensorSource = FeedbackSensorSourceValue.FusedCANcoder;
+    feedbackConfigs.SensorToMechanismRatio = sensorToMechanismRatio;
+    feedbackConfigs.RotorToSensorRatio = rotorToSensorRatio;
+    motor.getConfigurator().apply(feedbackConfigs);
+  }
+
+  private static void applyCancoderConfig(
+      CANcoder cancoder, double magnetOffsetRotations, double discontinuityPointRotations) {
+    CANcoderConfiguration encoderConfig = new CANcoderConfiguration();
+    encoderConfig.MagnetSensor.withAbsoluteSensorDiscontinuityPoint(
+        Rotations.of(discontinuityPointRotations));
+    encoderConfig.MagnetSensor.SensorDirection = SensorDirectionValue.Clockwise_Positive;
+    encoderConfig.MagnetSensor.withMagnetOffset(Rotations.of(magnetOffsetRotations));
+    cancoder.getConfigurator().apply(encoderConfig);
   }
 
   /**

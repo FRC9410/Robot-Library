@@ -487,12 +487,6 @@ function AppContent() {
               variant={status === "idle" ? "outlined" : "filled"}
             />
             <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-              <Chip
-                color={tuningModeEnabled ? "warning" : "default"}
-                label={tuningModeEnabled ? "tuning armed" : "tuning safe"}
-                size="small"
-                variant={tuningModeEnabled ? "filled" : "outlined"}
-              />
               <FormControlLabel
                 control={
                   <Switch

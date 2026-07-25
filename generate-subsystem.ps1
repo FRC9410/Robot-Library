@@ -328,8 +328,13 @@ function Convert-MotorsToConstantDeclarations {
 
     $index = 1
     foreach ($follower in (@($Subsystem.motors) | Where-Object { $_.role -eq "follower" })) {
+        $neutralModeExpression = if ($null -ne $follower.neutralMode -and -not [string]::IsNullOrWhiteSpace($follower.neutralMode.ToString())) {
+            Get-NeutralModeExpression $follower.neutralMode
+        } else {
+            "LEADER_NEUTRAL_MODE"
+        }
         $lines += "  public static final int FOLLOWER_${index}_MOTOR_ID = $($follower.id);"
-        $lines += "  public static final NeutralModeValue FOLLOWER_${index}_NEUTRAL_MODE = LEADER_NEUTRAL_MODE;"
+        $lines += "  public static final NeutralModeValue FOLLOWER_${index}_NEUTRAL_MODE = $neutralModeExpression;"
         $lines += "  public static final boolean FOLLOWER_${index}_REVERSED = $($follower.reversed.ToString().ToLowerInvariant());"
         $index++
     }

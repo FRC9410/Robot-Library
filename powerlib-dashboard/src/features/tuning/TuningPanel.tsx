@@ -128,12 +128,6 @@ export function TuningPanel() {
                 >
                   Save Values
                 </Button>
-                <Chip
-                  color={tuningModeEnabled ? "warning" : "default"}
-                  label={tuningModeEnabled ? "tuning armed" : "tuning safe"}
-                  size="small"
-                  variant={tuningModeEnabled ? "filled" : "outlined"}
-                />
               </Stack>
             </Stack>
 
@@ -161,8 +155,8 @@ export function TuningPanel() {
               </Stack>
             ) : (
               <Alert severity="info" variant="outlined">
-                No live tunable variables are published yet. Generated subsystem PID values and generated command values
-                will appear here while robot code is running.
+                No live tunable variables are published yet. Generated subsystem control values and generated command
+                values will appear here while robot code is running.
               </Alert>
             )}
           </Stack>

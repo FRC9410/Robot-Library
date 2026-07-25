@@ -91,6 +91,10 @@ public interface PowerRobotContainer {
     return toDouble(getSubsystemVariable(subsystemName, key, Double.valueOf(defaultValue)), defaultValue);
   }
 
+  static boolean getSubsystemVariable(String subsystemName, String key, boolean defaultValue) {
+    return toBoolean(getSubsystemVariable(subsystemName, key, Boolean.valueOf(defaultValue)), defaultValue);
+  }
+
   static Map<String, Map<String, Object>> getAllSubsystemVariables() {
     return SUBSYSTEM_VARIABLES;
   }
@@ -111,6 +115,10 @@ public interface PowerRobotContainer {
 
   static double getCommandVariable(String commandName, String key, double defaultValue) {
     return toDouble(getCommandVariable(commandName, key, Double.valueOf(defaultValue)), defaultValue);
+  }
+
+  static boolean getCommandVariable(String commandName, String key, boolean defaultValue) {
+    return toBoolean(getCommandVariable(commandName, key, Boolean.valueOf(defaultValue)), defaultValue);
   }
 
   static Map<String, Map<String, Object>> getAllCommandVariables() {
@@ -166,6 +174,30 @@ public interface PowerRobotContainer {
         return Double.parseDouble((String) value);
       } catch (NumberFormatException ignored) {
         return defaultValue;
+      }
+    }
+
+    return defaultValue;
+  }
+
+  private static boolean toBoolean(Object value, boolean defaultValue) {
+    if (value instanceof Boolean) {
+      return (Boolean) value;
+    }
+
+    if (value instanceof String) {
+      String normalized = ((String) value).trim().toLowerCase();
+      if (normalized.equals("true")
+          || normalized.equals("1")
+          || normalized.equals("yes")
+          || normalized.equals("on")) {
+        return true;
+      }
+      if (normalized.equals("false")
+          || normalized.equals("0")
+          || normalized.equals("no")
+          || normalized.equals("off")) {
+        return false;
       }
     }
 

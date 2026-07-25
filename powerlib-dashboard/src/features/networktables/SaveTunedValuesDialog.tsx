@@ -24,6 +24,10 @@ import { methodNeedsValue, toBindingId, toConstantName } from "../bindings/bindi
 import type { BindingCommand, GeneratedBinding } from "../bindings/types";
 
 type SaveTarget = "subsystem" | "command";
+type JsonPathSegment = string | number;
+type JsonContainer = Record<string | number, unknown>;
+type SaveValue = number | boolean | string;
+type SubsystemVariableValueKind = "number" | "boolean" | "brakeMode";
 
 type SaveValueChange = {
   id: string;
@@ -32,9 +36,9 @@ type SaveValueChange = {
   label: string;
   topicName: string;
   oldValueText: string;
-  newValue: number;
+  newValue: SaveValue;
   subsystemIndex?: number;
-  subsystemPath?: string[];
+  subsystemPath?: JsonPathSegment[];
   bindingIndex?: number;
   commandVariableKey?: string;
 };
@@ -53,7 +57,11 @@ type LoadedDocuments = {
 const subsystemVariablesPrefix = "/PowerLib/Subsystems/";
 const commandVariablesPrefix = "/PowerLib/Commands/";
 
-const subsystemVariableMappings: Record<string, { jsonPath: string[]; label: string }> = {
+const subsystemVariableMappings: Record<
+  string,
+  { jsonPath: JsonPathSegment[]; label: string; valueKind?: SubsystemVariableValueKind }
+> = {
+  "Control/FOCEnabled": { jsonPath: ["focEnabled"], label: "FOC enabled", valueKind: "boolean" },
   "PID/kP": { jsonPath: ["pid", "kP"], label: "PID kP" },
   "PID/kI": { jsonPath: ["pid", "kI"], label: "PID kI" },
   "PID/kD": { jsonPath: ["pid", "kD"], label: "PID kD" },
@@ -61,6 +69,23 @@ const subsystemVariableMappings: Record<string, { jsonPath: string[]; label: str
   "Feedforward/kS": { jsonPath: ["pid", "kS"], label: "Feedforward kS" },
   "Feedforward/kV": { jsonPath: ["pid", "kV"], label: "Feedforward kV" },
   "Feedforward/kA": { jsonPath: ["pid", "kA"], label: "Feedforward kA" },
+  "Feedforward/Torque": { jsonPath: ["torqueFF"], label: "Torque feedforward" },
+  "Cancoder/MagnetOffset": {
+    jsonPath: ["cancoder", "magnetOffset"],
+    label: "CANcoder magnet offset"
+  },
+  "Cancoder/DiscontinuityPoint": {
+    jsonPath: ["cancoder", "discontinuityPoint"],
+    label: "CANcoder discontinuity point"
+  },
+  "Ratios/SensorToMechanism": {
+    jsonPath: ["ratios", "sensorToMechanism"],
+    label: "Sensor to mechanism ratio"
+  },
+  "Ratios/RotorToSensor": {
+    jsonPath: ["ratios", "rotorToSensor"],
+    label: "Rotor to sensor ratio"
+  },
   "MotionMagic/CruiseVelocity": {
     jsonPath: ["motionMagic", "cruiseVelocity"],
     label: "Motion Magic cruise velocity"
@@ -76,6 +101,10 @@ const subsystemVariableMappings: Record<string, { jsonPath: string[]; label: str
   "SlowMotionMagic/Acceleration": {
     jsonPath: ["slowMotionMagic", "acceleration"],
     label: "Slow Motion Magic acceleration"
+  },
+  "Position/Default": {
+    jsonPath: ["position", "default"],
+    label: "Default position"
   }
 };
 
@@ -117,6 +146,45 @@ function parseVariableTopic(name: string, prefix: string) {
   };
 }
 
+function getSubsystemVariableMapping(variableKey: string, subsystem: GeneratedSubsystem) {
+  const staticMapping = subsystemVariableMappings[variableKey];
+  if (staticMapping) {
+    return {
+      ...staticMapping,
+      valueKind: staticMapping.valueKind ?? ("number" as const)
+    };
+  }
+
+  const motorMatch = variableKey.match(/^Motors\/([^/]+)\/(BrakeMode|Reversed)$/);
+  if (!motorMatch) {
+    return null;
+  }
+
+  const canId = Number(motorMatch[1]);
+  if (!Number.isFinite(canId)) {
+    return null;
+  }
+
+  const motorIndex = (subsystem.motors ?? []).findIndex((motor) => Number(motor.id) === canId);
+  if (motorIndex < 0) {
+    return null;
+  }
+
+  if (motorMatch[2] === "BrakeMode") {
+    return {
+      jsonPath: ["motors", motorIndex, "neutralMode"],
+      label: `Motor ${canId} brake mode`,
+      valueKind: "brakeMode" as const
+    };
+  }
+
+  return {
+    jsonPath: ["motors", motorIndex, "reversed"],
+    label: `Motor ${canId} reversed`,
+    valueKind: "boolean" as const
+  };
+}
+
 function getTopicNumber(topic: NtTopicSnapshot) {
   if (typeof topic.value === "number" && Number.isFinite(topic.value)) {
     return topic.value;
@@ -130,25 +198,83 @@ function getTopicNumber(topic: NtTopicSnapshot) {
   return null;
 }
 
-function getNestedValue(root: unknown, path: string[]) {
-  let current = root as Record<string, unknown> | undefined;
+function getTopicBoolean(topic: NtTopicSnapshot) {
+  if (typeof topic.value === "boolean") {
+    return topic.value;
+  }
+
+  if (typeof topic.value === "number" && Number.isFinite(topic.value)) {
+    return topic.value !== 0;
+  }
+
+  if (typeof topic.value === "string") {
+    return toBooleanOrNull(topic.value);
+  }
+
+  return null;
+}
+
+function getTopicValue(topic: NtTopicSnapshot, valueKind: SubsystemVariableValueKind) {
+  if (valueKind === "number") {
+    return getTopicNumber(topic);
+  }
+
+  const boolValue = getTopicBoolean(topic);
+  if (boolValue === null) {
+    return null;
+  }
+
+  return valueKind === "brakeMode" ? (boolValue ? "Brake" : "Coast") : boolValue;
+}
+
+function getNestedValue(root: unknown, path: JsonPathSegment[]) {
+  let current = root as JsonContainer | undefined;
   for (const segment of path) {
     if (!current || typeof current !== "object") {
       return undefined;
     }
-    current = current[segment] as Record<string, unknown> | undefined;
+    current = current[segment] as JsonContainer | undefined;
   }
   return current;
 }
 
-function setNestedValue(root: unknown, path: string[], value: number) {
-  let current = root as Record<string, unknown>;
-  path.slice(0, -1).forEach((segment) => {
-    const next = current[segment];
+function getEffectiveMotorNeutralMode(subsystem: GeneratedSubsystem, motorIndex: number) {
+  const motors = subsystem.motors ?? [];
+  const motorNeutralMode = motors[motorIndex]?.neutralMode;
+  if (motorNeutralMode === "Brake" || motorNeutralMode === "Coast") {
+    return motorNeutralMode;
+  }
+
+  const leader = motors.find((motor) => motor.role === "leader") ?? motors[0];
+  return leader?.neutralMode === "Coast" ? "Coast" : "Brake";
+}
+
+function getSubsystemOldValue(
+  subsystem: GeneratedSubsystem,
+  mapping: { jsonPath: JsonPathSegment[]; valueKind: SubsystemVariableValueKind }
+) {
+  const oldValue = getNestedValue(subsystem, mapping.jsonPath);
+  if (mapping.valueKind !== "brakeMode" || oldValue !== undefined) {
+    return oldValue;
+  }
+
+  const [rootKey, motorIndex] = mapping.jsonPath;
+  if (rootKey === "motors" && typeof motorIndex === "number") {
+    return getEffectiveMotorNeutralMode(subsystem, motorIndex);
+  }
+
+  return oldValue;
+}
+
+function setNestedValue(root: unknown, path: JsonPathSegment[], value: SaveValue) {
+  let current = root as JsonContainer;
+  path.slice(0, -1).forEach((segment, index) => {
+    let next = current[segment] as JsonContainer | undefined;
     if (!next || typeof next !== "object") {
-      current[segment] = {};
+      next = {};
+      current[segment] = next;
     }
-    current = current[segment] as Record<string, unknown>;
+    current = next;
   });
   current[path[path.length - 1]] = value;
 }
@@ -166,6 +292,28 @@ function toNumberOrNull(value: unknown) {
   return null;
 }
 
+function toBooleanOrNull(value: unknown) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value !== 0;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "on", "brake"].includes(normalized)) {
+      return true;
+    }
+    if (["false", "0", "no", "off", "coast"].includes(normalized)) {
+      return false;
+    }
+  }
+
+  return null;
+}
+
 function formatValue(value: unknown) {
   if (value === undefined) {
     return "unset";
@@ -176,13 +324,22 @@ function formatValue(value: unknown) {
   return String(value);
 }
 
-function valuesDiffer(oldValue: unknown, newValue: number) {
-  const oldNumber = toNumberOrNull(oldValue);
-  if (oldNumber === null) {
-    return true;
+function valuesDiffer(oldValue: unknown, newValue: SaveValue) {
+  if (typeof newValue === "number") {
+    const oldNumber = toNumberOrNull(oldValue);
+    if (oldNumber === null) {
+      return true;
+    }
+
+    return Math.abs(oldNumber - newValue) > 1.0e-9;
   }
 
-  return Math.abs(oldNumber - newValue) > 1.0e-9;
+  if (typeof newValue === "boolean") {
+    const oldBoolean = toBooleanOrNull(oldValue);
+    return oldBoolean === null || oldBoolean !== newValue;
+  }
+
+  return String(oldValue ?? "") !== newValue;
 }
 
 function getCommandKind(command: BindingCommand) {
@@ -259,13 +416,7 @@ function buildSubsystemChanges(topics: NtTopicSnapshot[], subsystems: GeneratedS
 
   topics.forEach((topic) => {
     const parsed = parseVariableTopic(topic.name, subsystemVariablesPrefix);
-    const newValue = getTopicNumber(topic);
-    if (!parsed || newValue === null) {
-      return;
-    }
-
-    const mapping = subsystemVariableMappings[parsed.variableKey];
-    if (!mapping) {
+    if (!parsed) {
       return;
     }
 
@@ -275,7 +426,17 @@ function buildSubsystemChanges(topics: NtTopicSnapshot[], subsystems: GeneratedS
     }
 
     const subsystem = subsystems[subsystemIndex];
-    const oldValue = getNestedValue(subsystem, mapping.jsonPath);
+    const mapping = getSubsystemVariableMapping(parsed.variableKey, subsystem);
+    if (!mapping) {
+      return;
+    }
+
+    const newValue = getTopicValue(topic, mapping.valueKind);
+    if (newValue === null) {
+      return;
+    }
+
+    const oldValue = getSubsystemOldValue(subsystem, mapping);
     if (!valuesDiffer(oldValue, newValue)) {
       return;
     }
@@ -441,7 +602,12 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
           subsystemChanged = true;
         }
 
-        if (change.target === "command" && change.bindingIndex !== undefined && change.commandVariableKey) {
+        if (
+          change.target === "command" &&
+          change.bindingIndex !== undefined &&
+          change.commandVariableKey &&
+          typeof change.newValue === "number"
+        ) {
           applyCommandValue(
             nextBindings[change.bindingIndex].commands,
             nextSubsystems,
@@ -546,7 +712,7 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
                     </TableCell>
                     <TableCell>
                       <Box sx={{ fontFamily: "monospace", whiteSpace: "nowrap" }}>
-                        {change.oldValueText} -&gt; {change.newValue}
+                        {change.oldValueText} -&gt; {formatValue(change.newValue)}
                       </Box>
                     </TableCell>
                   </TableRow>
@@ -556,7 +722,7 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
           ) : (
             !loading && (
               <Alert severity="info" variant="outlined">
-                No changed numeric tunables were found.
+                No changed tunables were found.
               </Alert>
             )
           )}

@@ -5,10 +5,8 @@
 package frc.powerlib.subsystems;
 
 import com.ctre.phoenix6.CANBus;
-import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.controls.Follower;
 import com.ctre.phoenix6.hardware.TalonFX;
-import com.ctre.phoenix6.signals.InvertedValue;
 import com.ctre.phoenix6.signals.MotorAlignmentValue;
 import com.ctre.phoenix6.signals.NeutralModeValue;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
@@ -33,6 +31,9 @@ public abstract class PowerSubsystem extends SubsystemBase {
 
   private final CANBus bus;
   private final Map<Integer, TalonFX> motorsByCanId;
+  private final Map<Integer, Boolean> brakeModeByCanId;
+  private final Map<Integer, Boolean> followerByCanId;
+  private final Map<Integer, Boolean> reversedByCanId;
   private Integer leaderCanId;
   private String subsystemName;
 
@@ -45,7 +46,14 @@ public abstract class PowerSubsystem extends SubsystemBase {
 
     this.bus = new CANBus(DEFAULT_CAN_BUS_NAME);
     this.motorsByCanId = new HashMap<>();
+    this.brakeModeByCanId = new HashMap<>();
+    this.followerByCanId = new HashMap<>();
+    this.reversedByCanId = new HashMap<>();
     this.subsystemName = subsystemName;
+
+    for (MotorConfig motorConfig : configList) {
+      registerMotorTunableState(motorConfig);
+    }
 
     // Get the leader motor and register it
     for (MotorConfig motorConfig : configList) {
@@ -67,9 +75,7 @@ public abstract class PowerSubsystem extends SubsystemBase {
         }
 
         // Reverse it relative to the leader
-        if (motorConfig.isReversed()) {
-          setFollower(motorConfig.canId(), this.leaderCanId, true);
-        }
+        setFollower(motorConfig.canId(), this.leaderCanId, motorConfig.isReversed());
       }
     }
   }
@@ -123,11 +129,7 @@ public abstract class PowerSubsystem extends SubsystemBase {
       leaderCanId = canId;
     }
     TalonFX motor = createTalonFx(canId, neutralMode);
-    if (isInverted) {
-      TalonFXConfiguration cfg = new TalonFXConfiguration();
-      cfg.MotorOutput.Inverted = InvertedValue.CounterClockwise_Positive;
-      motor.getConfigurator().apply(cfg);
-    }
+    motor.setInverted(isInverted);
     motorsByCanId.put(canId, motor);
     return motor;
   }
@@ -228,8 +230,66 @@ public abstract class PowerSubsystem extends SubsystemBase {
     frc.powerlib.PowerRobotContainer.setSubsystemVariableDefault(subsystemName, key, defaultValue);
   }
 
+  protected void registerSubsystemVariable(String key, boolean defaultValue) {
+    frc.powerlib.PowerRobotContainer.setSubsystemVariableDefault(subsystemName, key, defaultValue);
+  }
+
   protected double getSubsystemVariable(String key, double defaultValue) {
     return frc.powerlib.PowerRobotContainer.getSubsystemVariable(subsystemName, key, defaultValue);
+  }
+
+  protected boolean getSubsystemVariable(String key, boolean defaultValue) {
+    return frc.powerlib.PowerRobotContainer.getSubsystemVariable(subsystemName, key, defaultValue);
+  }
+
+  protected void applyMotorTunableValues() {
+    for (int canId : reversedByCanId.keySet()) {
+      boolean currentBrakeMode = brakeModeByCanId.getOrDefault(canId, true);
+      boolean nextBrakeMode =
+          getSubsystemVariable(getMotorVariableKey(canId, "BrakeMode"), currentBrakeMode);
+      if (nextBrakeMode != currentBrakeMode) {
+        setNeutralMode(canId, nextBrakeMode ? NeutralModeValue.Brake : NeutralModeValue.Coast);
+        brakeModeByCanId.put(canId, nextBrakeMode);
+      }
+
+      boolean currentReversed = reversedByCanId.getOrDefault(canId, false);
+      boolean nextReversed =
+          getSubsystemVariable(getMotorVariableKey(canId, "Reversed"), currentReversed);
+      if (nextReversed != currentReversed) {
+        applyMotorDirection(canId, nextReversed);
+        reversedByCanId.put(canId, nextReversed);
+      }
+    }
+  }
+
+  private void registerMotorTunableState(MotorConfig motorConfig) {
+    int canId = motorConfig.canId();
+    boolean brakeMode = motorConfig.neutralMode() == NeutralModeValue.Brake;
+    boolean reversed = motorConfig.isReversed();
+
+    brakeModeByCanId.put(canId, brakeMode);
+    followerByCanId.put(canId, motorConfig.isFollower());
+    reversedByCanId.put(canId, reversed);
+    registerSubsystemVariable(getMotorVariableKey(canId, "BrakeMode"), brakeMode);
+    registerSubsystemVariable(getMotorVariableKey(canId, "Reversed"), reversed);
+  }
+
+  private String getMotorVariableKey(int canId, String key) {
+    return "Motors/" + canId + "/" + key;
+  }
+
+  private void applyMotorDirection(int canId, boolean reversed) {
+    if (followerByCanId.getOrDefault(canId, false)) {
+      if (leaderCanId != null) {
+        setFollower(canId, leaderCanId, reversed);
+      }
+      return;
+    }
+
+    TalonFX motor = getMotorById(canId);
+    if (motor != null) {
+      motor.setInverted(reversed);
+    }
   }
 
   public boolean isMotorRunning (int id) {
