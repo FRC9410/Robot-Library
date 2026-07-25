@@ -2,24 +2,20 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
-  Button,
   Card,
   CardContent,
   Chip,
   Collapse,
   Divider,
-  FormControlLabel,
   IconButton,
   Stack,
-  Switch,
   TextField,
   Typography
 } from "@mui/material";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import type { NtPrimitive, NtTopicSnapshot, NtTopicType } from "../../networktables/nt4Client";
+import type { NtTopicSnapshot } from "../../networktables/nt4Client";
 import { stringifyValue } from "../subsystems/subsystemUtils";
-import { SaveTunedValuesDialog } from "./SaveTunedValuesDialog";
 import { useNetworkTables } from "./NetworkTablesContext";
 
 type TopicTreeNode = {
@@ -28,65 +24,6 @@ type TopicTreeNode = {
   children: TopicTreeNode[];
   topic?: NtTopicSnapshot;
 };
-
-const tunablePathMarker = "/Variables/";
-const tuningModeTopicName = "/PowerLib/Tuning/Enabled";
-
-function getWritableTopicType(topic: NtTopicSnapshot): NtTopicType | null {
-  switch (topic.type) {
-    case "boolean":
-    case "double":
-    case "int":
-    case "string":
-      return topic.type;
-    default:
-      return null;
-  }
-}
-
-function isTunableTopic(topic: NtTopicSnapshot) {
-  return topic.name.includes(tunablePathMarker) && getWritableTopicType(topic) !== null;
-}
-
-function topicValueToDraft(value: NtTopicSnapshot["value"]) {
-  if (value === null || value === undefined) {
-    return "";
-  }
-
-  if (typeof value === "boolean") {
-    return value ? "true" : "false";
-  }
-
-  return typeof value === "string" || typeof value === "number" ? String(value) : stringifyValue(value);
-}
-
-function parseDraftValue(type: NtTopicType, draft: string): NtPrimitive {
-  if (type === "string") {
-    return draft;
-  }
-
-  if (type === "boolean") {
-    const normalized = draft.trim().toLowerCase();
-    if (["true", "1", "yes", "on"].includes(normalized)) {
-      return true;
-    }
-    if (["false", "0", "no", "off"].includes(normalized)) {
-      return false;
-    }
-
-    throw new Error("Use true/false, yes/no, on/off, or 1/0 for booleans.");
-  }
-
-  const parsed = Number(draft);
-  if (!Number.isFinite(parsed)) {
-    throw new Error(`"${draft}" is not a valid ${type} value.`);
-  }
-  if (type === "int" && !Number.isInteger(parsed)) {
-    throw new Error(`"${draft}" is not a valid integer value.`);
-  }
-
-  return parsed;
-}
 
 function createTree(topics: NtTopicSnapshot[], search: string) {
   const normalizedSearch = search.trim().toLowerCase();
@@ -122,73 +59,6 @@ function collectDefaultExpanded(node: TopicTreeNode, expanded: Set<string>) {
   }
 
   node.children.forEach((child) => collectDefaultExpanded(child, expanded));
-}
-
-type TunableVariableRowProps = {
-  disabled: boolean;
-  topic: NtTopicSnapshot;
-  onApply: (topic: NtTopicSnapshot, type: NtTopicType, value: NtPrimitive) => void;
-};
-
-function TunableVariableRow({ disabled, topic, onApply }: TunableVariableRowProps) {
-  const type = getWritableTopicType(topic);
-  const [draft, setDraft] = useState(topicValueToDraft(topic.value));
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setDraft(topicValueToDraft(topic.value));
-    setError(null);
-  }, [topic.name, topic.value]);
-
-  if (!type) {
-    return null;
-  }
-  const writableType = type;
-
-  function applyValue() {
-    if (disabled) {
-      return;
-    }
-
-    try {
-      const value = parseDraftValue(writableType, draft);
-      onApply(topic, writableType, value);
-      setError(null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
-    }
-  }
-
-  return (
-    <Box
-      sx={{
-        alignItems: "start",
-        display: "grid",
-        gap: 1,
-        gridTemplateColumns: { xs: "1fr", md: "minmax(260px, 1fr) 96px minmax(160px, 240px) 90px" }
-      }}
-    >
-      <Typography sx={{ fontFamily: "monospace", overflowWrap: "anywhere", pt: 1 }}>{topic.name}</Typography>
-      <Box sx={{ pt: 0.75 }}>
-        <Chip label={writableType} size="small" variant="outlined" />
-      </Box>
-      <TextField
-        error={Boolean(error)}
-        helperText={error ?? " "}
-        size="small"
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            applyValue();
-          }
-        }}
-      />
-      <Button disabled={disabled} onClick={applyValue} size="small" variant="contained">
-        Apply
-      </Button>
-    </Box>
-  );
 }
 
 type TopicTreeProps = {
@@ -247,10 +117,9 @@ function TopicTree({ node, depth = 0, expandedPaths, onToggle }: TopicTreeProps)
 }
 
 export function NetworkTablesPanel() {
-  const { clientRef, connectionSettings, status, topics, setError, upsertTopic } = useNetworkTables();
+  const { connectionSettings, topics } = useNetworkTables();
   const [search, setSearch] = useState("");
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(["/"]));
-  const [saveValuesOpen, setSaveValuesOpen] = useState(false);
 
   const topicTree = useMemo(() => {
     return createTree(topics, search);
@@ -271,12 +140,6 @@ export function NetworkTablesPanel() {
     return topics.filter((topic) => !normalizedSearch || topic.name.toLowerCase().includes(normalizedSearch)).length;
   }, [topics, search]);
 
-  const tunableTopics = useMemo(() => {
-    return topics.filter(isTunableTopic).sort((left, right) => left.name.localeCompare(right.name));
-  }, [topics]);
-  const tuningModeTopic = topics.find((topic) => topic.name === tuningModeTopicName);
-  const tuningModeEnabled = tuningModeTopic?.value === true;
-
   function togglePath(path: string) {
     setExpandedPaths((current) => {
       const next = new Set(current);
@@ -289,106 +152,8 @@ export function NetworkTablesPanel() {
     });
   }
 
-  function applyTunableTopic(topic: NtTopicSnapshot, type: NtTopicType, value: NtPrimitive) {
-    try {
-      clientRef.current.publish(topic.name, type, value);
-      upsertTopic({
-        ...topic,
-        type,
-        value,
-        lastChangedTime: Date.now()
-      });
-      setError(null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
-    }
-  }
-
-  function setTuningModeEnabled(enabled: boolean) {
-    try {
-      clientRef.current.publish(tuningModeTopicName, "boolean", enabled);
-      upsertTopic({
-        name: tuningModeTopicName,
-        type: "boolean",
-        value: enabled,
-        lastChangedTime: Date.now()
-      });
-      setError(null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
-    }
-  }
-
   return (
-    <Stack spacing={2}>
-      <Card variant="outlined">
-        <CardContent>
-          <Stack spacing={1.5}>
-            <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ alignItems: { md: "center" } }}>
-              <Box sx={{ flexGrow: 1 }}>
-                <Typography variant="h6">Live Tunables</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Apply writes primitive command and subsystem variables to NetworkTables. Robot code only uses them
-                  while tuning mode is enabled.
-                </Typography>
-              </Box>
-              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                <Button
-                  disabled={tunableTopics.length === 0 || !window.powerlib?.readSubsystems || !window.powerlib?.readBindings}
-                  onClick={() => setSaveValuesOpen(true)}
-                  size="small"
-                  variant="outlined"
-                >
-                  Save Values
-                </Button>
-                <Chip
-                  color={tuningModeEnabled ? "warning" : "default"}
-                  label={tuningModeEnabled ? "armed" : "safe"}
-                  size="small"
-                  variant={tuningModeEnabled ? "filled" : "outlined"}
-                />
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={tuningModeEnabled}
-                      disabled={status !== "connected"}
-                      onChange={(event) => setTuningModeEnabled(event.target.checked)}
-                    />
-                  }
-                  label={tuningModeEnabled ? "Tuning on" : "Tuning off"}
-                />
-              </Stack>
-            </Stack>
-
-            <Alert severity={tuningModeEnabled ? "warning" : "info"} variant="outlined">
-              {tuningModeEnabled
-                ? "Tuning mode is on: applied values can change subsystem gains and generated command targets live."
-                : "Tuning mode is off: applied values are staged in NetworkTables, but robot code uses generated constants/defaults."}
-            </Alert>
-
-            {tunableTopics.length > 0 ? (
-              <Stack spacing={1}>
-                {tunableTopics.map((topic) => (
-                  <TunableVariableRow
-                    key={topic.name}
-                    disabled={status !== "connected"}
-                    topic={topic}
-                    onApply={applyTunableTopic}
-                  />
-                ))}
-              </Stack>
-            ) : (
-              <Alert severity="info" variant="outlined">
-                No live tunable variables are published yet. Generated subsystem PID values and generated command values
-                will appear here while robot code is running.
-              </Alert>
-            )}
-          </Stack>
-        </CardContent>
-      </Card>
-
-      <SaveTunedValuesDialog open={saveValuesOpen} topics={topics} onClose={() => setSaveValuesOpen(false)} />
-
+    <Box>
       <Card variant="outlined">
         <CardContent sx={{ p: 0 }}>
           <Stack spacing={0}>
@@ -447,6 +212,6 @@ export function NetworkTablesPanel() {
           </Stack>
         </CardContent>
       </Card>
-    </Stack>
+    </Box>
   );
 }

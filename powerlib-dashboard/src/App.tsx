@@ -6,8 +6,10 @@ import {
   Button,
   Chip,
   Container,
+  FormControlLabel,
   Snackbar,
   Stack,
+  Switch,
   Tab,
   Tabs,
   Toolbar,
@@ -19,6 +21,7 @@ import DashboardIcon from "@mui/icons-material/Dashboard";
 import ElectricBoltIcon from "@mui/icons-material/ElectricBolt";
 import GamepadIcon from "@mui/icons-material/Gamepad";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
+import TuneIcon from "@mui/icons-material/Tune";
 import type {
   CharacterizationCommand,
   GeneratedSubsystem,
@@ -41,8 +44,10 @@ import { UpdateCodeDialog } from "./features/subsystems/components/UpdateCodeDia
 import { NetworkTablesPanel } from "./features/networktables/NetworkTablesPanel";
 import { NetworkTablesProvider, useNetworkTables } from "./features/networktables/NetworkTablesContext";
 import { ConnectionSettingsDialog } from "./features/networktables/ConnectionSettingsDialog";
+import { tuningModeTopicName } from "./features/networktables/tuningUtils";
 import { RobotPanel } from "./features/robot/RobotPanel";
 import { BindingsPanel } from "./features/bindings/BindingsPanel";
+import { TuningPanel } from "./features/tuning/TuningPanel";
 import type { AppView } from "./types/app";
 
 type ToastState = {
@@ -104,6 +109,8 @@ function AppContent() {
   const updateSubsystemCodeRef = useRef<() => Promise<void>>(async () => {});
   const updateInstallSectionRef = useRef<(section: string) => Promise<void>>(async () => {});
   const updatePowerToolRef = useRef<() => Promise<void>>(async () => {});
+  const tuningModeTopic = topics.find((topic) => topic.name === tuningModeTopicName);
+  const tuningModeEnabled = tuningModeTopic?.value === true;
 
   const characterizationCommands = useMemo<CharacterizationCommand[]>(() => {
     if (!subsystemForm?.name) {
@@ -387,6 +394,21 @@ function AppContent() {
     setTopics([]);
   }
 
+  function setTuningModeEnabled(enabled: boolean) {
+    try {
+      clientRef.current.publish(tuningModeTopicName, "boolean", enabled);
+      upsertTopic({
+        name: tuningModeTopicName,
+        type: "boolean",
+        value: enabled,
+        lastChangedTime: Date.now()
+      });
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not update tuning mode.");
+    }
+  }
+
   updateSubsystemCodeRef.current = updateSubsystemCode;
   updateInstallSectionRef.current = updateInstallSection;
   updatePowerToolRef.current = updatePowerTool;
@@ -455,7 +477,7 @@ function AppContent() {
         sx={{ borderBottom: 1, borderColor: "divider", top: 0, zIndex: (theme) => theme.zIndex.drawer + 1 }}
       >
         <Container maxWidth={false}>
-          <Toolbar disableGutters sx={{ gap: 2 }}>
+          <Toolbar disableGutters sx={{ gap: 2, flexWrap: "wrap" }}>
             <ElectricBoltIcon color="primary" sx={{ fontSize: 34 }} />
             <Box sx={{ flexGrow: 1 }}>
               <Stack direction="row" spacing={1.25} sx={{ alignItems: "baseline" }}>
@@ -472,14 +494,41 @@ function AppContent() {
               color={status === "connected" ? "success" : status === "connecting" ? "warning" : "default"}
               variant={status === "idle" ? "outlined" : "filled"}
             />
-            <Stack direction="row" spacing={1}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+              <Chip
+                color={tuningModeEnabled ? "warning" : "default"}
+                label={tuningModeEnabled ? "tuning armed" : "tuning safe"}
+                size="small"
+                variant={tuningModeEnabled ? "filled" : "outlined"}
+              />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={tuningModeEnabled}
+                    disabled={status !== "connected"}
+                    onChange={(event) => setTuningModeEnabled(event.target.checked)}
+                  />
+                }
+                label="Tuning"
+              />
+            </Stack>
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
               <Chip label={`${connectionSettings.host}:${connectionSettings.port}`} variant="outlined" />
-              <Button startIcon={<CableIcon />} variant="contained" size="small" onClick={connectNetworkTables}>
-                Connect
-              </Button>
-              <Button variant="outlined" size="small" onClick={disconnectNetworkTables}>
-                Disconnect
-              </Button>
+              {status === "connected" ? (
+                <Button variant="outlined" size="small" onClick={disconnectNetworkTables}>
+                  Disconnect
+                </Button>
+              ) : (
+                <Button
+                  disabled={status === "connecting"}
+                  startIcon={<CableIcon />}
+                  variant="contained"
+                  size="small"
+                  onClick={connectNetworkTables}
+                >
+                  {status === "connecting" ? "Connecting" : "Connect"}
+                </Button>
+              )}
             </Stack>
           </Toolbar>
           <Tabs value={activeView} onChange={(_, value) => setActiveView(value)} sx={{ minHeight: 44 }}>
@@ -488,6 +537,13 @@ function AppContent() {
               iconPosition="start"
               label="Robot"
               value="robot"
+              sx={{ minHeight: 44 }}
+            />
+            <Tab
+              icon={<TuneIcon />}
+              iconPosition="start"
+              label="Tuning"
+              value="tuning"
               sx={{ minHeight: 44 }}
             />
             <Tab
@@ -585,6 +641,10 @@ function AppContent() {
 
           {activeView === "networktables" && (
             <NetworkTablesPanel />
+          )}
+
+          {activeView === "tuning" && (
+            <TuningPanel />
           )}
 
           {activeView === "subsystems" && (

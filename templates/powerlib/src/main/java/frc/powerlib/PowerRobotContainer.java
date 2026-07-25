@@ -88,7 +88,7 @@ public interface PowerRobotContainer {
   }
 
   static double getSubsystemVariable(String subsystemName, String key, double defaultValue) {
-    return toDouble(getSubsystemVariable(subsystemName, key, defaultValue), defaultValue);
+    return toDouble(getSubsystemVariable(subsystemName, key, Double.valueOf(defaultValue)), defaultValue);
   }
 
   static Map<String, Map<String, Object>> getAllSubsystemVariables() {
@@ -110,7 +110,7 @@ public interface PowerRobotContainer {
   }
 
   static double getCommandVariable(String commandName, String key, double defaultValue) {
-    return toDouble(getCommandVariable(commandName, key, defaultValue), defaultValue);
+    return toDouble(getCommandVariable(commandName, key, Double.valueOf(defaultValue)), defaultValue);
   }
 
   static Map<String, Map<String, Object>> getAllCommandVariables() {
