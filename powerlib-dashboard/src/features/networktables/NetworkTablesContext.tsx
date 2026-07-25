@@ -16,8 +16,6 @@ type NetworkTablesContextValue = {
   setConnectionSettings: (settings: ConnectionSettings) => void;
   topics: NtTopicSnapshot[];
   setTopics: React.Dispatch<React.SetStateAction<NtTopicSnapshot[]>>;
-  error: string | null;
-  setError: (error: string | null) => void;
   upsertTopic: (snapshot: NtTopicSnapshot) => void;
 };
 
@@ -52,7 +50,6 @@ export function NetworkTablesProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<ConnectionState>("idle");
   const [connectionSettingsState, setConnectionSettingsState] = useState<ConnectionSettings>(readSavedConnectionSettings);
   const [topics, setTopics] = useState<NtTopicSnapshot[]>([]);
-  const [error, setError] = useState<string | null>(null);
 
   function setConnectionSettings(settings: ConnectionSettings) {
     setConnectionSettingsState(settings);
@@ -76,8 +73,6 @@ export function NetworkTablesProvider({ children }: { children: ReactNode }) {
         setConnectionSettings,
         topics,
         setTopics,
-        error,
-        setError,
         upsertTopic
       }}
     >

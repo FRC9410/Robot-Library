@@ -14,7 +14,7 @@ import {
 type TunableVariableRowProps = {
   disabled: boolean;
   topic: NtTopicSnapshot;
-  onApply: (topic: NtTopicSnapshot, type: NtTopicType, value: NtPrimitive) => void;
+  onApply: (topic: NtTopicSnapshot, type: NtTopicType, value: NtPrimitive) => Promise<void>;
 };
 
 function TunableVariableRow({ disabled, topic, onApply }: TunableVariableRowProps) {
@@ -32,14 +32,14 @@ function TunableVariableRow({ disabled, topic, onApply }: TunableVariableRowProp
   }
   const writableType = type;
 
-  function applyValue() {
+  async function applyValue() {
     if (disabled) {
       return;
     }
 
     try {
       const value = parseDraftValue(writableType, draft);
-      onApply(topic, writableType, value);
+      await onApply(topic, writableType, value);
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -79,8 +79,9 @@ function TunableVariableRow({ disabled, topic, onApply }: TunableVariableRowProp
 }
 
 export function TuningPanel() {
-  const { clientRef, status, topics, setError, upsertTopic } = useNetworkTables();
+  const { clientRef, status, topics, upsertTopic } = useNetworkTables();
   const [saveValuesOpen, setSaveValuesOpen] = useState(false);
+  const [panelError, setPanelError] = useState<string | null>(null);
 
   const tunableTopics = useMemo(() => {
     return topics.filter(isTunableTopic).sort((left, right) => left.name.localeCompare(right.name));
@@ -88,18 +89,20 @@ export function TuningPanel() {
   const tuningModeTopic = topics.find((topic) => topic.name === tuningModeTopicName);
   const tuningModeEnabled = tuningModeTopic?.value === true;
 
-  function applyTunableTopic(topic: NtTopicSnapshot, type: NtTopicType, value: NtPrimitive) {
+  async function applyTunableTopic(topic: NtTopicSnapshot, type: NtTopicType, value: NtPrimitive) {
     try {
-      clientRef.current.publish(topic.name, type, value);
+      await clientRef.current.publish(topic.name, type, value);
       upsertTopic({
         ...topic,
         type,
         value,
         lastChangedTime: Date.now()
       });
-      setError(null);
+      setPanelError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
+      const message = caught instanceof Error ? caught.message : String(caught);
+      setPanelError(message);
+      throw new Error(message);
     }
   }
 
@@ -139,6 +142,11 @@ export function TuningPanel() {
                 ? "Tuning mode is on: applied values can change subsystem gains and generated command targets live."
                 : "Tuning mode is off: applied values are staged in NetworkTables, but robot code uses generated constants/defaults."}
             </Alert>
+            {panelError && (
+              <Alert severity="error" onClose={() => setPanelError(null)}>
+                {panelError}
+              </Alert>
+            )}
 
             {tunableTopics.length > 0 ? (
               <Stack spacing={1}>
@@ -147,7 +155,7 @@ export function TuningPanel() {
                     key={topic.name}
                     disabled={status !== "connected"}
                     topic={topic}
-                    onApply={applyTunableTopic}
+                    onApply={(changedTopic, type, value) => applyTunableTopic(changedTopic, type, value)}
                   />
                 ))}
               </Stack>

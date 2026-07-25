@@ -81,8 +81,6 @@ function AppContent() {
     setConnectionSettings,
     topics,
     setTopics,
-    error,
-    setError,
     upsertTopic
   } = useNetworkTables();
   const [activeView, setActiveView] = useState<AppView>("robot");
@@ -311,7 +309,6 @@ function AppContent() {
     }
 
     setPowerToolUpdating(true);
-    setError(null);
 
     try {
       if (!window.powerlib?.updatePowerTool) {
@@ -322,7 +319,7 @@ function AppContent() {
       showToast("Started Power Tool update. The app will restart when it finishes.", "info");
     } catch (caught) {
       setPowerToolUpdating(false);
-      setError(caught instanceof Error ? caught.message : "Could not start Power Tool update.");
+      showToast(caught instanceof Error ? caught.message : "Could not start Power Tool update.", "error");
     }
   }
 
@@ -351,7 +348,6 @@ function AppContent() {
 
     const label = installSectionLabels[section] ?? section;
     setInstallSectionUpdating(label);
-    setError(null);
 
     try {
       if (!window.powerlib?.updateInstallSection) {
@@ -371,7 +367,6 @@ function AppContent() {
   }
 
   function connectNetworkTables() {
-    setError(null);
     setStatus("connecting");
     setTopics([]);
 
@@ -384,7 +379,7 @@ function AppContent() {
       });
     } catch (caught) {
       setStatus("disconnected");
-      setError(caught instanceof Error ? caught.message : "Could not connect to NetworkTables.");
+      showToast(caught instanceof Error ? caught.message : "Could not connect to NetworkTables.", "error");
     }
   }
 
@@ -394,18 +389,17 @@ function AppContent() {
     setTopics([]);
   }
 
-  function setTuningModeEnabled(enabled: boolean) {
+  async function setTuningModeEnabled(enabled: boolean) {
     try {
-      clientRef.current.publish(tuningModeTopicName, "boolean", enabled);
+      await clientRef.current.publish(tuningModeTopicName, "boolean", enabled);
       upsertTopic({
         name: tuningModeTopicName,
         type: "boolean",
         value: enabled,
         lastChangedTime: Date.now()
       });
-      setError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not update tuning mode.");
+      showToast(caught instanceof Error ? caught.message : "Could not update tuning mode.", "error");
     }
   }
 
@@ -456,11 +450,9 @@ function AppContent() {
     }
   }
 
-  function runCharacterizationCommand(command: CharacterizationCommand) {
-    setError(null);
-
+  async function runCharacterizationCommand(command: CharacterizationCommand) {
     try {
-      clientRef.current.publish(`${command.baseTopic}/request`, "boolean", true);
+      await clientRef.current.publish(`${command.baseTopic}/request`, "boolean", true);
       upsertTopic({ name: `${command.baseTopic}/request`, type: "boolean", value: true });
       showToast(`Started ${command.label}.`, "success");
     } catch (caught) {
@@ -506,7 +498,7 @@ function AppContent() {
                   <Switch
                     checked={tuningModeEnabled}
                     disabled={status !== "connected"}
-                    onChange={(event) => setTuningModeEnabled(event.target.checked)}
+                    onChange={(event) => void setTuningModeEnabled(event.target.checked)}
                   />
                 }
                 label="Tuning"
@@ -630,8 +622,6 @@ function AppContent() {
 
       <Container maxWidth={false} sx={{ py: 2 }}>
         <Stack spacing={2}>
-          {error && <Alert severity="error">{error}</Alert>}
-
           {activeView === "robot" && (
             <RobotPanel
               subsystems={subsystemDocument.subsystems}

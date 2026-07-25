@@ -76,7 +76,7 @@ export class PowerLibNt4Client {
     });
   }
 
-  publish(name: string, type: NtTopicType, value: NtPrimitive) {
+  async publish(name: string, type: NtTopicType, value: NtPrimitive) {
     if (!this.nt) {
       throw new Error("NetworkTables is not connected.");
     }
@@ -84,7 +84,7 @@ export class PowerLibNt4Client {
     const topic =
       this.topics.get(name) ?? this.nt.createTopic<NtPrimitive>(name, typeInfoByType[type], value);
     this.topics.set(name, topic);
-    void topic.publish();
+    await topic.publish();
     topic.setValue(value);
   }
 
