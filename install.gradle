@@ -261,6 +261,7 @@ def installTemplatesPropertyName = 'powerlibInstallTemplates'
 def installVendordepsPropertyName = 'powerlibInstallVendordeps'
 def installToolsPropertyName = 'powerlibInstallTools'
 def installDashboardPropertyName = 'powerlibInstallDashboard'
+def installSkillsPropertyName = 'powerlibInstallSkills'
 def interactiveInstallPropertyName = 'powerlibInteractive'
 def dashboardInstallScriptName = 'power-tool-install.ps1'
 def installStateFileName = '.powerlib-installed'
@@ -493,6 +494,35 @@ def copyTemplateFile = { Project project, TemplateFile template, boolean writeTe
 }
 
 
+def skillFiles = [
+    'SKILL.md',
+    'SimManager-template.md',
+    'Swerve-sim-thread-template.md',
+    'MapleSimSwerveDrivetrain-template.md'
+]
+
+def installSkills = { Project project ->
+    String userHome = System.getProperty('user.home')
+    File skillsDir = new File(userHome, '.claude/skills/powerlib-sim')
+    skillsDir.mkdirs()
+
+    File localInstallerRoot = findLocalInstallerRoot()
+    File localSkillsRoot = localInstallerRoot == null ? null : new File(localInstallerRoot, 'skills')
+
+    skillFiles.each { fileName ->
+        File destination = new File(skillsDir, fileName)
+        File localSkillFile = localSkillsRoot == null ? null : new File(localSkillsRoot, fileName)
+
+        if (localSkillFile != null && localSkillFile.exists()) {
+            Files.copy(localSkillFile.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        } else {
+            destination.text = new URL(rawFileUrlFor(project, "skills/${fileName}")).getText('UTF-8')
+        }
+
+        logger.lifecycle("Installed skill: ${destination.absolutePath}")
+    }
+}
+
 def deleteOldDashboardBuildScript = { Project project ->
     File oldDashboardBuildScript = project.file('powerlib-build-dashboard.ps1')
     if (oldDashboardBuildScript.exists() && !oldDashboardBuildScript.delete()) {
@@ -598,6 +628,7 @@ gradle.projectsLoaded {
                 boolean installVendordeps = findInstallChoice(project, installVendordepsPropertyName, 'Install vendor dependencies?', true)
                 boolean installTools = findBooleanProperty(project, installToolsPropertyName, true)
                 boolean installDashboard = installTools && findInstallChoice(project, installDashboardPropertyName, 'Download Power Tool source and run npm install?', true)
+                boolean shouldInstallSkills = installTools && findInstallChoice(project, installSkillsPropertyName, 'Install PowerLib Claude skills to ~/.claude/skills/?', true)
                 boolean vendordepsOnly = installVendordeps && !installLib && !installTemplates && !installDashboard
                 boolean priorPowerLibInstall = hasPriorPowerLibInstall(project)
 
@@ -606,6 +637,7 @@ gradle.projectsLoaded {
                 logger.lifecycle("  Robot starter/template files: ${installTemplates}")
                 logger.lifecycle("  Vendor dependencies: ${installVendordeps}")
                 logger.lifecycle("  Power Tool and scripts: ${installDashboard}")
+                logger.lifecycle("  Claude skills: ${shouldInstallSkills}")
 
                 if (installVendordeps) {
                     vendorDependencies.each { dependency ->
@@ -651,6 +683,12 @@ gradle.projectsLoaded {
                 } else {
                     logger.lifecycle(installTools ? 'Skipped Power Tool' : 'Skipped PowerLib tools')
                     deleteOldDashboardBuildScript(project)
+                }
+
+                if (shouldInstallSkills) {
+                    installSkills(project)
+                } else {
+                    logger.lifecycle('Skipped Claude skills')
                 }
 
                 if (keepBackups) {

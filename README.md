@@ -113,6 +113,41 @@ Power Tool includes NetworkTables tools and generated subsystem editing. Install
 
 Use `Update Power Tool` inside the app to download the latest Power Tool source, refresh the scripts, reinstall npm dependencies, and restart the app.
 
+## Claude Skills
+
+The `skills/` directory contains Claude Code skills for Team 9410 robot projects. These automate common setup tasks that would otherwise require reading documentation and writing a lot of boilerplate by hand.
+
+### Available Skills
+
+| Skill | Trigger | What it does |
+|-------|---------|--------------|
+| `powerlib-sim` | "sim setup", "simulation", "maple sim", "SimManager", "set up sim" | Guides you through entering robot physical values and game piece definitions, then generates all MapleSim integration files from scratch |
+
+### What `powerlib-sim` generates
+
+| File | Action |
+|------|--------|
+| `gradle.properties` | Created — pins Gradle to WPILib JDK 17 |
+| `src/.../simulation/MapleSimSwerveDrivetrain.java` | Created — MapleSim physics wrapper |
+| `src/.../simulation/SimManager.java` | Created — game piece spawning and pose publishing |
+| `src/.../subsystems/Swerve.java` | Modified — sim thread and pose publisher |
+| `src/.../Robot.java` | Modified — `simulationPeriodic()`, `resetField()`, `publishPoses()` |
+| `sim-config.md` | Created — reference doc with all values used |
+
+If you have [Claude Code](https://claude.ai/code), the `powerlib-sim` skill is available in any robot project set up with Robot-Library. It walks you through setting up MapleSim simulation from scratch — something that normally requires reading through vendordep APIs, writing physics config boilerplate, and wiring up several files by hand.
+
+The skill collects your robot's physical properties (weight, bumper size, motor types, wheel COF) and your season's game piece definitions (shape, mass, damping, spawn locations), then generates and modifies all the required files so simulation works out of the box with `./gradlew simulateJava`.
+
+To use it, open Claude Code in your robot project and say something like:
+
+```
+set up sim for this robot
+```
+
+Claude will take it from there.
+
+---
+
 ## Internal Docs
 
 Maintainer notes and development workflow details live in [INTERNAL.md](INTERNAL.md).
