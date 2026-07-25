@@ -6,12 +6,11 @@ package frc.powerlib.subsystems;
 
 import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.configs.MotionMagicConfigs;
+import com.ctre.phoenix6.configs.Slot0Configs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.hardware.TalonFX;
-import com.ctre.phoenix6.signals.NeutralModeValue;
 
 import edu.wpi.first.wpilibj.RobotBase;
-import frc.powerlib.PowerRobotContainer;
 import frc.powerlib.configs.LeadMotorConfig;
 import frc.powerlib.configs.MotionMagicConfig;
 import frc.powerlib.configs.VelocitySubsystemConfig;
@@ -30,6 +29,15 @@ public class VelocitySubsystem extends PowerSubsystem {
   private boolean focEnabled;
   private double torqueFeedForward;
   private double velocitySetpoint;
+  private double kP;
+  private double kI;
+  private double kD;
+  private double kG;
+  private double kS;
+  private double kV;
+  private double kA;
+  private double motionMagicCruiseVelocity;
+  private double motionMagicAcceleration;
   /**
    * Constructor that uses the leader motor from the config and configures it with lead and motion
    * magic settings from the same config.
@@ -51,6 +59,7 @@ public class VelocitySubsystem extends PowerSubsystem {
     this.focEnabled = config.leadConfig().focEnabled();
     this.torqueFeedForward = config.torqueFeedForward();
     this.velocitySetpoint = 0.0;
+    initializeTunableState(config.leadConfig(), config.motionMagicConfig());
     this.io = io == null ? createDefaultIO() : io;
   }
 
@@ -61,11 +70,12 @@ public class VelocitySubsystem extends PowerSubsystem {
   @Override
   public void periodic() {
     io.updateInputs(inputs);
+    applyTunableValues();
     SignalLogger.writeDouble(subsystemName + " Velocity", inputs.velocityRotationsPerSecond, "rotations per second");
-    PowerRobotContainer.setData(subsystemName + "/Velocity", inputs.velocityRotationsPerSecond);
-    PowerRobotContainer.setData(subsystemName + "/VelocitySetpoint", inputs.velocitySetpoint);
-    PowerRobotContainer.setData(subsystemName + "/AppliedVolts", inputs.appliedVolts);
-    PowerRobotContainer.setData(subsystemName + "/Connected", inputs.connected);
+    setSubsystemData("Velocity", inputs.velocityRotationsPerSecond);
+    setSubsystemData("VelocitySetpoint", inputs.velocitySetpoint);
+    setSubsystemData("AppliedVolts", inputs.appliedVolts);
+    setSubsystemData("Connected", inputs.connected);
   }
 
   /**
@@ -92,6 +102,86 @@ public class VelocitySubsystem extends PowerSubsystem {
 
     motor.getConfigurator().apply(config);
     motor.getConfigurator().apply(motionMagicConfigs);
+  }
+
+  private void initializeTunableState(
+      LeadMotorConfig leadConfig, MotionMagicConfig motionMagicConfig) {
+    kP = leadConfig.kP();
+    kI = leadConfig.kI();
+    kD = leadConfig.kD();
+    kG = leadConfig.kG();
+    kS = leadConfig.kS().orElse(0.0);
+    kV = leadConfig.kV().orElse(0.0);
+    kA = leadConfig.kA().orElse(0.0);
+    motionMagicCruiseVelocity = motionMagicConfig.cruiseVelocity();
+    motionMagicAcceleration = motionMagicConfig.acceleration();
+
+    registerSubsystemVariable("PID/kP", kP);
+    registerSubsystemVariable("PID/kI", kI);
+    registerSubsystemVariable("PID/kD", kD);
+    registerSubsystemVariable("PID/kG", kG);
+    registerSubsystemVariable("Feedforward/kS", kS);
+    registerSubsystemVariable("Feedforward/kV", kV);
+    registerSubsystemVariable("Feedforward/kA", kA);
+    registerSubsystemVariable("MotionMagic/CruiseVelocity", motionMagicCruiseVelocity);
+    registerSubsystemVariable("MotionMagic/Acceleration", motionMagicAcceleration);
+  }
+
+  private void applyTunableValues() {
+    if (velocityMotor == null) {
+      return;
+    }
+
+    double nextKP = getSubsystemVariable("PID/kP", kP);
+    double nextKI = getSubsystemVariable("PID/kI", kI);
+    double nextKD = getSubsystemVariable("PID/kD", kD);
+    double nextKG = getSubsystemVariable("PID/kG", kG);
+    double nextKS = getSubsystemVariable("Feedforward/kS", kS);
+    double nextKV = getSubsystemVariable("Feedforward/kV", kV);
+    double nextKA = getSubsystemVariable("Feedforward/kA", kA);
+
+    if (changed(nextKP, kP)
+        || changed(nextKI, kI)
+        || changed(nextKD, kD)
+        || changed(nextKG, kG)
+        || changed(nextKS, kS)
+        || changed(nextKV, kV)
+        || changed(nextKA, kA)) {
+      Slot0Configs slot0 = new Slot0Configs();
+      slot0.kP = nextKP;
+      slot0.kI = nextKI;
+      slot0.kD = nextKD;
+      slot0.kG = nextKG;
+      slot0.kS = nextKS;
+      slot0.kV = nextKV;
+      slot0.kA = nextKA;
+      velocityMotor.getConfigurator().apply(slot0);
+
+      kP = nextKP;
+      kI = nextKI;
+      kD = nextKD;
+      kG = nextKG;
+      kS = nextKS;
+      kV = nextKV;
+      kA = nextKA;
+    }
+
+    double nextCruiseVelocity =
+        getSubsystemVariable("MotionMagic/CruiseVelocity", motionMagicCruiseVelocity);
+    double nextAcceleration = getSubsystemVariable("MotionMagic/Acceleration", motionMagicAcceleration);
+    if (changed(nextCruiseVelocity, motionMagicCruiseVelocity)
+        || changed(nextAcceleration, motionMagicAcceleration)) {
+      MotionMagicConfigs motionMagicConfigs = new MotionMagicConfigs();
+      motionMagicConfigs.withMotionMagicCruiseVelocity(nextCruiseVelocity);
+      motionMagicConfigs.withMotionMagicAcceleration(nextAcceleration);
+      velocityMotor.getConfigurator().apply(motionMagicConfigs);
+      motionMagicCruiseVelocity = nextCruiseVelocity;
+      motionMagicAcceleration = nextAcceleration;
+    }
+  }
+
+  private static boolean changed(double left, double right) {
+    return Math.abs(left - right) > 1.0e-9;
   }
 
   /**

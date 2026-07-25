@@ -1063,7 +1063,7 @@ function Ensure-PowerDashboardRawNetworkTablesSupport {
     param([Parameter(Mandatory = $true)][string]$PowerDashboardPath)
 
     $content = Get-Content -Path $PowerDashboardPath -Raw
-    if ($content.Contains("registerCharacterizationCommand(") -and -not $content.Contains("SmartDashboard")) {
+    if ($content.Contains("registerCharacterizationCommand(") -and $content.Contains('getSubTable("Subsystems")') -and $content.Contains('getSubTable("Tuning")') -and $content.Contains("TUNING_MODE_SYNC_INTERVAL_SECONDS") -and -not $content.Contains("SmartDashboard")) {
         return
     }
 
@@ -1077,6 +1077,7 @@ package frc.robot.subsystems;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableEntry;
 import edu.wpi.first.networktables.NetworkTableInstance;
+import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
@@ -1085,12 +1086,20 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class PowerDashboard extends SubsystemBase {
+  private static final double TUNING_MODE_SYNC_INTERVAL_SECONDS = 1.0;
+
   private final StateMachine stateMachine;
-  private final NetworkTable dataTable =
-      NetworkTableInstance.getDefault().getTable("PowerLib").getSubTable("Data");
+  private final NetworkTable subsystemsTable =
+      NetworkTableInstance.getDefault().getTable("PowerLib").getSubTable("Subsystems");
+  private final NetworkTable commandsTable =
+      NetworkTableInstance.getDefault().getTable("PowerLib").getSubTable("Commands");
+  private final NetworkTable tuningTable =
+      NetworkTableInstance.getDefault().getTable("PowerLib").getSubTable("Tuning");
+  private final NetworkTableEntry tuningEnabledEntry = tuningTable.getEntry("Enabled");
   private final NetworkTable characterizationTable =
       NetworkTableInstance.getDefault().getTable("PowerLib").getSubTable("Characterization");
   private final Map<String, CharacterizationCommandBinding> characterizationCommands = new HashMap<>();
+  private double nextTuningModeSyncTime = 0.0;
 
   public PowerDashboard(StateMachine stateMachine) {
     this.stateMachine = stateMachine;
@@ -1104,13 +1113,105 @@ public class PowerDashboard extends SubsystemBase {
 
   @Override
   public void periodic() {
-    new java.util.HashMap<>(PowerRobotContainer.getAllData())
-        .forEach(this::publishValue);
+    syncTuningMode();
+    publishSubsystemData();
+    syncSubsystemVariables();
+    syncCommandVariables();
     pollCharacterizationCommands();
   }
 
-  private void publishValue(String key, Object value) {
-    NetworkTableEntry entry = dataTable.getEntry(key);
+  private void syncTuningMode() {
+    double now = Timer.getFPGATimestamp();
+    if (now < nextTuningModeSyncTime) {
+      return;
+    }
+
+    nextTuningModeSyncTime = now + TUNING_MODE_SYNC_INTERVAL_SECONDS;
+    if (!tuningEnabledEntry.exists()) {
+      tuningEnabledEntry.setBoolean(PowerRobotContainer.isTuningEnabled());
+    }
+    PowerRobotContainer.setTuningEnabled(tuningEnabledEntry.getBoolean(false));
+  }
+
+  private void publishSubsystemData() {
+    new java.util.HashMap<>(PowerRobotContainer.getAllSubsystemData())
+        .forEach(
+            (subsystemName, values) -> {
+              NetworkTable dataTable = subsystemsTable.getSubTable(subsystemName).getSubTable("Data");
+              new java.util.HashMap<>(values).forEach((key, value) -> publishValue(dataTable, key, value));
+            });
+  }
+
+  private void syncSubsystemVariables() {
+    syncVariables(
+        PowerRobotContainer.getAllSubsystemVariables(),
+        subsystemsTable,
+        PowerRobotContainer::updateSubsystemVariable);
+  }
+
+  private void syncCommandVariables() {
+    syncVariables(
+        PowerRobotContainer.getAllCommandVariables(),
+        commandsTable,
+        PowerRobotContainer::updateCommandVariable);
+  }
+
+  private void syncVariables(
+      Map<String, Map<String, Object>> variablesByOwner,
+      NetworkTable ownerTable,
+      VariableUpdater updater) {
+    new java.util.HashMap<>(variablesByOwner)
+        .forEach(
+            (ownerName, variables) -> {
+              NetworkTable variablesTable = ownerTable.getSubTable(ownerName).getSubTable("Variables");
+              new java.util.HashMap<>(variables)
+                  .forEach(
+                      (key, defaultValue) -> {
+                        Object value =
+                            syncVariable(
+                                variablesTable.getEntry(key),
+                                defaultValue,
+                                PowerRobotContainer.isTuningEnabled());
+                        updater.update(ownerName, key, value);
+                      });
+            });
+  }
+
+  private Object syncVariable(NetworkTableEntry entry, Object defaultValue, boolean tuningEnabled) {
+    if (defaultValue instanceof Boolean) {
+      boolean fallback = (Boolean) defaultValue;
+      if (!entry.exists()) {
+        entry.setBoolean(fallback);
+      }
+      if (!tuningEnabled) {
+        return fallback;
+      }
+      return entry.getBoolean(fallback);
+    }
+
+    if (defaultValue instanceof Number) {
+      double fallback = ((Number) defaultValue).doubleValue();
+      if (!entry.exists()) {
+        entry.setDouble(fallback);
+      }
+      if (!tuningEnabled) {
+        return fallback;
+      }
+      return entry.getDouble(fallback);
+    }
+
+    String fallback = defaultValue == null ? "" : defaultValue.toString();
+    if (!entry.exists()) {
+      entry.setString(fallback);
+    }
+    if (!tuningEnabled) {
+      return fallback;
+    }
+    return entry.getString(fallback);
+  }
+
+  private void publishValue(NetworkTable table, String key, Object value) {
+    NetworkTableEntry entry = table.getEntry(key);
     if (value instanceof Boolean) {
       entry.setBoolean((Boolean) value);
       return;
@@ -1122,6 +1223,10 @@ public class PowerDashboard extends SubsystemBase {
     }
 
     entry.setString(value == null ? "" : value.toString());
+  }
+
+  private interface VariableUpdater {
+    void update(String ownerName, String key, Object value);
   }
 
   private void registerCharacterizationCommand(String subsystemName, String commandName, Command command) {
@@ -1367,6 +1472,16 @@ function Convert-ToJavaConstantName {
     return ($parts | ForEach-Object { $_.ToUpperInvariant() }) -join "_"
 }
 
+function Convert-ToJavaStringLiteral {
+    param([AllowNull()][string]$Value)
+
+    if ($null -eq $Value) {
+        return '""'
+    }
+
+    return '"' + $Value.Replace('\', '\\').Replace('"', '\"') + '"'
+}
+
 function Format-JavaDoubleLiteral {
     param([Parameter(Mandatory = $true)]$Value)
 
@@ -1479,10 +1594,36 @@ function Get-BindingCommandKind {
     return "function"
 }
 
+function Get-BindingCommandVariableKey {
+    param(
+        [Parameter(Mandatory = $true)]$Command,
+        [Parameter(Mandatory = $true)]$Subsystems,
+        [Parameter(Mandatory = $true)][string]$Description
+    )
+
+    $kind = Get-BindingCommandKind $Command
+    $constantProperty = Get-JsonPropertyValue $Command "constantName"
+    if ([string]::IsNullOrWhiteSpace($constantProperty)) {
+        throw "$Description needs a constant name."
+    }
+
+    $constantName = Convert-ToJavaConstantName $constantProperty.ToString()
+    if ($kind -eq "wait") {
+        return "Wait/$constantName"
+    }
+
+    $subsystemId = (Get-JsonPropertyValue $Command "subsystemId" "").ToString()
+    $method = (Get-JsonPropertyValue $Command "method" "").ToString()
+    $subsystem = Find-SubsystemById $Subsystems $subsystemId
+    $metadata = Get-SubsystemMetadata $subsystem
+    return "$($metadata.PascalName)/$method/$constantName"
+}
+
 function New-InstantBindingCommandCall {
     param(
         [Parameter(Mandatory = $true)]$Command,
-        [Parameter(Mandatory = $true)]$Subsystems
+        [Parameter(Mandatory = $true)]$Subsystems,
+        [Parameter(Mandatory = $true)][string]$CommandOwner
     )
 
     $subsystemId = (Get-JsonPropertyValue $Command "subsystemId" "").ToString()
@@ -1497,7 +1638,9 @@ function New-InstantBindingCommandCall {
             throw "Binding command '$method' for subsystem '$($metadata.Name)' needs a constant name."
         }
         $constantName = Convert-ToJavaConstantName $constantProperty.ToString()
-        $argument = "Constants.$($metadata.PascalName).$constantName"
+        $fallback = "Constants.$($metadata.PascalName).$constantName"
+        $variableKey = Get-BindingCommandVariableKey $Command $Subsystems "Binding command '$method'"
+        $argument = "PowerRobotContainer.getCommandVariable($(Convert-ToJavaStringLiteral $CommandOwner), $(Convert-ToJavaStringLiteral $variableKey), $fallback)"
     }
 
     $call = if ($needsValue) {
@@ -1533,30 +1676,33 @@ function Get-BindingConstantReference {
 function New-InstantBindingCommandExpression {
     param(
         [Parameter(Mandatory = $true)]$Command,
-        [Parameter(Mandatory = $true)]$Subsystems
+        [Parameter(Mandatory = $true)]$Subsystems,
+        [Parameter(Mandatory = $true)][string]$CommandOwner
     )
 
-    $commandCall = New-InstantBindingCommandCall $Command $Subsystems
+    $commandCall = New-InstantBindingCommandCall $Command $Subsystems $CommandOwner
     return "new InstantCommand(() -> { $($commandCall.Call) }, $($commandCall.Requirement))"
 }
 
 function New-RunBindingCommandExpression {
     param(
         [Parameter(Mandatory = $true)]$Command,
-        [Parameter(Mandatory = $true)]$Subsystems
+        [Parameter(Mandatory = $true)]$Subsystems,
+        [Parameter(Mandatory = $true)][string]$CommandOwner
     )
 
-    $commandCall = New-InstantBindingCommandCall $Command $Subsystems
+    $commandCall = New-InstantBindingCommandCall $Command $Subsystems $CommandOwner
     return "Commands.run(() -> { $($commandCall.Call) }, $($commandCall.Requirement))"
 }
 
 function New-InstantBindingGroupExpression {
     param(
         [Parameter(Mandatory = $true)]$Commands,
-        [Parameter(Mandatory = $true)]$Subsystems
+        [Parameter(Mandatory = $true)]$Subsystems,
+        [Parameter(Mandatory = $true)][string]$CommandOwner
     )
 
-    $commandCalls = @($Commands | ForEach-Object { New-InstantBindingCommandCall $_ $Subsystems })
+    $commandCalls = @($Commands | ForEach-Object { New-InstantBindingCommandCall $_ $Subsystems $CommandOwner })
     $requirements = @($commandCalls | ForEach-Object { $_.Requirement } | Select-Object -Unique)
     $calls = ($commandCalls | ForEach-Object { $_.Call }) -join " "
     return "new InstantCommand(() -> { $calls }, $($requirements -join ', '))"
@@ -1586,15 +1732,18 @@ function Test-BindingCommandGroupContainsKind {
 function New-BindingCommandExpression {
     param(
         [Parameter(Mandatory = $true)]$Command,
-        [Parameter(Mandatory = $true)]$Subsystems
+        [Parameter(Mandatory = $true)]$Subsystems,
+        [Parameter(Mandatory = $true)][string]$CommandOwner
     )
 
     $kind = Get-BindingCommandKind $Command
     if ($kind -eq "function") {
-        return New-InstantBindingCommandExpression $Command $Subsystems
+        return New-InstantBindingCommandExpression $Command $Subsystems $CommandOwner
     }
     if ($kind -eq "wait") {
-        return "Commands.waitSeconds($(Get-BindingConstantReference $Command $Subsystems 'Wait command'))"
+        $fallback = Get-BindingConstantReference $Command $Subsystems 'Wait command'
+        $variableKey = Get-BindingCommandVariableKey $Command $Subsystems 'Wait command'
+        return "Commands.waitSeconds(PowerRobotContainer.getCommandVariable($(Convert-ToJavaStringLiteral $CommandOwner), $(Convert-ToJavaStringLiteral $variableKey), $fallback))"
     }
 
     $children = @(Get-JsonPropertyValue $Command "children" @())
@@ -1603,23 +1752,64 @@ function New-BindingCommandExpression {
     }
 
     if ($kind -eq "sequence") {
-        $childExpressions = @($children | ForEach-Object { New-BindingCommandExpression $_ $Subsystems })
+        $childExpressions = @($children | ForEach-Object { New-BindingCommandExpression $_ $Subsystems $CommandOwner })
         return "new SequentialCommandGroup($($childExpressions -join ', '))"
     }
     if ($kind -eq "parallel") {
-        $childExpressions = @($children | ForEach-Object { New-BindingCommandExpression $_ $Subsystems })
+        $childExpressions = @($children | ForEach-Object { New-BindingCommandExpression $_ $Subsystems $CommandOwner })
         return "new ParallelCommandGroup($($childExpressions -join ', '))"
     }
 
     $raceContainsWait = Test-BindingCommandGroupContainsKind $children "wait"
     $childExpressions = @($children | ForEach-Object {
         if ($raceContainsWait -and (Get-BindingCommandKind $_) -eq "function") {
-            New-RunBindingCommandExpression $_ $Subsystems
+            New-RunBindingCommandExpression $_ $Subsystems $CommandOwner
         } else {
-            New-BindingCommandExpression $_ $Subsystems
+            New-BindingCommandExpression $_ $Subsystems $CommandOwner
         }
     })
     return "new ParallelRaceGroup($($childExpressions -join ', '))"
+}
+
+function Get-BindingCommandVariableDefaultLines {
+    param(
+        [Parameter(Mandatory = $true)]$Command,
+        [Parameter(Mandatory = $true)]$Subsystems,
+        [Parameter(Mandatory = $true)][string]$CommandOwner
+    )
+
+    $kind = Get-BindingCommandKind $Command
+    if ($kind -eq "function") {
+        $subsystemId = (Get-JsonPropertyValue $Command "subsystemId" "").ToString()
+        $method = (Get-JsonPropertyValue $Command "method" "").ToString()
+        $subsystem = Find-SubsystemById $Subsystems $subsystemId
+        if (-not (Get-BindingMethodNeedsValue $subsystem $method)) {
+            return @()
+        }
+
+        $metadata = Get-SubsystemMetadata $subsystem
+        $constantProperty = Get-JsonPropertyValue $Command "constantName"
+        if ([string]::IsNullOrWhiteSpace($constantProperty)) {
+            throw "Binding command '$method' for subsystem '$($metadata.Name)' needs a constant name."
+        }
+
+        $constantName = Convert-ToJavaConstantName $constantProperty.ToString()
+        $variableKey = Get-BindingCommandVariableKey $Command $Subsystems "Binding command '$method'"
+        return @("    PowerRobotContainer.setCommandVariableDefault($(Convert-ToJavaStringLiteral $CommandOwner), $(Convert-ToJavaStringLiteral $variableKey), Constants.$($metadata.PascalName).$constantName);")
+    }
+
+    if ($kind -eq "wait") {
+        $fallback = Get-BindingConstantReference $Command $Subsystems 'Wait command'
+        $variableKey = Get-BindingCommandVariableKey $Command $Subsystems 'Wait command'
+        return @("    PowerRobotContainer.setCommandVariableDefault($(Convert-ToJavaStringLiteral $CommandOwner), $(Convert-ToJavaStringLiteral $variableKey), $fallback);")
+    }
+
+    $lines = @()
+    foreach ($child in @(Get-JsonPropertyValue $Command "children" @())) {
+        $lines += @(Get-BindingCommandVariableDefaultLines $child $Subsystems $CommandOwner)
+    }
+
+    return $lines
 }
 
 function Write-PowerButtonBindingsFile {
@@ -1641,6 +1831,7 @@ function Write-PowerButtonBindingsFile {
     $lines += "import edu.wpi.first.wpilibj2.command.ParallelRaceGroup;"
     $lines += "import edu.wpi.first.wpilibj2.command.SequentialCommandGroup;"
     $lines += "import edu.wpi.first.wpilibj2.command.button.CommandXboxController;"
+    $lines += "import frc.powerlib.PowerRobotContainer;"
     $lines += "import frc.robot.subsystems.StateMachine;"
     $lines += ""
     $lines += "public final class PowerButtonBindings {"
@@ -1665,16 +1856,18 @@ function Write-PowerButtonBindingsFile {
         } else {
             $bindingName
         }
-        $variableName = "$(Convert-ToJavaIdentifier $bindingId 'binding')Command$bindingIndex"
+        $commandOwner = Convert-ToJavaIdentifier $bindingId 'binding'
+        $variableName = "$($commandOwner)Command$bindingIndex"
         $controller = (Get-JsonPropertyValue $binding "controller" "driver").ToString()
         $input = (Get-JsonPropertyValue $binding "input" "a").ToString()
         $event = (Get-JsonPropertyValue $binding "event" "onTrue").ToString()
         $triggerExpression = Get-BindingTriggerExpression $controller $input
         $eventName = Get-BindingEventName $event
-        $commandExpressions = @($commands | ForEach-Object { New-BindingCommandExpression $_ $Subsystems })
+        $commandVariableDefaults = @($commands | ForEach-Object { Get-BindingCommandVariableDefaultLines $_ $Subsystems $commandOwner } | Select-Object -Unique)
+        $commandExpressions = @($commands | ForEach-Object { New-BindingCommandExpression $_ $Subsystems $commandOwner })
         $allInstantFunctions = @($commands | Where-Object { (Get-BindingCommandKind $_) -eq "function" }).Count -eq $commands.Count
         $commandExpression = if ($allInstantFunctions) {
-            New-InstantBindingGroupExpression $commands $Subsystems
+            New-InstantBindingGroupExpression $commands $Subsystems $commandOwner
         } elseif ($commandExpressions.Count -eq 1) {
             $commandExpressions[0]
         } else {
@@ -1682,6 +1875,9 @@ function Write-PowerButtonBindingsFile {
         }
 
         $lines += ""
+        foreach ($defaultLine in $commandVariableDefaults) {
+            $lines += $defaultLine
+        }
         $lines += "    Command $variableName = $commandExpression;"
         $lines += "    $triggerExpression.$eventName($variableName);"
         $bindingIndex++

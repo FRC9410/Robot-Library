@@ -463,7 +463,10 @@ def shouldReplaceExistingDestination = { TemplateFile template, File destination
                 !currentText.contains('new PowerDashboard(')
         case 'src/main/java/frc/robot/subsystems/PowerDashboard.java':
             return currentText.contains('SmartDashboard') ||
-                !currentText.contains('getTable("PowerLib").getSubTable("Data")')
+                !currentText.contains('getTable("PowerLib").getSubTable("Subsystems")') ||
+                !currentText.contains('getTable("PowerLib").getSubTable("Commands")') ||
+                !currentText.contains('getTable("PowerLib").getSubTable("Tuning")') ||
+                !currentText.contains('TUNING_MODE_SYNC_INTERVAL_SECONDS')
         default:
             return false
     }

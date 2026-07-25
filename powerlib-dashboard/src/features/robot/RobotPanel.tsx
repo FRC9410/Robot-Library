@@ -23,7 +23,8 @@ type RobotPanelProps = {
   topics: NtTopicSnapshot[];
 };
 
-const dataPrefix = "/PowerLib/Data/";
+const subsystemPrefix = "/PowerLib/Subsystems/";
+const legacyDataPrefix = "/PowerLib/Data/";
 
 function toPascalCase(value: string) {
   return value
@@ -74,8 +75,38 @@ function metricSortValue(metric: RobotMetric) {
   return index === -1 ? order.length : index;
 }
 
+function getDataTopicParts(topic: NtTopicSnapshot) {
+  if (topic.name.startsWith(subsystemPrefix)) {
+    const [subsystemName, section, ...metricParts] = topic.name.slice(subsystemPrefix.length).split("/").filter(Boolean);
+    if (!subsystemName || section !== "Data" || metricParts.length === 0) {
+      return null;
+    }
+
+    return {
+      subsystemName,
+      metricKey: metricParts.join(" ")
+    };
+  }
+
+  if (topic.name.startsWith(legacyDataPrefix)) {
+    const [subsystemName, ...metricParts] = topic.name.slice(legacyDataPrefix.length).split("/").filter(Boolean);
+    if (!subsystemName || metricParts.length === 0) {
+      return null;
+    }
+
+    return {
+      subsystemName,
+      metricKey: metricParts.join(" ")
+    };
+  }
+
+  return null;
+}
+
 function createTiles(subsystems: GeneratedSubsystem[], topics: NtTopicSnapshot[]) {
-  const dataTopics = topics.filter((topic) => topic.name.startsWith(dataPrefix));
+  const dataTopics = topics
+    .map((topic) => ({ topic, parts: getDataTopicParts(topic) }))
+    .filter((item): item is { topic: NtTopicSnapshot; parts: { subsystemName: string; metricKey: string } } => item.parts !== null);
   const configuredTiles = subsystems.map((subsystem, index) => ({
     id: subsystem.id || subsystem.name || `subsystem-${index}`,
     name: getSubsystemDisplayName(subsystem, index),
@@ -86,7 +117,7 @@ function createTiles(subsystems: GeneratedSubsystem[], topics: NtTopicSnapshot[]
   const dataOnlyTiles = Array.from(
     new Set(
       dataTopics
-        .map((topic) => topic.name.slice(dataPrefix.length).split("/").filter(Boolean)[0])
+        .map(({ parts }) => parts.subsystemName)
         .filter((topicSubsystem): topicSubsystem is string => Boolean(topicSubsystem))
         .filter((topicSubsystem) => !configuredTopicKeys.has(topicSubsystem))
     )
@@ -101,15 +132,13 @@ function createTiles(subsystems: GeneratedSubsystem[], topics: NtTopicSnapshot[]
 
   return [...configuredTiles, ...dataOnlyTiles].map<RobotSubsystemTile>((tile) => {
     const metrics = dataTopics
-      .map((topic) => {
-        const [topicSubsystem, ...metricParts] = topic.name.slice(dataPrefix.length).split("/").filter(Boolean);
-        if (topicSubsystem !== tile.topicKey || metricParts.length === 0) {
+      .map(({ topic, parts }) => {
+        if (parts.subsystemName !== tile.topicKey) {
           return null;
         }
 
-        const metricKey = metricParts.join(" ");
         return {
-          label: formatMetricLabel(metricKey),
+          label: formatMetricLabel(parts.metricKey),
           value: formatRobotMetricValue(topic.value),
           type: String(topic.type)
         };

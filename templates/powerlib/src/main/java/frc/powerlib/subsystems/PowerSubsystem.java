@@ -24,9 +24,8 @@ import java.util.Map;
  * Use {@link #registerMotor(int)}, {@link #setOutput(int, double)}, and related helpers
  * to add and control TalonFX devices without duplicating setup code.
  * <p>
- * Implements {@link frc.robot.subsystems.SharedDataSubsystem}; subclasses must implement
- * {@link #readFromContainer()} and {@link #writeToContainer()}, using
- * {@link frc.powerlib.PowerRobotContainer#getData(String)} and {@link frc.powerlib.PowerRobotContainer#setData(String, Object)}.
+ * Provides helpers for publishing telemetry and registering live-tunable values under the
+ * subsystem's PowerLib NetworkTables path.
  */
 public abstract class PowerSubsystem extends SubsystemBase {
 
@@ -216,6 +215,22 @@ public abstract class PowerSubsystem extends SubsystemBase {
 
   @Override
   public void periodic() {}
+
+  protected String getSubsystemName() {
+    return subsystemName;
+  }
+
+  protected void setSubsystemData(String key, Object value) {
+    frc.powerlib.PowerRobotContainer.setSubsystemData(subsystemName, key, value);
+  }
+
+  protected void registerSubsystemVariable(String key, double defaultValue) {
+    frc.powerlib.PowerRobotContainer.setSubsystemVariableDefault(subsystemName, key, defaultValue);
+  }
+
+  protected double getSubsystemVariable(String key, double defaultValue) {
+    return frc.powerlib.PowerRobotContainer.getSubsystemVariable(subsystemName, key, defaultValue);
+  }
 
   public boolean isMotorRunning (int id) {
     return motorsByCanId.get(id).getVelocity().getValueAsDouble() == 0.0;

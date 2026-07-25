@@ -10,6 +10,7 @@ import com.ctre.phoenix6.BaseStatusSignal;
 import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.configs.CANcoderConfiguration;
 import com.ctre.phoenix6.configs.MotionMagicConfigs;
+import com.ctre.phoenix6.configs.Slot0Configs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.controls.MotionMagicVoltage;
 import com.ctre.phoenix6.hardware.CANcoder;
@@ -19,7 +20,6 @@ import com.ctre.phoenix6.signals.NeutralModeValue;
 import com.ctre.phoenix6.signals.SensorDirectionValue;
 import com.ctre.phoenix6.CANBus;
 import edu.wpi.first.wpilibj.RobotBase;
-import frc.powerlib.PowerRobotContainer;
 import frc.powerlib.configs.CancoderConfig;
 import frc.powerlib.configs.LeadMotorConfig;
 import frc.powerlib.configs.MotionMagicConfig;
@@ -41,6 +41,12 @@ public class PositionSubsystem extends PowerSubsystem {
   private String subsystemName;
   private String units;
   private boolean focEnabled;
+  private double kP;
+  private double kI;
+  private double kD;
+  private double kG;
+  private double motionMagicCruiseVelocity;
+  private double motionMagicAcceleration;
 
   /** Last commanded position setpoint in rotations. */
   private double setpointRotations;
@@ -66,6 +72,7 @@ public class PositionSubsystem extends PowerSubsystem {
     this.units = config.units();
     this.focEnabled = config.leadConfig().focEnabled();
     this.setpointRotations = config.defaultPosition().orElseGet(() -> leader != null ? leader.getPosition().getValueAsDouble() : 0.0);
+    initializeTunableState(config.leadConfig(), config.motionMagicConfig());
     this.io = io == null ? createDefaultIO() : io;
   }
 
@@ -76,11 +83,12 @@ public class PositionSubsystem extends PowerSubsystem {
   @Override
   public void periodic() {
     io.updateInputs(inputs);
+    applyTunableValues();
     SignalLogger.writeDouble(subsystemName + " Position", inputs.positionRotations, units);
-    PowerRobotContainer.setData(subsystemName + "/Position", inputs.positionRotations);
-    PowerRobotContainer.setData(subsystemName + "/SetpointRotations", inputs.setpointRotations);
-    PowerRobotContainer.setData(subsystemName + "/AppliedVolts", inputs.appliedVolts);
-    PowerRobotContainer.setData(subsystemName + "/Connected", inputs.connected);
+    setSubsystemData("Position", inputs.positionRotations);
+    setSubsystemData("SetpointRotations", inputs.setpointRotations);
+    setSubsystemData("AppliedVolts", inputs.appliedVolts);
+    setSubsystemData("Connected", inputs.connected);
   }
 
   /**
@@ -128,6 +136,67 @@ public class PositionSubsystem extends PowerSubsystem {
     double targetPos = defaultPos.isEmpty() ?  motor.getPosition().getValueAsDouble() : defaultPos.get();
 
     motor.setControl(new MotionMagicVoltage(0).withPosition(targetPos).withSlot(0).withEnableFOC(leadConfig.focEnabled()));
+  }
+
+  private void initializeTunableState(
+      LeadMotorConfig leadConfig, MotionMagicConfig motionMagicConfig) {
+    kP = leadConfig.kP();
+    kI = leadConfig.kI();
+    kD = leadConfig.kD();
+    kG = leadConfig.kG();
+    motionMagicCruiseVelocity = motionMagicConfig.cruiseVelocity();
+    motionMagicAcceleration = motionMagicConfig.acceleration();
+
+    registerSubsystemVariable("PID/kP", kP);
+    registerSubsystemVariable("PID/kI", kI);
+    registerSubsystemVariable("PID/kD", kD);
+    registerSubsystemVariable("PID/kG", kG);
+    registerSubsystemVariable("MotionMagic/CruiseVelocity", motionMagicCruiseVelocity);
+    registerSubsystemVariable("MotionMagic/Acceleration", motionMagicAcceleration);
+  }
+
+  private void applyTunableValues() {
+    if (positionMotor == null) {
+      return;
+    }
+
+    double nextKP = getSubsystemVariable("PID/kP", kP);
+    double nextKI = getSubsystemVariable("PID/kI", kI);
+    double nextKD = getSubsystemVariable("PID/kD", kD);
+    double nextKG = getSubsystemVariable("PID/kG", kG);
+    if (changed(nextKP, kP)
+        || changed(nextKI, kI)
+        || changed(nextKD, kD)
+        || changed(nextKG, kG)) {
+      Slot0Configs slot0 = new Slot0Configs();
+      slot0.kP = nextKP;
+      slot0.kI = nextKI;
+      slot0.kD = nextKD;
+      slot0.kG = nextKG;
+      positionMotor.getConfigurator().apply(slot0);
+
+      kP = nextKP;
+      kI = nextKI;
+      kD = nextKD;
+      kG = nextKG;
+    }
+
+    double nextCruiseVelocity =
+        getSubsystemVariable("MotionMagic/CruiseVelocity", motionMagicCruiseVelocity);
+    double nextAcceleration = getSubsystemVariable("MotionMagic/Acceleration", motionMagicAcceleration);
+    if (changed(nextCruiseVelocity, motionMagicCruiseVelocity)
+        || changed(nextAcceleration, motionMagicAcceleration)) {
+      MotionMagicConfigs motionMagicConfigs = new MotionMagicConfigs();
+      motionMagicConfigs.withMotionMagicCruiseVelocity(nextCruiseVelocity);
+      motionMagicConfigs.withMotionMagicAcceleration(nextAcceleration);
+      positionMotor.getConfigurator().apply(motionMagicConfigs);
+      motionMagicCruiseVelocity = nextCruiseVelocity;
+      motionMagicAcceleration = nextAcceleration;
+    }
+  }
+
+  private static boolean changed(double left, double right) {
+    return Math.abs(left - right) > 1.0e-9;
   }
 
   /**

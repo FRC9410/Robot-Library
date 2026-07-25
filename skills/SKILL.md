@@ -43,7 +43,14 @@ or the equivalent chain traced from the actual project.
 Use raw NetworkTables APIs for all generated logging/publishing. Do NOT import or use
 `SmartDashboard`, and do NOT publish generated data under `/SmartDashboard`. Simulation-only
 topics should stay under `/Simulation/...`; PowerLib dashboard data and commands, if touched,
-belong under `/PowerLib/...`.
+belong under `/PowerLib/...`:
+
+- Subsystem telemetry: `/PowerLib/Subsystems/<SubsystemName>/Data/<Metric>`
+- Subsystem tunables: `/PowerLib/Subsystems/<SubsystemName>/Variables/<Variable>`
+- Generated command tunables: `/PowerLib/Commands/<CommandName>/Variables/<Variable>`
+- Tuning enable switch: `/PowerLib/Tuning/Enabled` (default false; robot code should only consume
+  tunable variable values while this is true; dashboard code should poll this flag at about 1 Hz,
+  not every robot loop)
 
 ---
 
