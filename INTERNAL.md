@@ -45,6 +45,15 @@ power-tool/scripts/powerlib-generate-subsystem.cmd
 power-tool/scripts/powerlib-update-subsystems.cmd
 ```
 
+PowerLib skills:
+
+```text
+skills/SKILL.md
+skills/SimManager-template.md
+skills/Swerve-sim-thread-template.md
+skills/MapleSimSwerveDrivetrain-template.md
+```
+
 Before replacing a stock file during the first install, the installer creates a temporary backup. If the install succeeds, that backup is deleted during cleanup unless you pass `-PpowerlibKeepBackups=true`. If the install fails halfway through, the backup is left in place next to the original file.
 
 After PowerLib has already been installed once, robot starter/template files are no longer overwritten when the destination already exists. Instead, the installer writes the updated template beside the existing file with a `.template` suffix, for example `RobotContainer.java.template` or `settings.json.template`. PowerLib library files under `frc.powerlib` still update in place.
@@ -86,10 +95,10 @@ powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -Ppowerlib
 powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -PpowerlibInstallVendordeps=false
 
 # Update only vendordeps.
-powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -PpowerlibInstallLib=false -PpowerlibInstallTemplates=false -PpowerlibInstallDashboard=false
+powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -PpowerlibInstallLib=false -PpowerlibInstallTemplates=false -PpowerlibInstallTools=false
 ```
 
-When run from an interactive terminal, the installer asks at the beginning whether to install each section, including Power Tool.
+When run from an interactive terminal, the installer asks at the beginning whether to install each section, including Power Tool and PowerLib skills.
 
 The downloaded `.robot-library-install.ps1` deletes itself after the run. Add `-KeepInstaller` if you want to reuse it for repeated update tests.
 
@@ -121,10 +130,10 @@ pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1 -PpowerlibInstal
 pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1 -PpowerlibInstallVendordeps=false
 
 # Update only vendordeps.
-pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1 -PpowerlibInstallLib=false -PpowerlibInstallTemplates=false -PpowerlibInstallDashboard=false
+pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1 -PpowerlibInstallLib=false -PpowerlibInstallTemplates=false -PpowerlibInstallTools=false
 ```
 
-When run from an interactive terminal, the installer asks at the beginning whether to install each section, including Power Tool.
+When run from an interactive terminal, the installer asks at the beginning whether to install each section, including Power Tool and PowerLib skills.
 
 ## Install Sections
 
@@ -136,6 +145,7 @@ These flags control which sections the installer updates. They all default to `t
 -PpowerlibInstallVendordeps=true
 -PpowerlibInstallTools=true
 -PpowerlibInstallDashboard=true
+-PpowerlibInstallSkills=true
 -PpowerlibInteractive=true
 -PpowerlibRepoRef=main
 ```
@@ -147,13 +157,14 @@ PowerLib library files
 robot starter/template files
 vendor dependencies
 Power Tool source, npm dependencies, and scripts
+PowerLib skills
 ```
 
-The Power Tool option downloads the app source, runs `npm install`, builds the app, and writes the run/update/generation scripts. Updating Power Tool refreshes those scripts too.
+The Power Tool option downloads the app source, runs `npm install`, builds the app, and writes the run/update/generation scripts. Updating Power Tool refreshes those scripts too. PowerLib skills are installed to the robot project's root-level `skills/` directory.
 
 Set `-PpowerlibInteractive=false` to skip prompts and use the flag/default values directly.
 
-To skip Power Tool during install or update:
+To skip PowerLib tools, including Power Tool and skills, during install or update:
 
 ```powershell
 -PpowerlibInstallTools=false
@@ -163,6 +174,12 @@ To install tools but skip the Power Tool download/npm install:
 
 ```powershell
 -PpowerlibInstallDashboard=false
+```
+
+To install tools but skip PowerLib skills:
+
+```powershell
+-PpowerlibInstallSkills=false
 ```
 
 To start Power Tool after it is installed:

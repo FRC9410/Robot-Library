@@ -502,8 +502,7 @@ def skillFiles = [
 ]
 
 def installSkills = { Project project ->
-    String userHome = System.getProperty('user.home')
-    File skillsDir = new File(userHome, '.claude/skills/powerlib-sim')
+    File skillsDir = project.file('skills')
     skillsDir.mkdirs()
 
     File localInstallerRoot = findLocalInstallerRoot()
@@ -519,7 +518,7 @@ def installSkills = { Project project ->
             destination.text = new URL(rawFileUrlFor(project, "skills/${fileName}")).getText('UTF-8')
         }
 
-        logger.lifecycle("Installed skill: ${destination.absolutePath}")
+        logger.lifecycle("Installed skill file: ${project.relativePath(destination)}")
     }
 }
 
@@ -628,8 +627,8 @@ gradle.projectsLoaded {
                 boolean installVendordeps = findInstallChoice(project, installVendordepsPropertyName, 'Install vendor dependencies?', true)
                 boolean installTools = findBooleanProperty(project, installToolsPropertyName, true)
                 boolean installDashboard = installTools && findInstallChoice(project, installDashboardPropertyName, 'Download Power Tool source and run npm install?', true)
-                boolean shouldInstallSkills = installTools && findInstallChoice(project, installSkillsPropertyName, 'Install PowerLib Claude skills to ~/.claude/skills/?', true)
-                boolean vendordepsOnly = installVendordeps && !installLib && !installTemplates && !installDashboard
+                boolean shouldInstallSkills = installTools && findInstallChoice(project, installSkillsPropertyName, 'Install PowerLib skills to ./skills/?', true)
+                boolean vendordepsOnly = installVendordeps && !installLib && !installTemplates && !installDashboard && !shouldInstallSkills
                 boolean priorPowerLibInstall = hasPriorPowerLibInstall(project)
 
                 logger.lifecycle('PowerLib install selections:')
@@ -637,7 +636,7 @@ gradle.projectsLoaded {
                 logger.lifecycle("  Robot starter/template files: ${installTemplates}")
                 logger.lifecycle("  Vendor dependencies: ${installVendordeps}")
                 logger.lifecycle("  Power Tool and scripts: ${installDashboard}")
-                logger.lifecycle("  Claude skills: ${shouldInstallSkills}")
+                logger.lifecycle("  PowerLib skills: ${shouldInstallSkills}")
 
                 if (installVendordeps) {
                     vendorDependencies.each { dependency ->
@@ -688,7 +687,7 @@ gradle.projectsLoaded {
                 if (shouldInstallSkills) {
                     installSkills(project)
                 } else {
-                    logger.lifecycle('Skipped Claude skills')
+                    logger.lifecycle('Skipped PowerLib skills')
                 }
 
                 if (keepBackups) {
