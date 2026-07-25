@@ -1078,6 +1078,7 @@ import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableEntry;
 import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.wpilibj2.command.Command;
+import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import frc.powerlib.PowerRobotContainer;
 import java.util.HashMap;
@@ -1138,16 +1139,17 @@ public class PowerDashboard extends SubsystemBase {
   }
 
   private void pollCharacterizationCommands() {
+    CommandScheduler scheduler = CommandScheduler.getInstance();
     characterizationCommands.values().forEach(
         binding -> {
           if (binding.requestEntry.getBoolean(false)) {
             binding.requestEntry.setBoolean(false);
-            if (!binding.command.isScheduled()) {
-              binding.command.schedule();
+            if (!scheduler.isScheduled(binding.command)) {
+              scheduler.schedule(binding.command);
             }
           }
 
-          binding.runningEntry.setBoolean(binding.command.isScheduled());
+          binding.runningEntry.setBoolean(scheduler.isScheduled(binding.command));
         });
   }
 

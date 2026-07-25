@@ -51,6 +51,16 @@ type ToastState = {
   severity: "success" | "error" | "info" | "warning";
 };
 
+const networkTableWatchPrefixes = [
+  "/",
+  "/PowerLib/",
+  "/Robot/",
+  "/SmartDashboard/",
+  "/Shuffleboard/",
+  "/FMSInfo/",
+  "/LiveWindow/"
+];
+
 export function App() {
   return (
     <NetworkTablesProvider>
@@ -364,7 +374,9 @@ function AppContent() {
       clientRef.current.connect(connectionSettings.host, connectionSettings.port, (connected) => {
         setStatus(connected ? "connected" : "disconnected");
       });
-      clientRef.current.watchPrefix("/", upsertTopic);
+      networkTableWatchPrefixes.forEach((prefix) => {
+        clientRef.current.watchPrefix(prefix, upsertTopic);
+      });
     } catch (caught) {
       setStatus("disconnected");
       setError(caught instanceof Error ? caught.message : "Could not connect to NetworkTables.");

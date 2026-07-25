@@ -451,11 +451,29 @@ def getTemplateCopyDestination = { File destination ->
     return new File(destination.parentFile, "${destination.name}.template")
 }
 
+def shouldReplaceExistingDestination = { TemplateFile template, File destination ->
+    if (!destination.exists()) {
+        return false
+    }
+
+    String currentText = destination.getText('UTF-8')
+    switch (template.destination) {
+        case 'src/main/java/frc/robot/RobotContainer.java':
+            return !currentText.contains('implements PowerRobotContainer') ||
+                !currentText.contains('new PowerDashboard(')
+        case 'src/main/java/frc/robot/subsystems/PowerDashboard.java':
+            return currentText.contains('SmartDashboard') ||
+                !currentText.contains('getTable("PowerLib").getSubTable("Data")')
+        default:
+            return false
+    }
+}
+
 def hasPriorPowerLibInstall = { Project project ->
     return project.file(installStateFileName).exists() ||
-        project.file('src/main/java/frc/powerlib').exists() ||
-        project.file('power-tool').exists() ||
-        project.file('power-tool.cmd').exists()
+        project.file('src/main/java/frc/robot/subsystems/StateMachine.java').exists() ||
+        project.file('src/main/java/frc/robot/subsystems/PowerDashboard.java').exists() ||
+        project.file('src/main/java/frc/robot/PowerButtonBindings.java').exists()
 }
 
 def markPowerLibInstallComplete = { Project project ->
@@ -466,7 +484,10 @@ def markPowerLibInstallComplete = { Project project ->
 
 def copyTemplateFile = { Project project, TemplateFile template, boolean writeTemplateCopyIfDestinationExists = false ->
     File destination = project.file(template.destination)
-    File copyDestination = writeTemplateCopyIfDestinationExists && destination.exists()
+    boolean replaceExistingDestination = writeTemplateCopyIfDestinationExists &&
+        destination.exists() &&
+        shouldReplaceExistingDestination(template, destination)
+    File copyDestination = writeTemplateCopyIfDestinationExists && destination.exists() && !replaceExistingDestination
         ? getTemplateCopyDestination(destination)
         : destination
     copyDestination.parentFile.mkdirs()
@@ -488,6 +509,8 @@ def copyTemplateFile = { Project project, TemplateFile template, boolean writeTe
 
     if (copyDestination != destination) {
         logger.lifecycle("Existing ${project.relativePath(destination)} preserved; wrote updated template to ${project.relativePath(copyDestination)}")
+    } else if (replaceExistingDestination) {
+        logger.lifecycle("Existing ${project.relativePath(destination)} was missing required PowerLib integration; replaced it and kept a .powerlib.bak backup")
     }
 
     return backup

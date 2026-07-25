@@ -93,6 +93,10 @@ export class PowerLibNt4Client {
       throw new Error("NetworkTables is not connected.");
     }
 
+    if (this.prefixTopics.has(prefix)) {
+      return;
+    }
+
     const topic = this.nt.createPrefixTopic(prefix);
     this.prefixTopics.set(prefix, topic);
 

@@ -50,7 +50,55 @@ function Remove-DirectoryIfExists {
     param([Parameter(Mandatory = $true)][string]$Path)
 
     if (Test-Path $Path) {
-        Remove-Item -LiteralPath $Path -Recurse -Force
+        $lastError = $null
+        for ($attempt = 1; $attempt -le 5; $attempt++) {
+            try {
+                Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+                return
+            } catch {
+                $lastError = $_
+                Start-Sleep -Milliseconds 500
+            }
+        }
+
+        throw $lastError
+    }
+}
+
+function Stop-PowerToolProcesses {
+    param([Parameter(Mandatory = $true)][string]$ToolRoot)
+
+    if (-not (Test-Path $ToolRoot)) {
+        return
+    }
+
+    $resolvedToolRoot = [System.IO.Path]::GetFullPath($ToolRoot)
+    while ($resolvedToolRoot.EndsWith('\') -or $resolvedToolRoot.EndsWith('/')) {
+        $resolvedToolRoot = $resolvedToolRoot.Substring(0, $resolvedToolRoot.Length - 1)
+    }
+    $toolRootPrefix = "$resolvedToolRoot\"
+
+    $processes = Get-CimInstance Win32_Process | Where-Object {
+        $executableMatches = $false
+        if (-not [string]::IsNullOrWhiteSpace($_.ExecutablePath)) {
+            $executablePath = [System.IO.Path]::GetFullPath($_.ExecutablePath)
+            $executableMatches = $executablePath.Equals($resolvedToolRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
+                $executablePath.StartsWith($toolRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)
+        }
+
+        $commandLineMatches = -not [string]::IsNullOrWhiteSpace($_.CommandLine) -and
+            $_.CommandLine.IndexOf($resolvedToolRoot, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+
+        $_.ProcessId -ne $PID -and ($executableMatches -or $commandLineMatches)
+    }
+
+    foreach ($process in @($processes)) {
+        Write-Host "Stopping running Power Tool process $($process.ProcessId) before update..."
+        Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+
+    if (@($processes).Count -gt 0) {
+        Start-Sleep -Milliseconds 750
     }
 }
 
@@ -97,6 +145,7 @@ try {
     $sourceRoot = Split-Path -Parent $source
     $sourceSkills = Join-Path $sourceRoot "skills"
     $robotSkills = Join-Path $robotRoot "skills"
+    Stop-PowerToolProcesses $toolRoot
     Remove-DirectoryIfExists $toolRoot
     foreach ($legacyScriptPath in $legacyScriptPaths) {
         Remove-Item -LiteralPath $legacyScriptPath -Force -ErrorAction SilentlyContinue

@@ -162,7 +162,7 @@ export function NetworkTablesPanel() {
                 <Box sx={{ flexGrow: 1 }}>
                   <Typography variant="h6">NetworkTables Tree</Typography>
                   <Typography variant="body2" color="text.secondary">
-                    {connectionSettings.host}:{connectionSettings.port} · Root subscription `/` has {visibleTopicCount} visible topic
+                    {connectionSettings.host}:{connectionSettings.port} · watched prefixes have {visibleTopicCount} visible topic
                     {visibleTopicCount === 1 ? "" : "s"}.
                   </Typography>
                 </Box>
