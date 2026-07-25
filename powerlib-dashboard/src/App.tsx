@@ -104,13 +104,15 @@ function AppContent() {
   const [deleteSubsystemIndex, setDeleteSubsystemIndex] = useState<number | null>(null);
   const [characterizationOpen, setCharacterizationOpen] = useState(false);
   const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(false);
+  const [optimisticTuningMode, setOptimisticTuningMode] = useState<boolean | null>(null);
   const updateSubsystemCodeRef = useRef<() => Promise<void>>(async () => {});
   const updateInstallSectionRef = useRef<(section: string) => Promise<void>>(async () => {});
   const updatePowerToolRef = useRef<() => Promise<void>>(async () => {});
   const tuningModeTopic = topics.find((topic) => topic.name === tuningModeTopicName);
   const tuningModeRequestTopic = topics.find((topic) => topic.name === tuningModeRequestTopicName);
-  const tuningModeEnabled =
+  const networkTuningMode =
     tuningModeRequestTopic?.value === true || (!tuningModeRequestTopic && tuningModeTopic?.value === true);
+  const tuningModeEnabled = optimisticTuningMode ?? networkTuningMode;
 
   const characterizationCommands = useMemo<CharacterizationCommand[]>(() => {
     if (!subsystemForm?.name) {
@@ -392,28 +394,25 @@ function AppContent() {
   }
 
   async function setTuningModeEnabled(enabled: boolean) {
+    const previousTuningMode = networkTuningMode;
+    setOptimisticTuningMode(enabled);
+    upsertTopic({
+      name: tuningModeRequestTopicName,
+      type: "boolean",
+      value: enabled,
+      lastChangedTime: Date.now()
+    });
+
     try {
-      const results = await Promise.allSettled([
-        clientRef.current.publish(tuningModeRequestTopicName, "boolean", enabled),
-        clientRef.current.publish(tuningModeTopicName, "boolean", enabled)
-      ]);
-      if (results.every((result) => result.status === "rejected")) {
-        const firstFailure = results[0];
-        throw firstFailure.status === "rejected" ? firstFailure.reason : new Error("Could not update tuning mode.");
-      }
+      await clientRef.current.publish(tuningModeRequestTopicName, "boolean", enabled);
+    } catch (caught) {
+      setOptimisticTuningMode(null);
       upsertTopic({
         name: tuningModeRequestTopicName,
         type: "boolean",
-        value: enabled,
+        value: previousTuningMode,
         lastChangedTime: Date.now()
       });
-      upsertTopic({
-        name: tuningModeTopicName,
-        type: "boolean",
-        value: enabled,
-        lastChangedTime: Date.now()
-      });
-    } catch (caught) {
       showToast(caught instanceof Error ? caught.message : "Could not update tuning mode.", "error");
     }
   }
@@ -453,6 +452,16 @@ function AppContent() {
       void loadSubsystems();
     }
   }, [activeView, subsystemDocument.loading, subsystemDocument.path]);
+
+  useEffect(() => {
+    if (optimisticTuningMode === null) {
+      return;
+    }
+
+    if (tuningModeRequestTopic?.value === optimisticTuningMode || tuningModeTopic?.value === optimisticTuningMode) {
+      setOptimisticTuningMode(null);
+    }
+  }, [optimisticTuningMode, tuningModeRequestTopic?.value, tuningModeTopic?.value]);
 
   function watchCharacterizationPrefix() {
     if (!subsystemForm?.name) {
