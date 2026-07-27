@@ -533,7 +533,16 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
             }}
           >
             {tuningDrawerOpen ? "Hide Tunables" : "Show Tunables"}
-            <Chip label={selectedTuningVariables.length} size="small" sx={{ ml: 1 }} />
+            <Chip
+              label={selectedTuningVariables.length}
+              size="small"
+              sx={{
+                bgcolor: tuningDrawerOpen ? "background.default" : undefined,
+                color: tuningDrawerOpen ? "primary.main" : undefined,
+                fontWeight: 900,
+                ml: 1
+              }}
+            />
           </Button>
         </Stack>
 
@@ -624,7 +633,7 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
           minHeight: 0,
           overflow: "hidden",
           transition: "width 220ms ease, border-left-width 220ms ease, opacity 180ms ease",
-          width: { xs: tuningDrawerOpen ? 360 : 0, md: tuningDrawerOpen ? 420 : 0 }
+          width: { xs: tuningDrawerOpen ? 270 : 0, md: tuningDrawerOpen ? 315 : 0 }
         }}
       >
         <Box
@@ -637,15 +646,12 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
             opacity: tuningDrawerOpen ? 1 : 0,
             p: 2,
             transition: "opacity 180ms ease",
-            width: { xs: 360, md: 420 }
+            width: { xs: 270, md: 315 }
           }}
         >
           <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexShrink: 0, mb: 1 }}>
             <Box sx={{ flexGrow: 1, minWidth: 0 }}>
               <Typography variant="h6">Selected Tunables</Typography>
-              <Typography color="text.secondary" variant="body2">
-                Watchlist from the Tuning tab.
-              </Typography>
             </Box>
             <IconButton
               aria-label="Refresh selected tunables"
