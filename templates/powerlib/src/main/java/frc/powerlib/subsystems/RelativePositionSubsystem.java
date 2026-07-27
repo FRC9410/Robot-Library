@@ -7,23 +7,23 @@ import com.ctre.phoenix6.configs.Slot0Configs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.hardware.TalonFX;
 import edu.wpi.first.wpilibj.RobotBase;
-import frc.powerlib.configs.AbsolutePositionSubsystemConfig;
+import frc.powerlib.configs.RelativePositionSubsystemConfig;
 import frc.powerlib.configs.LeadMotorConfig;
 import frc.powerlib.configs.MotionMagicConfig;
-import frc.powerlib.subsystems.io.AbsolutePositionSubsystemIO;
-import frc.powerlib.subsystems.io.AbsolutePositionSubsystemIOReal;
-import frc.powerlib.subsystems.io.AbsolutePositionSubsystemIOSim;
+import frc.powerlib.subsystems.io.RelativePositionSubsystemIO;
+import frc.powerlib.subsystems.io.RelativePositionSubsystemIOReal;
+import frc.powerlib.subsystems.io.RelativePositionSubsystemIOSim;
 
-public class AbsolutePositionSubsystem extends PowerSubsystem {
+public class RelativePositionSubsystem extends PowerSubsystem {
   private enum MotionProfile {
     NORMAL,
     SLOW
   }
 
   protected TalonFX positionMotor;
-  public final AbsolutePositionSubsystemIO.Inputs inputs = new AbsolutePositionSubsystemIO.Inputs();
-  private final AbsolutePositionSubsystemIO io;
-  private final AbsolutePositionSubsystemConfig config;
+  public final RelativePositionSubsystemIO.Inputs inputs = new RelativePositionSubsystemIO.Inputs();
+  private final RelativePositionSubsystemIO io;
+  private final RelativePositionSubsystemConfig config;
   private MotionProfile activeProfile = null;
   private double setpoint;
   private double voltage;
@@ -42,12 +42,12 @@ public class AbsolutePositionSubsystem extends PowerSubsystem {
   private double slowMotionMagicCruiseVelocity;
   private double slowMotionMagicAcceleration;
 
-  public AbsolutePositionSubsystem(AbsolutePositionSubsystemConfig config) {
+  public RelativePositionSubsystem(RelativePositionSubsystemConfig config) {
     this(config, null);
   }
 
-  public AbsolutePositionSubsystem(
-      AbsolutePositionSubsystemConfig config, AbsolutePositionSubsystemIO io) {
+  public RelativePositionSubsystem(
+      RelativePositionSubsystemConfig config, RelativePositionSubsystemIO io) {
     super(config.motorConfigs(), config.subsystemName());
     this.config = config;
     this.setpoint = config.homePosition();
@@ -67,8 +67,8 @@ public class AbsolutePositionSubsystem extends PowerSubsystem {
     this.io.setPosition(setpoint);
   }
 
-  protected AbsolutePositionSubsystemIO createDefaultIO() {
-    return RobotBase.isSimulation() ? new AbsolutePositionSubsystemIOSim() : new AbsolutePositionSubsystemIOReal(this);
+  protected RelativePositionSubsystemIO createDefaultIO() {
+    return RobotBase.isSimulation() ? new RelativePositionSubsystemIOSim() : new RelativePositionSubsystemIOReal(this);
   }
 
   @Override
@@ -176,7 +176,7 @@ public class AbsolutePositionSubsystem extends PowerSubsystem {
   }
 
   private static void configureMotor(
-      TalonFX motor, AbsolutePositionSubsystemConfig subsystemConfig) {
+      TalonFX motor, RelativePositionSubsystemConfig subsystemConfig) {
     TalonFXConfiguration talonConfig = new TalonFXConfiguration();
     LeadMotorConfig leadConfig = subsystemConfig.leadConfig();
 

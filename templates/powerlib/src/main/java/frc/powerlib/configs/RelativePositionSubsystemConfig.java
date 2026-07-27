@@ -2,7 +2,7 @@ package frc.powerlib.configs;
 
 import java.util.List;
 
-public record AbsolutePositionSubsystemConfig(
+public record RelativePositionSubsystemConfig(
     List<MotorConfig> motorConfigs,
     LeadMotorConfig leadConfig,
     MotionMagicConfig motionMagicConfig,

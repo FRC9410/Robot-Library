@@ -36,7 +36,7 @@ export type GeneratedSubsystem = {
     units?: string;
     default?: number | string | null;
   };
-  absolutePosition?: {
+  relativePosition?: {
     units?: string;
     homePosition?: number | string;
     forwardSoftLimit?: number | string;
@@ -60,7 +60,7 @@ export type SubsystemFormState = {
   index: number | null;
   id: string;
   name: string;
-  type: "velocity" | "velocityTorque" | "position" | "absolutePosition";
+  type: "velocity" | "velocityTorque" | "position" | "relativePosition";
   focEnabled: boolean;
   torqueFF: string;
   neutralMode: "Brake" | "Coast";

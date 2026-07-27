@@ -193,7 +193,7 @@ export function getMethodsForSubsystem(subsystem: GeneratedSubsystem | undefined
       { name: "stopPosition", needsValue: false }
     ];
   }
-  if (type === "absolutePosition") {
+  if (type === "relativePosition") {
     return [
       { name: "setPosition", needsValue: true },
       { name: "setPositionRotations", needsValue: true },

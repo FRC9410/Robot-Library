@@ -1,13 +1,13 @@
 import { Card, CardContent, Box, Divider, Stack, TextField, Typography } from "@mui/material";
 import type { SubsystemFormState } from "../types";
 
-type AbsolutePositionFieldsProps = {
+type RelativePositionFieldsProps = {
   form: SubsystemFormState;
   updateField: <K extends keyof SubsystemFormState>(field: K, value: SubsystemFormState[K]) => void;
 };
 
-export function AbsolutePositionFields({ form, updateField }: AbsolutePositionFieldsProps) {
-  if (form.type !== "absolutePosition") {
+export function RelativePositionFields({ form, updateField }: RelativePositionFieldsProps) {
+  if (form.type !== "relativePosition") {
     return null;
   }
 
@@ -24,7 +24,7 @@ export function AbsolutePositionFields({ form, updateField }: AbsolutePositionFi
         <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
           <Stack spacing={1.5}>
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-              Absolute Position
+              Relative Position
             </Typography>
             <Divider />
             <TextField fullWidth label="Position units" size="small" value={form.positionUnits} onChange={(event) => updateField("positionUnits", event.target.value)} />

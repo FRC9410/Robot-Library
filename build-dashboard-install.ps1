@@ -1,6 +1,7 @@
 param(
     [string]$RepoRef = "main",
     [string]$RepositoryArchiveUrl = "",
+    [string]$SourceRoot = "",
     [switch]$SkipNpmInstall
 )
 
@@ -8,7 +9,8 @@ $ErrorActionPreference = "Stop"
 
 $installRoot = (Get-Location).Path
 $rawBaseUrl = "https://raw.githubusercontent.com/FRC9410/Robot-Library/$RepoRef"
-if ([string]::IsNullOrWhiteSpace($RepositoryArchiveUrl)) {
+$useDefaultRepositoryArchiveUrl = [string]::IsNullOrWhiteSpace($RepositoryArchiveUrl)
+if ($useDefaultRepositoryArchiveUrl) {
     $RepositoryArchiveUrl = "https://github.com/FRC9410/Robot-Library/archive/refs/heads/$RepoRef.zip"
 }
 $tempRoot = Join-Path $installRoot "build\power-tool-source"
@@ -19,6 +21,8 @@ $windowsLauncherPath = Join-Path $installRoot "power-tool.cmd"
 $dashboardScriptsPath = Join-Path $dashboardOutput "scripts"
 $powershellLauncherPath = Join-Path $dashboardScriptsPath "power-tool.ps1"
 $updaterPath = Join-Path $dashboardScriptsPath "update-power-tool.ps1"
+$sourceRootStatePath = Join-Path $installRoot ".powerlib-source-root"
+$toolSourceRootStatePath = Join-Path $dashboardScriptsPath ".powerlib-source-root"
 $legacyDashboardOutput = Join-Path $installRoot "powerlib-dashboard"
 $legacyWindowsLauncherPath = Join-Path $installRoot "powerlib-dashboard.cmd"
 $legacyPowershellLauncherPath = Join-Path $installRoot "powerlib-dashboard.ps1"
@@ -29,6 +33,23 @@ $legacyScriptPaths = @(
     (Join-Path $installRoot "powerlib-update-subsystems.cmd"),
     (Join-Path $installRoot "power-tool.ps1")
 )
+
+$localSourceRoot = $null
+if (-not [string]::IsNullOrWhiteSpace($SourceRoot)) {
+    $candidateSourceRoot = [System.IO.Path]::GetFullPath($SourceRoot)
+    $candidateDashboardSource = Join-Path $candidateSourceRoot "powerlib-dashboard"
+    if (-not (Test-Path $candidateDashboardSource)) {
+        throw "SourceRoot '$SourceRoot' does not contain a powerlib-dashboard directory."
+    }
+
+    $localSourceRoot = $candidateSourceRoot
+} elseif ($useDefaultRepositoryArchiveUrl) {
+    $candidateSourceRoot = [System.IO.Path]::GetFullPath($PSScriptRoot)
+    $candidateDashboardSource = Join-Path $candidateSourceRoot "powerlib-dashboard"
+    if (Test-Path $candidateDashboardSource) {
+        $localSourceRoot = $candidateSourceRoot
+    }
+}
 
 function Remove-DirectoryIfExists {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -90,22 +111,28 @@ Remove-DirectoryIfExists $tempRoot
 New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
 
 try {
-    Write-Host "Downloading Power Tool source..."
-    Invoke-WebRequest -Uri $RepositoryArchiveUrl -OutFile $archivePath
+    if ($localSourceRoot) {
+        Write-Host "Using local Power Tool source from $localSourceRoot..."
+        $sourceRoot = $localSourceRoot
+        $dashboardSource = Join-Path $sourceRoot "powerlib-dashboard"
+    } else {
+        Write-Host "Downloading Power Tool source..."
+        Invoke-WebRequest -Uri $RepositoryArchiveUrl -OutFile $archivePath
 
-    Write-Host "Extracting Power Tool source..."
-    Expand-Archive -Path $archivePath -DestinationPath $extractRoot -Force
+        Write-Host "Extracting Power Tool source..."
+        Expand-Archive -Path $archivePath -DestinationPath $extractRoot -Force
 
-    $dashboardSource = Get-ChildItem -Path $extractRoot -Directory |
-        ForEach-Object { Join-Path $_.FullName "powerlib-dashboard" } |
-        Where-Object { Test-Path $_ } |
-        Select-Object -First 1
+        $dashboardSource = Get-ChildItem -Path $extractRoot -Directory |
+            ForEach-Object { Join-Path $_.FullName "powerlib-dashboard" } |
+            Where-Object { Test-Path $_ } |
+            Select-Object -First 1
 
-    if (-not $dashboardSource) {
-        throw "Could not find powerlib-dashboard in downloaded Robot-Library source archive."
+        if (-not $dashboardSource) {
+            throw "Could not find powerlib-dashboard in downloaded Robot-Library source archive."
+        }
+
+        $sourceRoot = Split-Path -Parent $dashboardSource
     }
-
-    $sourceRoot = Split-Path -Parent $dashboardSource
     Stop-PowerToolProcesses $dashboardOutput
     Remove-DirectoryIfExists $dashboardOutput
     Remove-DirectoryIfExists $legacyDashboardOutput
@@ -179,6 +206,13 @@ if (Test-Path $electron) {
 
     Set-Content -Path (Join-Path $dashboardScriptsPath ".powerlib-repo-ref") -Encoding ascii -Value "$RepoRef`r`n"
     Set-Content -Path (Join-Path $installRoot ".powerlib-repo-ref") -Encoding ascii -Value "$RepoRef`r`n"
+    if ($localSourceRoot) {
+        Set-Content -Path $sourceRootStatePath -Encoding ascii -Value "$localSourceRoot`r`n"
+        Set-Content -Path $toolSourceRootStatePath -Encoding ascii -Value "$localSourceRoot`r`n"
+    } else {
+        Remove-Item -LiteralPath $sourceRootStatePath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $toolSourceRootStatePath -Force -ErrorAction SilentlyContinue
+    }
 
     Set-Content -Path (Join-Path $dashboardScriptsPath "powerlib-generate-subsystem.cmd") -Encoding ascii -Value '@echo off
 powershell -ExecutionPolicy Bypass -File "%~dp0generate-subsystem.ps1" %*

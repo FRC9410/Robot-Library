@@ -190,15 +190,15 @@ function Get-SubsystemMetadata {
 
     $pascal = Convert-ToPascalCase $Subsystem.name
     $type = $Subsystem.type.ToString().ToLowerInvariant()
-    if ($type -ne "velocity" -and $type -ne "velocitytorque" -and $type -ne "position" -and $type -ne "absoluteposition") {
-        throw "Unsupported subsystem type '$($Subsystem.type)' for '$($Subsystem.name)'. Accepted values: velocity, velocityTorque, position, absolutePosition."
+    if ($type -ne "velocity" -and $type -ne "velocitytorque" -and $type -ne "position" -and $type -ne "relativeposition") {
+        throw "Unsupported subsystem type '$($Subsystem.type)' for '$($Subsystem.name)'. Accepted values: velocity, velocityTorque, position, relativePosition."
     }
 
     $subsystemClassName = switch ($type) {
         "velocity" { "VelocitySubsystem" }
         "velocitytorque" { "VelocityTorqueSubsystem" }
         "position" { "PositionSubsystem" }
-        "absoluteposition" { "AbsolutePositionSubsystem" }
+        "relativeposition" { "RelativePositionSubsystem" }
     }
 
     return [pscustomobject]@{
@@ -410,13 +410,18 @@ function New-InteractivePidConfig {
 
 function New-InteractiveSubsystem {
     $rawName = Prompt-Required "Subsystem name, example shooter"
-    $type = (Prompt-Enum "Subsystem type" @("velocity", "velocityTorque", "position", "absolutePosition") "velocity").ToLowerInvariant()
+    $type = (Prompt-Enum "Subsystem type" @("velocity", "velocityTorque", "position", "relativePosition") "velocity").ToLowerInvariant()
+    $canonicalType = switch ($type) {
+        "velocitytorque" { "velocityTorque" }
+        "relativeposition" { "relativePosition" }
+        default { $type }
+    }
     $stableId = Convert-ToCamelCase (Convert-ToPascalCase $rawName)
 
     $subsystem = [ordered]@{
         id = $stableId
         name = $rawName
-        type = $type
+        type = $canonicalType
         motors = @(New-InteractiveMotors)
         pid = New-InteractivePidConfig
         focEnabled = Prompt-Boolean "Enable FOC?" $true
@@ -440,14 +445,14 @@ function New-InteractiveSubsystem {
             units = Prompt-Value "Position units" "rotations"
             default = Prompt-OptionalDoubleText "Default position"
         }
-    } elseif ($type -eq "absoluteposition") {
+    } elseif ($type -eq "relativeposition") {
         $subsystem.motionMagic.cruiseVelocity = Prompt-DoubleText "Motion Magic cruise velocity" "0.0"
         $subsystem.motionMagic.acceleration = Prompt-DoubleText "Motion Magic acceleration" "0.0"
         $subsystem.slowMotionMagic = [ordered]@{
             cruiseVelocity = Prompt-DoubleText "Slow Motion Magic cruise velocity" "0.0"
             acceleration = Prompt-DoubleText "Slow Motion Magic acceleration" "0.0"
         }
-        $subsystem.absolutePosition = [ordered]@{
+        $subsystem.relativePosition = [ordered]@{
             units = Prompt-Value "Position units" "rotations"
             homePosition = Prompt-DoubleText "Home position" "0.0"
             forwardSoftLimit = Prompt-DoubleText "Forward soft limit" "0.0"
@@ -695,7 +700,7 @@ $CustomConstantsEndMarker
 "@
 }
 
-function New-AbsolutePositionConstantsContent {
+function New-RelativePositionConstantsContent {
     param(
         [Parameter(Mandatory = $true)]$Subsystem,
         [Parameter(Mandatory = $true)]$Metadata
@@ -711,7 +716,7 @@ $GeneratedFileMarker
 $SubsystemIdMarkerPrefix$($Metadata.Id)
 
 import com.ctre.phoenix6.signals.NeutralModeValue;
-import frc.powerlib.configs.AbsolutePositionSubsystemConfig;
+import frc.powerlib.configs.RelativePositionSubsystemConfig;
 import frc.powerlib.configs.LeadMotorConfig;
 import frc.powerlib.configs.MotionMagicConfig;
 import frc.powerlib.configs.MotorConfig;
@@ -735,16 +740,16 @@ $motorConstants
   public static final double SLOW_MOTION_MAGIC_CRUISE_VELOCITY = $($Subsystem.slowMotionMagic.cruiseVelocity);
   public static final double SLOW_MOTION_MAGIC_ACCELERATION = $($Subsystem.slowMotionMagic.acceleration);
   public static final String NAME = "$($Metadata.PascalName)";
-  public static final String POSITION_UNITS = "$($Subsystem.absolutePosition.units)";
-  public static final double HOME_POSITION = $($Subsystem.absolutePosition.homePosition);
-  public static final double FORWARD_SOFT_LIMIT = $($Subsystem.absolutePosition.forwardSoftLimit);
-  public static final double REVERSE_SOFT_LIMIT = $($Subsystem.absolutePosition.reverseSoftLimit);
-  public static final double SLOW_THRESHOLD = $($Subsystem.absolutePosition.slowThreshold);
-  public static final double POSITION_TOLERANCE = $($Subsystem.absolutePosition.tolerance);
-  public static final double STOP_VOLTAGE = $($Subsystem.absolutePosition.stopVoltage);
+  public static final String POSITION_UNITS = "$($Subsystem.relativePosition.units)";
+  public static final double HOME_POSITION = $($Subsystem.relativePosition.homePosition);
+  public static final double FORWARD_SOFT_LIMIT = $($Subsystem.relativePosition.forwardSoftLimit);
+  public static final double REVERSE_SOFT_LIMIT = $($Subsystem.relativePosition.reverseSoftLimit);
+  public static final double SLOW_THRESHOLD = $($Subsystem.relativePosition.slowThreshold);
+  public static final double POSITION_TOLERANCE = $($Subsystem.relativePosition.tolerance);
+  public static final double STOP_VOLTAGE = $($Subsystem.relativePosition.stopVoltage);
 
-  public static final AbsolutePositionSubsystemConfig $($Metadata.ConfigConstantName) =
-      new AbsolutePositionSubsystemConfig(
+  public static final RelativePositionSubsystemConfig $($Metadata.ConfigConstantName) =
+      new RelativePositionSubsystemConfig(
           List.of(
 $motorList),
           new LeadMotorConfig(
@@ -954,7 +959,7 @@ function Write-ConstantsFile {
         "velocity" { New-VelocityConstantsContent $Subsystem $Metadata }
         "velocitytorque" { New-VelocityConstantsContent $Subsystem $Metadata }
         "position" { New-PositionConstantsContent $Subsystem $Metadata }
-        "absoluteposition" { New-AbsolutePositionConstantsContent $Subsystem $Metadata }
+        "relativeposition" { New-RelativePositionConstantsContent $Subsystem $Metadata }
     }
     $content = Set-CustomConstantsBlock $content $customContent
 
@@ -1431,12 +1436,12 @@ function Get-BindingMethodNeedsValue {
     $type = (Get-SubsystemMetadata $Subsystem).Type
     $valueMethods = switch ($type) {
         "position" { @("setPositionRotations", "setPositionDegrees", "setVoltage") }
-        "absoluteposition" { @("setPosition", "setPositionRotations", "setVoltage") }
+        "relativeposition" { @("setPosition", "setPositionRotations", "setVoltage") }
         default { @("setVelocity", "setVoltage") }
     }
     $voidMethods = switch ($type) {
         "position" { @("stopPosition") }
-        "absoluteposition" { @("zeroEncoder") }
+        "relativeposition" { @("zeroEncoder") }
         default { @("stopVelocity", "brake") }
     }
 

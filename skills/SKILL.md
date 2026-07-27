@@ -30,7 +30,7 @@ then generates all MapleSim integration files for a Team 9410 PowerLib robot pro
 ## What Does NOT Change
 
 - `StateMachine.java` - no static block needed (see Problem 2 note below)
-- `VelocitySubsystemIOSim`, `PositionSubsystemIOSim`, `AbsolutePositionSubsystemIOSim`
+- `VelocitySubsystemIOSim`, `PositionSubsystemIOSim`, `RelativePositionSubsystemIOSim`
 - All other PowerLib library files
 - constants files
 

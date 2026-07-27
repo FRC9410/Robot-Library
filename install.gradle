@@ -17,8 +17,8 @@ class VendorDependency {
 
 def templateFiles = [
     new TemplateFile(
-        source: 'powerlib/src/main/java/frc/powerlib/configs/AbsolutePositionSubsystemConfig.java',
-        destination: 'src/main/java/frc/powerlib/configs/AbsolutePositionSubsystemConfig.java',
+        source: 'powerlib/src/main/java/frc/powerlib/configs/RelativePositionSubsystemConfig.java',
+        destination: 'src/main/java/frc/powerlib/configs/RelativePositionSubsystemConfig.java',
         replacement: false
     ),
     new TemplateFile(
@@ -62,8 +62,8 @@ def templateFiles = [
         replacement: false
     ),
     new TemplateFile(
-        source: 'powerlib/src/main/java/frc/powerlib/subsystems/AbsolutePositionSubsystem.java',
-        destination: 'src/main/java/frc/powerlib/subsystems/AbsolutePositionSubsystem.java',
+        source: 'powerlib/src/main/java/frc/powerlib/subsystems/RelativePositionSubsystem.java',
+        destination: 'src/main/java/frc/powerlib/subsystems/RelativePositionSubsystem.java',
         replacement: false
     ),
     new TemplateFile(
@@ -87,18 +87,18 @@ def templateFiles = [
         replacement: false
     ),
     new TemplateFile(
-        source: 'powerlib/src/main/java/frc/powerlib/subsystems/io/AbsolutePositionSubsystemIO.java',
-        destination: 'src/main/java/frc/powerlib/subsystems/io/AbsolutePositionSubsystemIO.java',
+        source: 'powerlib/src/main/java/frc/powerlib/subsystems/io/RelativePositionSubsystemIO.java',
+        destination: 'src/main/java/frc/powerlib/subsystems/io/RelativePositionSubsystemIO.java',
         replacement: false
     ),
     new TemplateFile(
-        source: 'powerlib/src/main/java/frc/powerlib/subsystems/io/AbsolutePositionSubsystemIOReal.java',
-        destination: 'src/main/java/frc/powerlib/subsystems/io/AbsolutePositionSubsystemIOReal.java',
+        source: 'powerlib/src/main/java/frc/powerlib/subsystems/io/RelativePositionSubsystemIOReal.java',
+        destination: 'src/main/java/frc/powerlib/subsystems/io/RelativePositionSubsystemIOReal.java',
         replacement: false
     ),
     new TemplateFile(
-        source: 'powerlib/src/main/java/frc/powerlib/subsystems/io/AbsolutePositionSubsystemIOSim.java',
-        destination: 'src/main/java/frc/powerlib/subsystems/io/AbsolutePositionSubsystemIOSim.java',
+        source: 'powerlib/src/main/java/frc/powerlib/subsystems/io/RelativePositionSubsystemIOSim.java',
+        destination: 'src/main/java/frc/powerlib/subsystems/io/RelativePositionSubsystemIOSim.java',
         replacement: false
     ),
     new TemplateFile(
@@ -555,6 +555,24 @@ def deleteOldDashboardBuildScript = { Project project ->
     }
 }
 
+def deprecatedPowerLibFiles = [
+    'src/main/java/frc/powerlib/configs/AbsolutePositionSubsystemConfig.java',
+    'src/main/java/frc/powerlib/subsystems/AbsolutePositionSubsystem.java',
+    'src/main/java/frc/powerlib/subsystems/io/AbsolutePositionSubsystemIO.java',
+    'src/main/java/frc/powerlib/subsystems/io/AbsolutePositionSubsystemIOReal.java',
+    'src/main/java/frc/powerlib/subsystems/io/AbsolutePositionSubsystemIOSim.java'
+]
+
+def deleteDeprecatedPowerLibFiles = { Project project ->
+    deprecatedPowerLibFiles.each { relativePath ->
+        File destination = project.file(relativePath)
+        if (destination.exists()) {
+            Files.deleteIfExists(destination.toPath())
+            logger.lifecycle("Removed deprecated PowerLib file: ${project.relativePath(destination)}")
+        }
+    }
+}
+
 def installDashboardTools = { Project project ->
     File dashboardInstallScript = project.file("build/${dashboardInstallScriptName}")
     try {
@@ -568,7 +586,7 @@ def installDashboardTools = { Project project ->
             dashboardInstallScript.text = new URL(rawFileUrlFor(project, 'build-dashboard-install.ps1')).getText('UTF-8')
         }
 
-        runCommand(project.rootDir, [
+        def installDashboardCommand = [
             'powershell',
             '-ExecutionPolicy',
             'Bypass',
@@ -576,7 +594,14 @@ def installDashboardTools = { Project project ->
             dashboardInstallScript.absolutePath,
             '-RepoRef',
             findRepoRef(project)
-        ])
+        ]
+        File localDashboardSource = localInstallerRoot == null ? null : new File(localInstallerRoot, 'powerlib-dashboard')
+        if (localDashboardSource != null && localDashboardSource.exists()) {
+            installDashboardCommand.add('-SourceRoot')
+            installDashboardCommand.add(localInstallerRoot.absolutePath)
+        }
+
+        runCommand(project.rootDir, installDashboardCommand)
     } catch (Exception exception) {
         logger.warn("Skipped Power Tool install: ${exception.message}")
     } finally {
@@ -682,6 +707,7 @@ gradle.projectsLoaded {
                 }
 
                 if (installLib) {
+                    deleteDeprecatedPowerLibFiles(project)
                     templateFiles.findAll { template -> template.source.startsWith('powerlib/') }.each { template ->
                         File backup = copyTemplateFile(project, template)
                         if (backup != null) {

@@ -772,7 +772,7 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
               onClick={() => void applyAllPendingTunables()}
               variant="contained"
             >
-              {applying ? "Applying" : `Apply All${pendingTuningVariables.length > 0 ? ` (${pendingTuningVariables.length})` : ""}`}
+              {applying ? "Applying" : "Apply"}
             </Button>
             <Button
               disabled={topics.length === 0 || !window.powerlib?.readSubsystems || !window.powerlib?.readBindings}
@@ -780,7 +780,7 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
               onClick={() => setSaveValuesOpen(true)}
               variant="outlined"
             >
-              Save Values
+              Save
             </Button>
           </Stack>
         </Box>

@@ -1,7 +1,8 @@
 param(
     [int]$ParentPid = 0,
     [string]$RepoRef = "",
-    [string]$RepositoryArchiveUrl = ""
+    [string]$RepositoryArchiveUrl = "",
+    [string]$SourceRoot = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,6 +12,8 @@ $toolRoot = Join-Path $robotRoot "power-tool"
 $scriptsRoot = Join-Path $toolRoot "scripts"
 $repoRefPath = Join-Path $robotRoot ".powerlib-repo-ref"
 $toolRepoRefPath = Join-Path $scriptsRoot ".powerlib-repo-ref"
+$sourceRootPath = Join-Path $robotRoot ".powerlib-source-root"
+$toolSourceRootPath = Join-Path $scriptsRoot ".powerlib-source-root"
 if ([string]::IsNullOrWhiteSpace($RepoRef)) {
     if (Test-Path $repoRefPath) {
         $RepoRef = (Get-Content -Path $repoRefPath -Raw).Trim()
@@ -20,7 +23,8 @@ if ([string]::IsNullOrWhiteSpace($RepoRef)) {
         $RepoRef = "main"
     }
 }
-if ([string]::IsNullOrWhiteSpace($RepositoryArchiveUrl)) {
+$useDefaultRepositoryArchiveUrl = [string]::IsNullOrWhiteSpace($RepositoryArchiveUrl)
+if ($useDefaultRepositoryArchiveUrl) {
     $RepositoryArchiveUrl = "https://github.com/FRC9410/Robot-Library/archive/refs/heads/$RepoRef.zip"
 }
 $tempRoot = Join-Path $robotRoot "build\power-tool-update"
@@ -41,6 +45,32 @@ $legacyScriptPaths = @(
     (Join-Path $robotRoot "power-tool.ps1")
 )
 $transcriptStarted = $false
+
+$localSourceRoot = $null
+if (-not [string]::IsNullOrWhiteSpace($SourceRoot)) {
+    $candidateSourceRoot = [System.IO.Path]::GetFullPath($SourceRoot)
+    if (-not (Test-Path (Join-Path $candidateSourceRoot "powerlib-dashboard"))) {
+        throw "SourceRoot '$SourceRoot' does not contain a powerlib-dashboard directory."
+    }
+
+    $localSourceRoot = $candidateSourceRoot
+} elseif ($useDefaultRepositoryArchiveUrl) {
+    $savedSourceRoot = ""
+    if (Test-Path $sourceRootPath) {
+        $savedSourceRoot = (Get-Content -Path $sourceRootPath -Raw).Trim()
+    } elseif (Test-Path $toolSourceRootPath) {
+        $savedSourceRoot = (Get-Content -Path $toolSourceRootPath -Raw).Trim()
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($savedSourceRoot)) {
+        $candidateSourceRoot = [System.IO.Path]::GetFullPath($savedSourceRoot)
+        if (Test-Path (Join-Path $candidateSourceRoot "powerlib-dashboard")) {
+            $localSourceRoot = $candidateSourceRoot
+        } else {
+            Write-Warning "Saved PowerLib source root '$savedSourceRoot' was not found; falling back to $RepositoryArchiveUrl."
+        }
+    }
+}
 
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $logPath) | Out-Null
 Start-Transcript -Path $logPath -Force | Out-Null
@@ -127,22 +157,28 @@ Remove-DirectoryIfExists $tempRoot
 New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
 
 try {
-    Write-Host "Downloading latest Power Tool source..."
-    Invoke-WebRequest -Uri $RepositoryArchiveUrl -OutFile $archivePath
+    if ($localSourceRoot) {
+        Write-Host "Using local Power Tool source from $localSourceRoot..."
+        $sourceRoot = $localSourceRoot
+        $source = Join-Path $sourceRoot "powerlib-dashboard"
+    } else {
+        Write-Host "Downloading latest Power Tool source..."
+        Invoke-WebRequest -Uri $RepositoryArchiveUrl -OutFile $archivePath
 
-    Write-Host "Extracting Power Tool source..."
-    Expand-Archive -Path $archivePath -DestinationPath $extractRoot -Force
+        Write-Host "Extracting Power Tool source..."
+        Expand-Archive -Path $archivePath -DestinationPath $extractRoot -Force
 
-    $source = Get-ChildItem -Path $extractRoot -Directory |
-        ForEach-Object { Join-Path $_.FullName "powerlib-dashboard" } |
-        Where-Object { Test-Path $_ } |
-        Select-Object -First 1
+        $source = Get-ChildItem -Path $extractRoot -Directory |
+            ForEach-Object { Join-Path $_.FullName "powerlib-dashboard" } |
+            Where-Object { Test-Path $_ } |
+            Select-Object -First 1
 
-    if (-not $source) {
-        throw "Could not find Power Tool source in downloaded Robot-Library archive."
+        if (-not $source) {
+            throw "Could not find Power Tool source in downloaded Robot-Library archive."
+        }
+
+        $sourceRoot = Split-Path -Parent $source
     }
-
-    $sourceRoot = Split-Path -Parent $source
     $sourceSkills = Join-Path $sourceRoot "skills"
     $robotSkills = Join-Path $robotRoot "skills"
     Stop-PowerToolProcesses $toolRoot
@@ -181,6 +217,13 @@ powershell -ExecutionPolicy Bypass -File "%~dp0generate-subsystem.ps1" -UpdateSu
 
     Set-Content -Path $repoRefPath -Encoding ascii -Value "$RepoRef`r`n"
     Set-Content -Path $toolRepoRefPath -Encoding ascii -Value "$RepoRef`r`n"
+    if ($localSourceRoot) {
+        Set-Content -Path $sourceRootPath -Encoding ascii -Value "$localSourceRoot`r`n"
+        Set-Content -Path $toolSourceRootPath -Encoding ascii -Value "$localSourceRoot`r`n"
+    } else {
+        Remove-Item -LiteralPath $sourceRootPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $toolSourceRootPath -Force -ErrorAction SilentlyContinue
+    }
 
     Set-Content -Path $launcherPath -Encoding ascii -Value '@echo off
 set "TOOL_ROOT=%~dp0power-tool"

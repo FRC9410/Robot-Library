@@ -2,14 +2,14 @@ package frc.powerlib.subsystems.io;
 
 import com.ctre.phoenix6.controls.MotionMagicVoltage;
 import com.ctre.phoenix6.hardware.TalonFX;
-import frc.powerlib.subsystems.AbsolutePositionSubsystem;
+import frc.powerlib.subsystems.RelativePositionSubsystem;
 
-public class AbsolutePositionSubsystemIOReal implements AbsolutePositionSubsystemIO {
-  private final AbsolutePositionSubsystem subsystem;
+public class RelativePositionSubsystemIOReal implements RelativePositionSubsystemIO {
+  private final RelativePositionSubsystem subsystem;
   private final MotionMagicVoltage motionMagicRequest = new MotionMagicVoltage(0);
   private double setpoint = 0.0;
 
-  public AbsolutePositionSubsystemIOReal(AbsolutePositionSubsystem subsystem) {
+  public RelativePositionSubsystemIOReal(RelativePositionSubsystem subsystem) {
     this.subsystem = subsystem;
   }
 

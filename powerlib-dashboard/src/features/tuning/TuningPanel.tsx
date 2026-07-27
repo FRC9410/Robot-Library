@@ -12,7 +12,7 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteIcon from "@mui/icons-material/Delete";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import SearchIcon from "@mui/icons-material/Search";
 import type { NtPrimitive, NtTopicSnapshot, NtTopicType } from "../../networktables/nt4Client";
@@ -264,7 +264,7 @@ function TunableVariableRow({
         sx={{ gridArea: "remove", justifySelf: "end" }}
         onClick={() => onRemove(topic.name)}
       >
-        <DeleteOutlineIcon fontSize="small" />
+        <DeleteIcon fontSize="small" />
       </IconButton>
     </Box>
   );
@@ -810,7 +810,7 @@ export function TuningPanel() {
                     size="small"
                     variant="contained"
                   >
-                    {applying ? "Applying" : "Apply Changes"}
+                    {applying ? "Applying" : "Apply"}
                   </Button>
                   <Button
                     disabled={
@@ -820,7 +820,7 @@ export function TuningPanel() {
                     size="small"
                     variant="outlined"
                   >
-                    Save Values
+                    Save
                   </Button>
                 </Stack>
               </Stack>
