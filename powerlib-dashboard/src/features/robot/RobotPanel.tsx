@@ -712,7 +712,10 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
         >
           <Stack direction="row" spacing={0.25} sx={{ alignItems: "center", flexShrink: 0, mb: 1 }}>
             <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-              <Typography noWrap variant="h6">
+              <Typography
+                variant="h6"
+                sx={{ lineHeight: 1.2, overflowWrap: "normal", whiteSpace: "normal", wordBreak: "normal" }}
+              >
                 Selected Tunables
               </Typography>
             </Box>
