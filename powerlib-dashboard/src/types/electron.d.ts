@@ -30,12 +30,20 @@ declare global {
         exists: boolean;
         path: string;
         selectedTopics: string[];
+        monitorDrawerOpen: boolean;
         error?: string;
       }>;
       saveTuningSelection: (selectedTopics: string[]) => Promise<{
         exists: boolean;
         path: string;
         selectedTopics: string[];
+        monitorDrawerOpen: boolean;
+      }>;
+      saveTuningMonitorDrawerOpen: (open: boolean) => Promise<{
+        exists: boolean;
+        path: string;
+        selectedTopics: string[];
+        monitorDrawerOpen: boolean;
       }>;
       readBindingConstants: () => Promise<{
         constants: unknown[];

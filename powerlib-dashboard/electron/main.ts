@@ -317,7 +317,8 @@ ipcMain.handle("powerlib:read-tuning-selection", async () => {
       return {
         exists: true,
         path: candidate,
-        selectedTopics: normalizeSelectedTopicNames(Array.isArray(parsed) ? parsed : parsed?.selectedTopics)
+        selectedTopics: normalizeSelectedTopicNames(Array.isArray(parsed) ? parsed : parsed?.selectedTopics),
+        monitorDrawerOpen: !Array.isArray(parsed) && parsed?.monitorDrawerOpen === true
       };
     } catch (error) {
       const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
@@ -326,6 +327,7 @@ ipcMain.handle("powerlib:read-tuning-selection", async () => {
           exists: false,
           path: candidate,
           selectedTopics: [],
+          monitorDrawerOpen: false,
           error: error instanceof Error ? error.message : "Could not read powerlib-tuning-selection.json."
         };
       }
@@ -335,17 +337,22 @@ ipcMain.handle("powerlib:read-tuning-selection", async () => {
   return {
     exists: false,
     path: getTuningSelectionJsonCandidates()[0],
-    selectedTopics: []
+    selectedTopics: [],
+    monitorDrawerOpen: false
   };
 });
 
 ipcMain.handle("powerlib:save-tuning-selection", async (_event, selectedTopics: unknown) => {
   let targetPath = getTuningSelectionJsonCandidates()[0];
+  let monitorDrawerOpen = false;
 
   for (const candidate of getTuningSelectionJsonCandidates()) {
     try {
       await fs.access(candidate);
       targetPath = candidate;
+      const raw = await fs.readFile(candidate, "utf-8");
+      const parsed = JSON.parse(raw);
+      monitorDrawerOpen = !Array.isArray(parsed) && parsed?.monitorDrawerOpen === true;
       break;
     } catch {
       // Keep looking. If none exist, write to the installed robot root candidate.
@@ -354,14 +361,48 @@ ipcMain.handle("powerlib:save-tuning-selection", async (_event, selectedTopics: 
 
   const document = {
     version: 1,
-    selectedTopics: normalizeSelectedTopicNames(selectedTopics)
+    selectedTopics: normalizeSelectedTopicNames(selectedTopics),
+    monitorDrawerOpen
   };
 
   await fs.writeFile(targetPath, `${JSON.stringify(document, null, 2)}\n`, "utf-8");
   return {
     exists: true,
     path: targetPath,
-    selectedTopics: document.selectedTopics
+    selectedTopics: document.selectedTopics,
+    monitorDrawerOpen: document.monitorDrawerOpen
+  };
+});
+
+ipcMain.handle("powerlib:save-tuning-monitor-drawer-open", async (_event, monitorDrawerOpen: unknown) => {
+  let targetPath = getTuningSelectionJsonCandidates()[0];
+  let selectedTopics: string[] = [];
+
+  for (const candidate of getTuningSelectionJsonCandidates()) {
+    try {
+      await fs.access(candidate);
+      targetPath = candidate;
+      const raw = await fs.readFile(candidate, "utf-8");
+      const parsed = JSON.parse(raw);
+      selectedTopics = normalizeSelectedTopicNames(Array.isArray(parsed) ? parsed : parsed?.selectedTopics);
+      break;
+    } catch {
+      // Keep looking. If none exist, write to the installed robot root candidate.
+    }
+  }
+
+  const document = {
+    version: 1,
+    selectedTopics,
+    monitorDrawerOpen: monitorDrawerOpen === true
+  };
+
+  await fs.writeFile(targetPath, `${JSON.stringify(document, null, 2)}\n`, "utf-8");
+  return {
+    exists: true,
+    path: targetPath,
+    selectedTopics: document.selectedTopics,
+    monitorDrawerOpen: document.monitorDrawerOpen
   };
 });
 
