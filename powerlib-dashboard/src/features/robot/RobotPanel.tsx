@@ -11,6 +11,7 @@ import {
   LinearProgress,
   Stack,
   TextField,
+  Tooltip,
   Typography
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
@@ -312,6 +313,7 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
       return (drafts[variable.name] ?? baseline) !== baseline;
     });
   }, [drafts, selectedTuningVariables]);
+  const hasWatchedTuningVariables = selectedTuningTopicNames.length > 0;
 
   useEffect(() => {
     let active = true;
@@ -328,8 +330,9 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
           return;
         }
 
-        setSelectedTuningTopicNames(normalizeSelectedTopicNames(result.selectedTopics));
-        setTuningDrawerOpen(result.monitorDrawerOpen === true);
+        const selectedTopics = normalizeSelectedTopicNames(result.selectedTopics);
+        setSelectedTuningTopicNames(selectedTopics);
+        setTuningDrawerOpen(result.monitorDrawerOpen === true && selectedTopics.length > 0);
         setSelectionError(result.error ?? null);
       } catch (caught) {
         if (!active) {
@@ -349,6 +352,15 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!tuningDrawerOpen || hasWatchedTuningVariables) {
+      return;
+    }
+
+    void setSavedTuningDrawerOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasWatchedTuningVariables, tuningDrawerOpen]);
 
   useEffect(() => {
     const nextTopicDrafts = selectedTuningVariables.reduce<Record<string, string>>((next, variable) => {
@@ -404,7 +416,8 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
   }
 
   async function setSavedTuningDrawerOpen(open: boolean) {
-    setTuningDrawerOpen(open);
+    const nextOpen = open && hasWatchedTuningVariables;
+    setTuningDrawerOpen(nextOpen);
 
     if (!window.powerlib?.saveTuningMonitorDrawerOpen) {
       setSelectionError("The tuning drawer state can only be saved from the Power Tool desktop app.");
@@ -412,9 +425,9 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
     }
 
     try {
-      const result = await window.powerlib.saveTuningMonitorDrawerOpen(open);
+      const result = await window.powerlib.saveTuningMonitorDrawerOpen(nextOpen);
       setSelectedTuningTopicNames(normalizeSelectedTopicNames(result.selectedTopics));
-      setTuningDrawerOpen(result.monitorDrawerOpen);
+      setTuningDrawerOpen(result.monitorDrawerOpen && normalizeSelectedTopicNames(result.selectedTopics).length > 0);
       setSelectionError(null);
     } catch (caught) {
       setSelectionError(caught instanceof Error ? caught.message : "Could not save the tuning drawer state.");
@@ -526,29 +539,37 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
               Live subsystem data from NetworkTables.
             </Typography>
           </Box>
-          <Button
-            startIcon={<TuneIcon />}
-            variant={tuningDrawerOpen ? "contained" : "outlined"}
-            onClick={() => {
-              const nextOpen = !tuningDrawerOpen;
-              void setSavedTuningDrawerOpen(nextOpen);
-              if (nextOpen) {
-                void refreshSelectedTunables();
-              }
-            }}
+          <Tooltip
+            disableHoverListener={hasWatchedTuningVariables}
+            title="No variables are currently being monitored"
           >
-            {tuningDrawerOpen ? "Hide Tunables" : "Show Tunables"}
-            <Chip
-              label={selectedTuningVariables.length}
-              size="small"
-              sx={{
-                bgcolor: tuningDrawerOpen ? "background.default" : undefined,
-                color: tuningDrawerOpen ? "primary.main" : undefined,
-                fontWeight: 900,
-                ml: 1
-              }}
-            />
-          </Button>
+            <Box component="span">
+              <Button
+                disabled={!hasWatchedTuningVariables}
+                startIcon={<TuneIcon />}
+                variant={tuningDrawerOpen ? "contained" : "outlined"}
+                onClick={() => {
+                  const nextOpen = !tuningDrawerOpen;
+                  void setSavedTuningDrawerOpen(nextOpen);
+                  if (nextOpen) {
+                    void refreshSelectedTunables();
+                  }
+                }}
+              >
+                {tuningDrawerOpen ? "Hide Tunables" : "Show Tunables"}
+                <Chip
+                  label={selectedTuningVariables.length}
+                  size="small"
+                  sx={{
+                    bgcolor: tuningDrawerOpen ? "background.default" : undefined,
+                    color: tuningDrawerOpen ? "primary.main" : undefined,
+                    fontWeight: 900,
+                    ml: 1
+                  }}
+                />
+              </Button>
+            </Box>
+          </Tooltip>
         </Stack>
 
         <Box sx={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", pb: 1, pr: 0.5 }}>

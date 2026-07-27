@@ -12,6 +12,7 @@ import {
   TextField,
   Typography
 } from "@mui/material";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import SearchIcon from "@mui/icons-material/Search";
 import type { NtPrimitive, NtTopicSnapshot, NtTopicType } from "../../networktables/nt4Client";
@@ -49,6 +50,7 @@ type TunableVariableRowProps = {
   error: string | null;
   topic: NtTopicSnapshot;
   onDraftChange: (topicName: string, draft: string) => void;
+  onRemove: (topicName: string) => void;
 };
 
 type TuningSidebarProps = {
@@ -205,10 +207,12 @@ function TunableVariableRow({
   draft,
   error,
   topic,
-  onDraftChange
+  onDraftChange,
+  onRemove
 }: TunableVariableRowProps) {
   const type = getWritableTopicType(topic);
   const parsed = parseTunableTopic(topic);
+  const displayName = getVariableDisplayName(topic);
 
   if (!type) {
     return null;
@@ -218,19 +222,23 @@ function TunableVariableRow({
   return (
     <Box
       sx={{
-        alignItems: "start",
+        alignItems: "center",
         border: "1px solid",
         borderColor: error ? "error.main" : "divider",
         borderRadius: 1.5,
         display: "grid",
         gap: 1,
-        gridTemplateColumns: { xs: "1fr", md: "minmax(260px, 1fr) 96px minmax(160px, 240px)" },
+        gridTemplateAreas: {
+          xs: `"label remove" "type remove" "input input"`,
+          md: `"label type input remove"`
+        },
+        gridTemplateColumns: { xs: "1fr auto", md: "minmax(220px, 1fr) auto minmax(160px, 240px) auto" },
         p: 1.25
       }}
     >
-      <Stack spacing={0.25} sx={{ minWidth: 0, pt: 0.5 }}>
+      <Stack spacing={0.25} sx={{ gridArea: "label", minWidth: 0 }}>
         <Typography sx={{ fontFamily: "monospace", fontWeight: 800, overflowWrap: "anywhere" }}>
-          {getVariableDisplayName(topic)}
+          {displayName}
         </Typography>
         {parsed && (
           <Typography color="text.secondary" sx={{ overflowWrap: "anywhere" }} variant="caption">
@@ -238,17 +246,26 @@ function TunableVariableRow({
           </Typography>
         )}
       </Stack>
-      <Box sx={{ pt: 0.75 }}>
+      <Box sx={{ gridArea: "type", justifySelf: { xs: "start", md: "center" } }}>
         <Chip label={writableType} size="small" variant="outlined" />
       </Box>
       <TextField
         disabled={disabled}
         error={Boolean(error)}
-        helperText={error ?? " "}
+        helperText={error ?? undefined}
         size="small"
+        sx={{ gridArea: "input" }}
         value={draft}
         onChange={(event) => onDraftChange(topic.name, event.target.value)}
       />
+      <IconButton
+        aria-label={`Remove ${displayName} from selected tunables`}
+        size="small"
+        sx={{ gridArea: "remove", justifySelf: "end" }}
+        onClick={() => onRemove(topic.name)}
+      >
+        <DeleteOutlineIcon fontSize="small" />
+      </IconButton>
     </Box>
   );
 }
@@ -268,7 +285,7 @@ function TuningSidebarTopicRow({
     <Box
       component="label"
       sx={{
-        alignItems: "flex-start",
+        alignItems: "center",
         border: "1px solid",
         borderColor: selected ? "primary.main" : "divider",
         borderRadius: 1.25,
@@ -293,7 +310,7 @@ function TuningSidebarTopicRow({
       <Checkbox
         checked={selected}
         size="small"
-        sx={{ mt: -0.25, p: 0.25 }}
+        sx={{ p: 0.25 }}
         onChange={(event) => onToggle(topic.name, event.target.checked)}
       />
       <Stack spacing={0.15} sx={{ minWidth: 0 }}>
@@ -843,6 +860,7 @@ export function TuningPanel() {
                       error={rowErrors[topic.name] ?? null}
                       topic={topic}
                       onDraftChange={updateDraft}
+                      onRemove={(topicName) => toggleTopicSelection(topicName, false)}
                     />
                   ))}
                 </Stack>
