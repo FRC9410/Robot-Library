@@ -4,24 +4,15 @@
 
 package frc.robot.commands;
 
-import static edu.wpi.first.units.Units.MetersPerSecond;
-import static edu.wpi.first.units.Units.RadiansPerSecond;
-import static edu.wpi.first.units.Units.RotationsPerSecond;
-
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import frc.powerlib.utils.DriveUtil;
-import frc.robot.Constants;
 import frc.robot.subsystems.Swerve;
 
 public class SwerveDriveCommand extends Command {
   private final Swerve drivetrain;
   private final CommandXboxController controller;
-
-  public final double maxSpeed = Constants.Tuner.kSpeedAt12Volts.in(MetersPerSecond);
-  public final double maxAngularRate = RotationsPerSecond.of(1.5).in(RadiansPerSecond);
-  public final double skewCompensation = -0.03;
 
   public SwerveDriveCommand(Swerve drivetrain, CommandXboxController controller) {
     this.drivetrain = drivetrain;
@@ -34,11 +25,14 @@ public class SwerveDriveCommand extends Command {
   public void execute() {
     ChassisSpeeds speeds =
         DriveUtil.calculateSpeedsBasedOnJoystickInputs(
-            controller, drivetrain, maxAngularRate, skewCompensation);
+            controller,
+            drivetrain,
+            drivetrain.getDriverMaxAngularRateRadiansPerSecond(),
+            drivetrain.getDriverSkewCompensation());
 
     drivetrain.drive(
-        speeds.vxMetersPerSecond * Constants.OI.MAX_SPEED_COEFFICIENT,
-        speeds.vyMetersPerSecond * Constants.OI.MAX_SPEED_COEFFICIENT,
+        speeds.vxMetersPerSecond * drivetrain.getDriverMaxSpeedCoefficient(),
+        speeds.vyMetersPerSecond * drivetrain.getDriverMaxSpeedCoefficient(),
         -speeds.omegaRadiansPerSecond,
         Swerve.DriveMode.FIELD_RELATIVE);
   }

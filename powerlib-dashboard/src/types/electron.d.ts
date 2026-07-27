@@ -8,12 +8,14 @@ declare global {
         exists: boolean;
         path: string;
         subsystems: unknown[];
+        swerve?: unknown;
         error?: string;
       }>;
-      saveSubsystems: (subsystems: unknown[]) => Promise<{
+      saveSubsystems: (subsystems: unknown[], swerve?: unknown) => Promise<{
         exists: boolean;
         path: string;
         subsystems: unknown[];
+        swerve?: unknown;
       }>;
       readBindings: () => Promise<{
         exists: boolean;

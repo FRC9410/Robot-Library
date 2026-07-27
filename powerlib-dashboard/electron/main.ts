@@ -211,7 +211,8 @@ ipcMain.handle("powerlib:read-subsystems", async () => {
       return {
         exists: true,
         path: candidate,
-        subsystems: Array.isArray(parsed.subsystems) ? parsed.subsystems : []
+        subsystems: Array.isArray(parsed.subsystems) ? parsed.subsystems : [],
+        swerve: parsed && typeof parsed.swerve === "object" && !Array.isArray(parsed.swerve) ? parsed.swerve : {}
       };
     } catch (error) {
       const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
@@ -220,6 +221,7 @@ ipcMain.handle("powerlib:read-subsystems", async () => {
           exists: false,
           path: candidate,
           subsystems: [],
+          swerve: {},
           error: error instanceof Error ? error.message : "Could not read powerlib-subsystems.json."
         };
       }
@@ -229,17 +231,28 @@ ipcMain.handle("powerlib:read-subsystems", async () => {
   return {
     exists: false,
     path: getSubsystemJsonCandidates()[0],
-    subsystems: []
+    subsystems: [],
+    swerve: {}
   };
 });
 
-ipcMain.handle("powerlib:save-subsystems", async (_event, subsystems: unknown[]) => {
+ipcMain.handle("powerlib:save-subsystems", async (_event, subsystems: unknown[], swerve?: unknown) => {
   let targetPath = getSubsystemJsonCandidates()[0];
+  let existingDocument: Record<string, unknown> = {};
 
   for (const candidate of getSubsystemJsonCandidates()) {
     try {
       await fs.access(candidate);
       targetPath = candidate;
+      try {
+        const raw = await fs.readFile(candidate, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          existingDocument = parsed as Record<string, unknown>;
+        }
+      } catch {
+        existingDocument = {};
+      }
       break;
     } catch {
       // Keep looking. If none exist, write to the installed robot root candidate.
@@ -247,6 +260,8 @@ ipcMain.handle("powerlib:save-subsystems", async (_event, subsystems: unknown[])
   }
 
   const document = {
+    ...existingDocument,
+    swerve: swerve !== undefined ? swerve : (existingDocument.swerve ?? {}),
     subsystems: Array.isArray(subsystems) ? subsystems : []
   };
 
@@ -254,7 +269,8 @@ ipcMain.handle("powerlib:save-subsystems", async (_event, subsystems: unknown[])
   return {
     exists: true,
     path: targetPath,
-    subsystems: document.subsystems
+    subsystems: document.subsystems,
+    swerve: document.swerve ?? {}
   };
 });
 

@@ -3,7 +3,8 @@ import { contextBridge, ipcRenderer } from "electron";
 contextBridge.exposeInMainWorld("powerlib", {
   platform: process.platform,
   readSubsystems: () => ipcRenderer.invoke("powerlib:read-subsystems"),
-  saveSubsystems: (subsystems: unknown[]) => ipcRenderer.invoke("powerlib:save-subsystems", subsystems),
+  saveSubsystems: (subsystems: unknown[], swerve?: unknown) =>
+    ipcRenderer.invoke("powerlib:save-subsystems", subsystems, swerve),
   readBindings: () => ipcRenderer.invoke("powerlib:read-bindings"),
   saveBindings: (bindings: unknown[]) => ipcRenderer.invoke("powerlib:save-bindings", bindings),
   readTuningSelection: () => ipcRenderer.invoke("powerlib:read-tuning-selection"),

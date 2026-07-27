@@ -51,6 +51,32 @@ export type GeneratedSubsystem = {
   };
 };
 
+export type GeneratedSwerveConstants = {
+  driver?: {
+    maxSpeedCoefficient?: number | string;
+    velocityScale?: number | string;
+    maxAngularRateRadiansPerSecond?: number | string;
+    joystickDeadband?: number | string;
+    skewCompensation?: number | string;
+  };
+  requests?: {
+    maxAngularRateRadiansPerSecond?: number | string;
+    translationDeadbandMetersPerSecond?: number | string;
+    rotationalDeadbandRadiansPerSecond?: number | string;
+  };
+  driveToPoint?: {
+    maxAngularRateRadiansPerSecond?: number | string;
+    maxSpeedCoefficient?: number | string;
+    slowSpeedCoefficient?: number | string;
+    staticFrictionConstant?: number | string;
+  };
+  heading?: {
+    kP?: number | string;
+    kI?: number | string;
+    kD?: number | string;
+  };
+};
+
 export type SubsystemDocumentState = {
   loading: boolean;
   exists: boolean;

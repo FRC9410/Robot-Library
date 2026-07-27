@@ -14,11 +14,11 @@ import {
   Typography
 } from "@mui/material";
 import type { NtTopicSnapshot } from "../../networktables/nt4Client";
-import type { GeneratedSubsystem } from "../subsystems/types";
+import type { GeneratedSubsystem, GeneratedSwerveConstants } from "../subsystems/types";
 import { methodNeedsValue, toConstantName } from "../bindings/bindingUtils";
 import type { BindingCommand, GeneratedBinding } from "../bindings/types";
 
-type SaveTarget = "subsystem" | "command";
+type SaveTarget = "subsystem" | "command" | "swerve";
 type JsonPathSegment = string | number;
 type JsonContainer = Record<string | number, unknown>;
 type SaveValue = number | boolean | string;
@@ -33,6 +33,7 @@ type SaveValueChange = {
   newValue: SaveValue;
   subsystemIndex?: number;
   subsystemPath?: JsonPathSegment[];
+  swervePath?: JsonPathSegment[];
   bindingIndex?: number;
   commandVariableKey?: string;
 };
@@ -45,11 +46,13 @@ type SaveTunedValuesDialogProps = {
 
 type LoadedDocuments = {
   subsystems: GeneratedSubsystem[];
+  swerve: GeneratedSwerveConstants;
   bindings: GeneratedBinding[];
 };
 
 const subsystemVariablesPrefix = "/PowerLib/Subsystems/";
 const commandVariablesPrefix = "/PowerLib/Commands/";
+const swerveTopicName = "Swerve";
 
 const subsystemVariableMappings: Record<
   string,
@@ -99,6 +102,91 @@ const subsystemVariableMappings: Record<
   "Position/Default": {
     jsonPath: ["absolutePosition", "default"],
     label: "Default position"
+  }
+};
+
+const defaultSwerveConstants: GeneratedSwerveConstants = {
+  driver: {
+    maxSpeedCoefficient: 0.75,
+    velocityScale: 0.95,
+    maxAngularRateRadiansPerSecond: 9.42477796076938,
+    joystickDeadband: 0.1,
+    skewCompensation: -0.03
+  },
+  requests: {
+    maxAngularRateRadiansPerSecond: 4.71238898038469,
+    translationDeadbandMetersPerSecond: 0.572,
+    rotationalDeadbandRadiansPerSecond: 0.471238898038469
+  },
+  driveToPoint: {
+    maxAngularRateRadiansPerSecond: 3.141592653589793,
+    maxSpeedCoefficient: 0.75,
+    slowSpeedCoefficient: 0.1875,
+    staticFrictionConstant: 0.085
+  },
+  heading: {
+    kP: 7,
+    kI: 0,
+    kD: 0
+  }
+};
+
+const swerveVariableMappings: Record<string, { jsonPath: JsonPathSegment[]; label: string }> = {
+  "Driver/MaxSpeedCoefficient": {
+    jsonPath: ["driver", "maxSpeedCoefficient"],
+    label: "Driver max speed coefficient"
+  },
+  "Driver/VelocityScale": {
+    jsonPath: ["driver", "velocityScale"],
+    label: "Driver velocity scale"
+  },
+  "Driver/MaxAngularRateRadiansPerSecond": {
+    jsonPath: ["driver", "maxAngularRateRadiansPerSecond"],
+    label: "Driver max angular rate"
+  },
+  "Driver/JoystickDeadband": {
+    jsonPath: ["driver", "joystickDeadband"],
+    label: "Driver joystick deadband"
+  },
+  "Driver/SkewCompensation": {
+    jsonPath: ["driver", "skewCompensation"],
+    label: "Driver skew compensation"
+  },
+  "Requests/TranslationDeadbandMetersPerSecond": {
+    jsonPath: ["requests", "translationDeadbandMetersPerSecond"],
+    label: "Request translation deadband"
+  },
+  "Requests/RotationalDeadbandRadiansPerSecond": {
+    jsonPath: ["requests", "rotationalDeadbandRadiansPerSecond"],
+    label: "Request rotational deadband"
+  },
+  "DriveToPoint/MaxAngularRateRadiansPerSecond": {
+    jsonPath: ["driveToPoint", "maxAngularRateRadiansPerSecond"],
+    label: "Drive-to-point max angular rate"
+  },
+  "DriveToPoint/MaxSpeedCoefficient": {
+    jsonPath: ["driveToPoint", "maxSpeedCoefficient"],
+    label: "Drive-to-point max speed coefficient"
+  },
+  "DriveToPoint/SlowSpeedCoefficient": {
+    jsonPath: ["driveToPoint", "slowSpeedCoefficient"],
+    label: "Drive-to-point slow speed coefficient"
+  },
+  "DriveToPoint/StaticFrictionConstant": {
+    jsonPath: ["driveToPoint", "staticFrictionConstant"],
+    label: "Drive-to-point static friction"
+  },
+  "Heading/kP": {
+    jsonPath: ["heading", "kP"],
+    label: "Heading kP"
+  },
+  "Heading/kI": {
+    jsonPath: ["heading", "kI"],
+    label: "Heading kI"
+  },
+  "Heading/kD": {
+    jsonPath: ["heading", "kD"],
+    label: "Heading kD"
   }
 };
 
@@ -272,6 +360,11 @@ function getSubsystemOldValue(
   return oldValue;
 }
 
+function getSwerveOldValue(swerve: GeneratedSwerveConstants, mapping: { jsonPath: JsonPathSegment[] }) {
+  const oldValue = getNestedValue(swerve, mapping.jsonPath);
+  return oldValue === undefined ? getNestedValue(defaultSwerveConstants, mapping.jsonPath) : oldValue;
+}
+
 function setNestedValue(root: unknown, path: JsonPathSegment[], value: SaveValue) {
   let current = root as JsonContainer;
   path.slice(0, -1).forEach((segment, index) => {
@@ -433,12 +526,40 @@ function applyCommandValue(
   }
 }
 
-function buildSubsystemChanges(topics: NtTopicSnapshot[], subsystems: GeneratedSubsystem[]) {
+function buildSubsystemChanges(
+  topics: NtTopicSnapshot[],
+  subsystems: GeneratedSubsystem[],
+  swerve: GeneratedSwerveConstants
+) {
   const changes: SaveValueChange[] = [];
 
   topics.forEach((topic) => {
     const parsed = parseVariableTopic(topic.name, subsystemVariablesPrefix);
     if (!parsed) {
+      return;
+    }
+
+    if (parsed.ownerName === swerveTopicName) {
+      const mapping = swerveVariableMappings[parsed.variableKey];
+      const newValue = getTopicNumber(topic);
+      if (!mapping || newValue === null) {
+        return;
+      }
+
+      const oldValue = getSwerveOldValue(swerve, mapping);
+      if (!valuesDiffer(oldValue, newValue)) {
+        return;
+      }
+
+      changes.push({
+        id: topic.name,
+        selected: true,
+        target: "swerve",
+        label: `Swerve: ${mapping.label}`,
+        oldValueText: formatValue(oldValue),
+        newValue,
+        swervePath: mapping.jsonPath
+      });
       return;
     }
 
@@ -524,13 +645,17 @@ function buildCommandChanges(
 
 function buildChanges(topics: NtTopicSnapshot[], documents: LoadedDocuments) {
   return [
-    ...buildSubsystemChanges(topics, documents.subsystems),
+    ...buildSubsystemChanges(topics, documents.subsystems, documents.swerve),
     ...buildCommandChanges(topics, documents.bindings, documents.subsystems)
   ].sort((left, right) => left.label.localeCompare(right.label));
 }
 
 export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValuesDialogProps) {
-  const [documents, setDocuments] = useState<LoadedDocuments>({ subsystems: [], bindings: [] });
+  const [documents, setDocuments] = useState<LoadedDocuments>({
+    subsystems: [],
+    swerve: {},
+    bindings: []
+  });
   const [changes, setChanges] = useState<SaveValueChange[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -573,6 +698,7 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
 
       const loaded = {
         subsystems: subsystemsResult.subsystems as GeneratedSubsystem[],
+        swerve: (subsystemsResult.swerve ?? {}) as GeneratedSwerveConstants,
         bindings: bindingsResult.bindings as GeneratedBinding[]
       };
       setDocuments(loaded);
@@ -611,15 +737,22 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
       }
 
       const nextSubsystems = cloneJson(documents.subsystems);
+      const nextSwerve = cloneJson(documents.swerve);
       const nextBindings = cloneJson(documents.bindings);
       const unselectedIds = new Set(changes.filter((change) => !change.selected).map((change) => change.id));
       let subsystemChanged = false;
+      let swerveChanged = false;
       let commandChanged = false;
 
       selectedChanges.forEach((change) => {
         if (change.target === "subsystem" && change.subsystemIndex !== undefined && change.subsystemPath) {
           setNestedValue(nextSubsystems[change.subsystemIndex], change.subsystemPath, change.newValue);
           subsystemChanged = true;
+        }
+
+        if (change.target === "swerve" && change.swervePath) {
+          setNestedValue(nextSwerve, change.swervePath, change.newValue);
+          swerveChanged = true;
         }
 
         if (
@@ -640,12 +773,14 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
 
       const savedDocuments = {
         subsystems: nextSubsystems,
+        swerve: nextSwerve,
         bindings: nextBindings
       };
 
-      if (subsystemChanged) {
-        const result = await window.powerlib.saveSubsystems(nextSubsystems);
+      if (subsystemChanged || swerveChanged) {
+        const result = await window.powerlib.saveSubsystems(nextSubsystems, nextSwerve);
         savedDocuments.subsystems = result.subsystems as GeneratedSubsystem[];
+        savedDocuments.swerve = (result.swerve ?? nextSwerve) as GeneratedSwerveConstants;
       }
       if (commandChanged) {
         const result = await window.powerlib.saveBindings(nextBindings);
@@ -731,7 +866,13 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
                     <Typography sx={{ fontWeight: 800, overflowWrap: "anywhere" }}>{change.label}</Typography>
                     <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
                       <Chip
-                        label={change.target === "subsystem" ? "Subsystem JSON" : "Bindings JSON"}
+                        label={
+                          change.target === "subsystem"
+                            ? "Subsystem JSON"
+                            : change.target === "swerve"
+                              ? "Swerve JSON"
+                              : "Bindings JSON"
+                        }
                         size="small"
                         variant="outlined"
                       />

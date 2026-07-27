@@ -472,17 +472,93 @@ function New-InteractiveSubsystem {
     return [pscustomobject]$subsystem
 }
 
+function New-DefaultSwerveConfig {
+    return [pscustomobject]@{
+        driver = [pscustomobject]@{
+            maxSpeedCoefficient = 0.75
+            velocityScale = 0.95
+            maxAngularRateRadiansPerSecond = 9.42477796076938
+            joystickDeadband = 0.1
+            skewCompensation = -0.03
+        }
+        requests = [pscustomobject]@{
+            maxAngularRateRadiansPerSecond = 4.71238898038469
+            translationDeadbandMetersPerSecond = 0.572
+            rotationalDeadbandRadiansPerSecond = 0.471238898038469
+        }
+        driveToPoint = [pscustomobject]@{
+            maxAngularRateRadiansPerSecond = 3.141592653589793
+            maxSpeedCoefficient = 0.75
+            slowSpeedCoefficient = 0.1875
+            staticFrictionConstant = 0.085
+        }
+        heading = [pscustomobject]@{
+            kP = 7.0
+            kI = 0.0
+            kD = 0.0
+        }
+    }
+}
+
+function Ensure-ObjectProperty {
+    param(
+        [Parameter(Mandatory = $true)]$Object,
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)]$DefaultValue
+    )
+
+    if (-not ($Object.PSObject.Properties.Name -contains $Name) -or $null -eq $Object.$Name) {
+        $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $DefaultValue -Force
+    }
+}
+
+function Ensure-SwerveConfig {
+    param([Parameter(Mandatory = $true)]$Document)
+
+    $defaults = New-DefaultSwerveConfig
+    Ensure-ObjectProperty $Document "swerve" ([pscustomobject]@{})
+    Ensure-ObjectProperty $Document.swerve "driver" ([pscustomobject]@{})
+    Ensure-ObjectProperty $Document.swerve "requests" ([pscustomobject]@{})
+    Ensure-ObjectProperty $Document.swerve "driveToPoint" ([pscustomobject]@{})
+    Ensure-ObjectProperty $Document.swerve "heading" ([pscustomobject]@{})
+
+    Ensure-ObjectProperty $Document.swerve.driver "maxSpeedCoefficient" $defaults.driver.maxSpeedCoefficient
+    Ensure-ObjectProperty $Document.swerve.driver "velocityScale" $defaults.driver.velocityScale
+    Ensure-ObjectProperty $Document.swerve.driver "maxAngularRateRadiansPerSecond" $defaults.driver.maxAngularRateRadiansPerSecond
+    Ensure-ObjectProperty $Document.swerve.driver "joystickDeadband" $defaults.driver.joystickDeadband
+    Ensure-ObjectProperty $Document.swerve.driver "skewCompensation" $defaults.driver.skewCompensation
+
+    Ensure-ObjectProperty $Document.swerve.requests "maxAngularRateRadiansPerSecond" $defaults.requests.maxAngularRateRadiansPerSecond
+    Ensure-ObjectProperty $Document.swerve.requests "translationDeadbandMetersPerSecond" $defaults.requests.translationDeadbandMetersPerSecond
+    Ensure-ObjectProperty $Document.swerve.requests "rotationalDeadbandRadiansPerSecond" $defaults.requests.rotationalDeadbandRadiansPerSecond
+
+    Ensure-ObjectProperty $Document.swerve.driveToPoint "maxAngularRateRadiansPerSecond" $defaults.driveToPoint.maxAngularRateRadiansPerSecond
+    Ensure-ObjectProperty $Document.swerve.driveToPoint "maxSpeedCoefficient" $defaults.driveToPoint.maxSpeedCoefficient
+    Ensure-ObjectProperty $Document.swerve.driveToPoint "slowSpeedCoefficient" $defaults.driveToPoint.slowSpeedCoefficient
+    Ensure-ObjectProperty $Document.swerve.driveToPoint "staticFrictionConstant" $defaults.driveToPoint.staticFrictionConstant
+
+    Ensure-ObjectProperty $Document.swerve.heading "kP" $defaults.heading.kP
+    Ensure-ObjectProperty $Document.swerve.heading "kI" $defaults.heading.kI
+    Ensure-ObjectProperty $Document.swerve.heading "kD" $defaults.heading.kD
+
+    return $Document.swerve
+}
+
 function Read-SubsystemDocument {
     param([Parameter(Mandatory = $true)][string]$Path)
 
     if (-not (Test-Path $Path)) {
-        return [pscustomobject]@{ subsystems = @() }
+        return [pscustomobject]@{
+            swerve = New-DefaultSwerveConfig
+            subsystems = @()
+        }
     }
 
     $document = Get-Content -Path $Path -Raw | ConvertFrom-Json
     if (-not ($document.PSObject.Properties.Name -contains "subsystems")) {
         $document | Add-Member -MemberType NoteProperty -Name subsystems -Value @()
     }
+    Ensure-SwerveConfig $document | Out-Null
 
     $document.subsystems = @($document.subsystems)
     foreach ($subsystem in @($document.subsystems)) {
@@ -505,6 +581,7 @@ function Save-SubsystemDocument {
         [Parameter(Mandatory = $true)]$Document
     )
 
+    Ensure-SwerveConfig $Document | Out-Null
     $Document.subsystems = @($Document.subsystems | Sort-Object { (Get-SubsystemMetadata $_).PascalName })
     $Document | ConvertTo-Json -Depth 12 | Set-Content -Path $Path -Encoding ascii
 }
@@ -533,6 +610,97 @@ function Save-BindingDocument {
 
     $Document.bindings = @($Document.bindings | Sort-Object { $_.name })
     $Document | ConvertTo-Json -Depth 12 | Set-Content -Path $Path -Encoding ascii
+}
+
+function Get-SwerveConfigValue {
+    param(
+        [Parameter(Mandatory = $true)]$SwerveConfig,
+        [Parameter(Mandatory = $true)][string[]]$Path,
+        [Parameter(Mandatory = $true)]$DefaultValue
+    )
+
+    $current = $SwerveConfig
+    foreach ($segment in $Path) {
+        if ($null -eq $current -or -not ($current.PSObject.Properties.Name -contains $segment)) {
+            return $DefaultValue
+        }
+        $current = $current.$segment
+    }
+
+    if ($null -eq $current) {
+        return $DefaultValue
+    }
+
+    return $current
+}
+
+function New-SwerveConstantsContent {
+    param([Parameter(Mandatory = $true)]$SwerveConfig)
+
+    $defaults = New-DefaultSwerveConfig
+    $driverMaxSpeedCoefficient =
+        Get-SwerveConfigValue $SwerveConfig @("driver", "maxSpeedCoefficient") $defaults.driver.maxSpeedCoefficient
+    $driverVelocityScale =
+        Get-SwerveConfigValue $SwerveConfig @("driver", "velocityScale") $defaults.driver.velocityScale
+    $driverMaxAngularRate =
+        Get-SwerveConfigValue $SwerveConfig @("driver", "maxAngularRateRadiansPerSecond") $defaults.driver.maxAngularRateRadiansPerSecond
+    $driverJoystickDeadband =
+        Get-SwerveConfigValue $SwerveConfig @("driver", "joystickDeadband") $defaults.driver.joystickDeadband
+    $driverSkewCompensation =
+        Get-SwerveConfigValue $SwerveConfig @("driver", "skewCompensation") $defaults.driver.skewCompensation
+
+    $requestMaxAngularRate =
+        Get-SwerveConfigValue $SwerveConfig @("requests", "maxAngularRateRadiansPerSecond") $defaults.requests.maxAngularRateRadiansPerSecond
+    $requestTranslationDeadband =
+        Get-SwerveConfigValue $SwerveConfig @("requests", "translationDeadbandMetersPerSecond") $defaults.requests.translationDeadbandMetersPerSecond
+    $requestRotationalDeadband =
+        Get-SwerveConfigValue $SwerveConfig @("requests", "rotationalDeadbandRadiansPerSecond") $defaults.requests.rotationalDeadbandRadiansPerSecond
+
+    $driveToPointMaxAngularRate =
+        Get-SwerveConfigValue $SwerveConfig @("driveToPoint", "maxAngularRateRadiansPerSecond") $defaults.driveToPoint.maxAngularRateRadiansPerSecond
+    $driveToPointMaxSpeedCoefficient =
+        Get-SwerveConfigValue $SwerveConfig @("driveToPoint", "maxSpeedCoefficient") $defaults.driveToPoint.maxSpeedCoefficient
+    $driveToPointSlowSpeedCoefficient =
+        Get-SwerveConfigValue $SwerveConfig @("driveToPoint", "slowSpeedCoefficient") $defaults.driveToPoint.slowSpeedCoefficient
+    $driveToPointStaticFrictionConstant =
+        Get-SwerveConfigValue $SwerveConfig @("driveToPoint", "staticFrictionConstant") $defaults.driveToPoint.staticFrictionConstant
+
+    $headingKP = Get-SwerveConfigValue $SwerveConfig @("heading", "kP") $defaults.heading.kP
+    $headingKI = Get-SwerveConfigValue $SwerveConfig @("heading", "kI") $defaults.heading.kI
+    $headingKD = Get-SwerveConfigValue $SwerveConfig @("heading", "kD") $defaults.heading.kD
+
+    return @"
+package frc.robot.constants;
+
+/**
+ * PowerLib-owned swerve behavior constants.
+ *
+ * <p>Phoenix/Tuner X hardware constants stay in {@link TunerConstants}; these values are the driver
+ * feel and heading-control defaults that Power Tool can live-tune and then save back to
+ * powerlib-subsystems.json.
+ */
+public class SwerveConstants {
+  public static final double DRIVER_MAX_SPEED_COEFFICIENT = $(Format-JavaDoubleLiteral $driverMaxSpeedCoefficient);
+  public static final double DRIVER_VELOCITY_SCALE = $(Format-JavaDoubleLiteral $driverVelocityScale);
+  public static final double DRIVER_MAX_ANGULAR_RATE_RADIANS_PER_SECOND = $(Format-JavaDoubleLiteral $driverMaxAngularRate);
+  public static final double DRIVER_JOYSTICK_DEADBAND = $(Format-JavaDoubleLiteral $driverJoystickDeadband);
+  public static final double DRIVER_SKEW_COMPENSATION = $(Format-JavaDoubleLiteral $driverSkewCompensation);
+
+  public static final double REQUEST_MAX_ANGULAR_RATE_RADIANS_PER_SECOND = $(Format-JavaDoubleLiteral $requestMaxAngularRate);
+  public static final double REQUEST_TRANSLATION_DEADBAND_METERS_PER_SECOND = $(Format-JavaDoubleLiteral $requestTranslationDeadband);
+  public static final double REQUEST_ROTATIONAL_DEADBAND_RADIANS_PER_SECOND = $(Format-JavaDoubleLiteral $requestRotationalDeadband);
+
+  public static final double DRIVE_TO_POINT_MAX_ANGULAR_RATE_RADIANS_PER_SECOND =
+      $(Format-JavaDoubleLiteral $driveToPointMaxAngularRate);
+  public static final double DRIVE_TO_POINT_MAX_SPEED_COEFFICIENT = $(Format-JavaDoubleLiteral $driveToPointMaxSpeedCoefficient);
+  public static final double DRIVE_TO_POINT_SLOW_SPEED_COEFFICIENT = $(Format-JavaDoubleLiteral $driveToPointSlowSpeedCoefficient);
+  public static final double DRIVE_TO_POINT_STATIC_FRICTION_CONSTANT = $(Format-JavaDoubleLiteral $driveToPointStaticFrictionConstant);
+
+  public static final double HEADING_KP = $(Format-JavaDoubleLiteral $headingKP);
+  public static final double HEADING_KI = $(Format-JavaDoubleLiteral $headingKI);
+  public static final double HEADING_KD = $(Format-JavaDoubleLiteral $headingKD);
+}
+"@
 }
 
 function Get-JsonPropertyValue {
@@ -973,6 +1141,17 @@ function Write-ConstantsFile {
     $content = Set-CustomConstantsBlock $content $customContent
 
     Set-Content -Path $outputFile -Value $content -Encoding ascii
+    return $outputFile
+}
+
+function Write-SwerveConstantsFile {
+    param([Parameter(Mandatory = $true)]$SwerveConfig)
+
+    $constantsDir = Join-Path (Get-Location) "src/main/java/frc/robot/constants"
+    New-Item -ItemType Directory -Force -Path $constantsDir | Out-Null
+
+    $outputFile = Join-Path $constantsDir "SwerveConstants.java"
+    Set-Content -Path $outputFile -Value (New-SwerveConstantsContent $SwerveConfig) -Encoding ascii
     return $outputFile
 }
 
@@ -2022,6 +2201,7 @@ function Update-SubsystemsFromJson {
     $characterizationWritten = @()
     $constantsDir = Join-Path (Get-Location) "src/main/java/frc/robot/constants"
     $customBlocksById = Get-CustomConstantsBySubsystemId $constantsDir
+    $written += Write-SwerveConstantsFile $document.swerve
     foreach ($subsystem in $subsystems) {
         $metadata = Get-SubsystemMetadata $subsystem
         $written += Write-ConstantsFile $subsystem $metadata $customBlocksById
