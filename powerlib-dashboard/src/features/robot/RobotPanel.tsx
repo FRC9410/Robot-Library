@@ -516,7 +516,7 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
         sx={{
           display: "grid",
           gap: 2,
-          gridTemplateColumns: { xs: "1fr", lg: tuningDrawerOpen ? "minmax(0, 1fr) 420px" : "1fr" },
+          gridTemplateColumns: { xs: "1fr", md: tuningDrawerOpen ? "minmax(0, 1fr) 420px" : "1fr" },
           minWidth: 0
         }}
       >
@@ -602,12 +602,12 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
             sx={{
               display: "flex",
               flexDirection: "column",
-              height: { xs: "auto", lg: "calc(100vh - 150px)" },
-              minHeight: { xs: 420, lg: 0 },
+              height: { xs: "auto", md: "calc(100vh - 150px)" },
+              minHeight: { xs: 420, md: 0 },
               minWidth: 0,
               overflow: "hidden",
-              position: { lg: "sticky" },
-              top: { lg: 16 }
+              position: { md: "sticky" },
+              top: { md: 16 }
             }}
           >
             <CardContent
