@@ -488,243 +488,259 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
   }
 
   return (
-    <Stack spacing={2}>
-      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ alignItems: { sm: "center" } }}>
-        <Box sx={{ flexGrow: 1 }}>
-          <Typography variant="h6">Subsystem Monitoring</Typography>
-          <Typography color="text.secondary" variant="body2">
-            Live subsystem data from NetworkTables.
-          </Typography>
-        </Box>
-        <Button
-          startIcon={<TuneIcon />}
-          variant={tuningDrawerOpen ? "contained" : "outlined"}
-          onClick={() => {
-            const nextOpen = !tuningDrawerOpen;
-            void setSavedTuningDrawerOpen(nextOpen);
-            if (nextOpen) {
-              void refreshSelectedTunables();
-            }
-          }}
-        >
-          {tuningDrawerOpen ? "Hide Tunables" : "Show Tunables"}
-          <Chip label={selectedTuningVariables.length} size="small" sx={{ ml: 1 }} />
-        </Button>
-      </Stack>
-
+    <Box
+      sx={{
+        display: "flex",
+        height: { xs: "auto", md: "calc(100vh - 150px)" },
+        minHeight: { xs: 0, md: 520 },
+        minWidth: 0,
+        overflow: "hidden",
+        width: "100%"
+      }}
+    >
       <Box
         sx={{
-          display: "grid",
-          gap: 2,
-          gridTemplateColumns: { xs: "1fr", md: tuningDrawerOpen ? "minmax(0, 1fr) 420px" : "1fr" },
-          minWidth: 0
+          display: "flex",
+          flex: "1 1 auto",
+          flexDirection: "column",
+          minHeight: 0,
+          minWidth: 0,
+          overflow: "hidden",
+          pr: { xs: 0, md: tuningDrawerOpen ? 1.5 : 0 },
+          transition: "padding-right 220ms ease"
         }}
       >
-        <Stack spacing={2} sx={{ minWidth: 0 }}>
-          {tiles.length === 0 && (
-            <Alert severity="info" variant="outlined">
-              No generated subsystem document was found for robot tiles.
-            </Alert>
-          )}
-
-          <Box
-            sx={{
-              display: "grid",
-              gap: 1.5,
-              justifyContent: "start",
-              gridTemplateColumns: {
-                xs: "1fr",
-                sm: "repeat(auto-fill, minmax(280px, 320px))"
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={1.5}
+          sx={{ alignItems: { sm: "center" }, flexShrink: 0, pb: 1.5 }}
+        >
+          <Box sx={{ flexGrow: 1 }}>
+            <Typography variant="h6">Subsystem Monitoring</Typography>
+            <Typography color="text.secondary" variant="body2">
+              Live subsystem data from NetworkTables.
+            </Typography>
+          </Box>
+          <Button
+            startIcon={<TuneIcon />}
+            variant={tuningDrawerOpen ? "contained" : "outlined"}
+            onClick={() => {
+              const nextOpen = !tuningDrawerOpen;
+              void setSavedTuningDrawerOpen(nextOpen);
+              if (nextOpen) {
+                void refreshSelectedTunables();
               }
             }}
           >
-            {tiles.map((tile) => (
-              <Card key={tile.id} variant="outlined" sx={{ minHeight: 160 }}>
-                <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
-                  <Stack spacing={1.25}>
-                    <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                      <Box sx={{ flexGrow: 1 }}>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-                          {tile.name}
-                        </Typography>
-                        <Stack direction="row" spacing={1} sx={{ mt: 0.75 }}>
-                          <Chip label={tile.type} size="small" />
-                          {tile.connected !== undefined && (
-                            <Chip
-                              label={tile.connected ? "connected" : "disconnected"}
-                              color={tile.connected ? "success" : "error"}
-                              size="small"
-                              variant={tile.connected ? "filled" : "outlined"}
-                            />
-                          )}
-                        </Stack>
-                      </Box>
-                    </Stack>
-
-                    <Divider />
-
-                    {tile.metrics.length > 0 ? (
-                      <Box sx={{ display: "grid", gap: 0.75 }}>
-                        {tile.metrics.map((metric) => (
-                          <Box
-                            key={`${tile.id}-${metric.label}`}
-                            sx={{
-                              alignItems: "baseline",
-                              display: "grid",
-                              gap: 0.75,
-                              gridTemplateColumns: "minmax(0, 1fr) minmax(48px, max-content)"
-                            }}
-                          >
-                            <Typography variant="body2" color="text.secondary">
-                              {metric.label}
-                            </Typography>
-                            <Typography sx={{ fontFamily: "monospace", overflowWrap: "anywhere" }}>
-                              {metric.value}
-                            </Typography>
-                          </Box>
-                        ))}
-                      </Box>
-                    ) : (
-                      <Typography color="text.secondary" sx={{ py: 3, textAlign: "center" }}>
-                        Waiting for NetworkTables data.
-                      </Typography>
-                    )}
-                  </Stack>
-                </CardContent>
-              </Card>
-            ))}
-          </Box>
+            {tuningDrawerOpen ? "Hide Tunables" : "Show Tunables"}
+            <Chip label={selectedTuningVariables.length} size="small" sx={{ ml: 1 }} />
+          </Button>
         </Stack>
 
-        {tuningDrawerOpen && (
-          <Card
-            variant="outlined"
-            sx={{
-              display: "flex",
-              flexDirection: "column",
-              height: { xs: "auto", md: "calc(100vh - 150px)" },
-              minHeight: { xs: 420, md: 0 },
-              minWidth: 0,
-              overflow: "hidden",
-              position: { md: "sticky" },
-              top: { md: 16 }
-            }}
-          >
-            <CardContent
+        <Box sx={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", pb: 1, pr: 0.5 }}>
+          <Stack spacing={2}>
+            {tiles.length === 0 && (
+              <Alert severity="info" variant="outlined">
+                No generated subsystem document was found for robot tiles.
+              </Alert>
+            )}
+
+            <Box
               sx={{
-                display: "flex",
-                flex: "1 1 auto",
-                flexDirection: "column",
-                minHeight: 0,
-                p: 2,
-                "&:last-child": { pb: 2 }
+                display: "grid",
+                gap: 1.5,
+                justifyContent: "start",
+                gridTemplateColumns: {
+                  xs: "1fr",
+                  sm: "repeat(auto-fill, minmax(280px, 320px))"
+                }
               }}
             >
-              <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 1 }}>
-                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                  <Typography variant="h6">Selected Tunables</Typography>
-                  <Typography color="text.secondary" variant="body2">
-                    Watchlist from the Tuning tab.
-                  </Typography>
-                </Box>
-                <IconButton
-                  aria-label="Refresh selected tunables"
-                  disabled={selectionLoading}
-                  onClick={() => void refreshSelectedTunables()}
-                >
-                  <RefreshIcon />
-                </IconButton>
-                <IconButton aria-label="Close selected tunables" onClick={() => void setSavedTuningDrawerOpen(false)}>
-                  <CloseIcon />
-                </IconButton>
-              </Stack>
-
-              {selectionLoading && <LinearProgress sx={{ mb: 1 }} />}
-              {selectionError && (
-                <Alert severity="error" sx={{ mb: 1 }} onClose={() => setSelectionError(null)}>
-                  {selectionError}
-                </Alert>
-              )}
-
-              <Box sx={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", pr: 0.5 }}>
-                {selectedTuningVariables.length > 0 ? (
-                  <Stack spacing={1}>
-                    {selectedTuningVariables.map((variable) => {
-                      const type = variable.topic ? getWritableTopicType(variable.topic) : null;
-
-                      return (
-                        <Card key={variable.name} variant="outlined">
-                          <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
-                            <Stack spacing={1}>
-                              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                                  <Typography sx={{ fontWeight: 800, overflowWrap: "anywhere" }}>
-                                    {getTuningVariableLabel(variable)}
-                                  </Typography>
-                                  <Typography color="text.secondary" variant="caption">
-                                    {getTuningOwnerLabel(variable)}
-                                  </Typography>
-                                </Box>
-                                <Chip
-                                  color={variable.topic ? "success" : "warning"}
-                                  label={variable.topic ? String(variable.topic.type) : "offline"}
-                                  size="small"
-                                  variant={variable.topic ? "outlined" : "filled"}
-                                />
-                              </Stack>
-                              <TextField
-                                disabled={!variable.topic || !type || status !== "connected" || applying}
-                                error={Boolean(rowErrors[variable.name])}
-                                fullWidth
-                                helperText={
-                                  rowErrors[variable.name] ??
-                                  (variable.topic ? `Live: ${formatRobotMetricValue(variable.topic.value)}` : "not published")
-                                }
+              {tiles.map((tile) => (
+                <Card key={tile.id} variant="outlined" sx={{ minHeight: 160 }}>
+                  <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
+                    <Stack spacing={1.25}>
+                      <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                        <Box sx={{ flexGrow: 1 }}>
+                          <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                            {tile.name}
+                          </Typography>
+                          <Stack direction="row" spacing={1} sx={{ mt: 0.75 }}>
+                            <Chip label={tile.type} size="small" />
+                            {tile.connected !== undefined && (
+                              <Chip
+                                label={tile.connected ? "connected" : "disconnected"}
+                                color={tile.connected ? "success" : "error"}
                                 size="small"
-                                value={drafts[variable.name] ?? (variable.topic ? topicValueToDraft(variable.topic.value) : "")}
-                                onChange={(event) => updateDraft(variable.name, event.target.value)}
+                                variant={tile.connected ? "filled" : "outlined"}
                               />
-                            </Stack>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </Stack>
-                ) : (
-                  !selectionLoading && (
-                    <Alert severity="info" variant="outlined">
-                      No tuning variables are selected yet. Pick variables on the Tuning tab to pin them here.
-                    </Alert>
-                  )
-                )}
-              </Box>
+                            )}
+                          </Stack>
+                        </Box>
+                      </Stack>
 
-              <Stack spacing={1} sx={{ borderTop: "1px solid", borderColor: "divider", mt: 1.5, pt: 1.5 }}>
-                <Button
-                  disabled={status !== "connected" || applying || pendingTuningVariables.length === 0}
-                  fullWidth
-                  onClick={() => void applyAllPendingTunables()}
-                  variant="contained"
-                >
-                  {applying ? "Applying" : `Apply All${pendingTuningVariables.length > 0 ? ` (${pendingTuningVariables.length})` : ""}`}
-                </Button>
-                <Button
-                  disabled={
-                    topics.length === 0 || !window.powerlib?.readSubsystems || !window.powerlib?.readBindings
-                  }
-                  fullWidth
-                  onClick={() => setSaveValuesOpen(true)}
-                  variant="outlined"
-                >
-                  Save Values
-                </Button>
+                      <Divider />
+
+                      {tile.metrics.length > 0 ? (
+                        <Box sx={{ display: "grid", gap: 0.75 }}>
+                          {tile.metrics.map((metric) => (
+                            <Box
+                              key={`${tile.id}-${metric.label}`}
+                              sx={{
+                                alignItems: "baseline",
+                                display: "grid",
+                                gap: 0.75,
+                                gridTemplateColumns: "minmax(0, 1fr) minmax(48px, max-content)"
+                              }}
+                            >
+                              <Typography variant="body2" color="text.secondary">
+                                {metric.label}
+                              </Typography>
+                              <Typography sx={{ fontFamily: "monospace", overflowWrap: "anywhere" }}>
+                                {metric.value}
+                              </Typography>
+                            </Box>
+                          ))}
+                        </Box>
+                      ) : (
+                        <Typography color="text.secondary" sx={{ py: 3, textAlign: "center" }}>
+                          Waiting for NetworkTables data.
+                        </Typography>
+                      )}
+                    </Stack>
+                  </CardContent>
+                </Card>
+              ))}
+            </Box>
+          </Stack>
+        </Box>
+      </Box>
+
+      <Box
+        sx={{
+          borderLeft: tuningDrawerOpen ? "1px solid" : "0 solid",
+          borderColor: "divider",
+          flex: "0 0 auto",
+          minHeight: 0,
+          overflow: "hidden",
+          transition: "width 220ms ease, border-left-width 220ms ease, opacity 180ms ease",
+          width: { xs: tuningDrawerOpen ? 360 : 0, md: tuningDrawerOpen ? 420 : 0 }
+        }}
+      >
+        <Box
+          sx={{
+            bgcolor: "background.paper",
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+            minHeight: 0,
+            opacity: tuningDrawerOpen ? 1 : 0,
+            p: 2,
+            transition: "opacity 180ms ease",
+            width: { xs: 360, md: 420 }
+          }}
+        >
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexShrink: 0, mb: 1 }}>
+            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+              <Typography variant="h6">Selected Tunables</Typography>
+              <Typography color="text.secondary" variant="body2">
+                Watchlist from the Tuning tab.
+              </Typography>
+            </Box>
+            <IconButton
+              aria-label="Refresh selected tunables"
+              disabled={selectionLoading}
+              onClick={() => void refreshSelectedTunables()}
+            >
+              <RefreshIcon />
+            </IconButton>
+            <IconButton aria-label="Close selected tunables" onClick={() => void setSavedTuningDrawerOpen(false)}>
+              <CloseIcon />
+            </IconButton>
+          </Stack>
+
+          {selectionLoading && <LinearProgress sx={{ flexShrink: 0, mb: 1 }} />}
+          {selectionError && (
+            <Alert severity="error" sx={{ flexShrink: 0, mb: 1 }} onClose={() => setSelectionError(null)}>
+              {selectionError}
+            </Alert>
+          )}
+
+          <Box sx={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", pr: 0.5 }}>
+            {selectedTuningVariables.length > 0 ? (
+              <Stack spacing={1}>
+                {selectedTuningVariables.map((variable) => {
+                  const type = variable.topic ? getWritableTopicType(variable.topic) : null;
+
+                  return (
+                    <Card key={variable.name} variant="outlined">
+                      <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
+                        <Stack spacing={1}>
+                          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                              <Typography sx={{ fontWeight: 800, overflowWrap: "anywhere" }}>
+                                {getTuningVariableLabel(variable)}
+                              </Typography>
+                              <Typography color="text.secondary" variant="caption">
+                                {getTuningOwnerLabel(variable)}
+                              </Typography>
+                            </Box>
+                            <Chip
+                              color={variable.topic ? "success" : "warning"}
+                              label={variable.topic ? String(variable.topic.type) : "offline"}
+                              size="small"
+                              variant={variable.topic ? "outlined" : "filled"}
+                            />
+                          </Stack>
+                          <TextField
+                            disabled={!variable.topic || !type || status !== "connected" || applying}
+                            error={Boolean(rowErrors[variable.name])}
+                            fullWidth
+                            helperText={
+                              rowErrors[variable.name] ??
+                              (variable.topic ? `Live: ${formatRobotMetricValue(variable.topic.value)}` : "not published")
+                            }
+                            size="small"
+                            value={drafts[variable.name] ?? (variable.topic ? topicValueToDraft(variable.topic.value) : "")}
+                            onChange={(event) => updateDraft(variable.name, event.target.value)}
+                          />
+                        </Stack>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </Stack>
-            </CardContent>
-          </Card>
-        )}
+            ) : (
+              !selectionLoading && (
+                <Alert severity="info" variant="outlined">
+                  No tuning variables are selected yet. Pick variables on the Tuning tab to pin them here.
+                </Alert>
+              )
+            )}
+          </Box>
+
+          <Stack spacing={1} sx={{ borderTop: "1px solid", borderColor: "divider", flexShrink: 0, mt: 1.5, pt: 1.5 }}>
+            <Button
+              disabled={status !== "connected" || applying || pendingTuningVariables.length === 0}
+              fullWidth
+              onClick={() => void applyAllPendingTunables()}
+              variant="contained"
+            >
+              {applying ? "Applying" : `Apply All${pendingTuningVariables.length > 0 ? ` (${pendingTuningVariables.length})` : ""}`}
+            </Button>
+            <Button
+              disabled={topics.length === 0 || !window.powerlib?.readSubsystems || !window.powerlib?.readBindings}
+              fullWidth
+              onClick={() => setSaveValuesOpen(true)}
+              variant="outlined"
+            >
+              Save Values
+            </Button>
+          </Stack>
+        </Box>
       </Box>
 
       <SaveTunedValuesDialog open={saveValuesOpen} topics={topics} onClose={() => setSaveValuesOpen(false)} />
-    </Stack>
+    </Box>
   );
 }
