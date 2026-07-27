@@ -11,16 +11,11 @@ import {
   DialogTitle,
   LinearProgress,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   Typography
 } from "@mui/material";
 import type { NtTopicSnapshot } from "../../networktables/nt4Client";
 import type { GeneratedSubsystem } from "../subsystems/types";
-import { methodNeedsValue, toBindingId, toConstantName } from "../bindings/bindingUtils";
+import { methodNeedsValue, toConstantName } from "../bindings/bindingUtils";
 import type { BindingCommand, GeneratedBinding } from "../bindings/types";
 
 type SaveTarget = "subsystem" | "command";
@@ -34,7 +29,6 @@ type SaveValueChange = {
   selected: boolean;
   target: SaveTarget;
   label: string;
-  topicName: string;
   oldValueText: string;
   newValue: SaveValue;
   subsystemIndex?: number;
@@ -122,12 +116,24 @@ function toPascalName(value: string | undefined) {
     .join("");
 }
 
+function toJavaIdentifier(value: string | undefined, fallback = "binding") {
+  const parts = (value && value.trim().length > 0 ? value : fallback)
+    .trim()
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean);
+  const pascalName = parts
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}`)
+    .join("");
+  return pascalName ? `${pascalName.charAt(0).toLowerCase()}${pascalName.slice(1)}` : fallback;
+}
+
 function getSubsystemTopicName(subsystem: GeneratedSubsystem) {
   return toPascalName(subsystem.name || subsystem.id);
 }
 
 function getBindingTopicName(binding: GeneratedBinding) {
-  return toBindingId(binding.id || binding.name || "binding");
+  return toJavaIdentifier(binding.id || binding.name, "binding");
 }
 
 function parseVariableTopic(name: string, prefix: string) {
@@ -324,6 +330,22 @@ function formatValue(value: unknown) {
   return String(value);
 }
 
+function formatVariableSegment(segment: string) {
+  if (/^k[A-Z]$/.test(segment)) {
+    return segment;
+  }
+
+  if (/^[A-Z0-9_]+$/.test(segment)) {
+    return segment.replace(/_/g, " ");
+  }
+
+  return segment.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
+}
+
+function formatVariableKey(variableKey: string) {
+  return variableKey.split("/").map(formatVariableSegment).join(" ");
+}
+
 function valuesDiffer(oldValue: unknown, newValue: SaveValue) {
   if (typeof newValue === "number") {
     const oldNumber = toNumberOrNull(oldValue);
@@ -446,7 +468,6 @@ function buildSubsystemChanges(topics: NtTopicSnapshot[], subsystems: GeneratedS
       selected: true,
       target: "subsystem",
       label: `${subsystem.name || parsed.ownerName}: ${mapping.label}`,
-      topicName: topic.name,
       oldValueText: formatValue(oldValue),
       newValue,
       subsystemIndex,
@@ -490,8 +511,7 @@ function buildCommandChanges(
       id: topic.name,
       selected: true,
       target: "command",
-      label: `${binding.name || parsed.ownerName}: ${parsed.variableKey}`,
-      topicName: topic.name,
+      label: `${binding.name || parsed.ownerName}: ${formatVariableKey(parsed.variableKey)}`,
       oldValueText: formatValue(command.value),
       newValue,
       bindingIndex,
@@ -676,53 +696,57 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
           </Stack>
 
           {changes.length > 0 ? (
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell padding="checkbox" />
-                  <TableCell>Value</TableCell>
-                  <TableCell>File</TableCell>
-                  <TableCell>Change</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {changes.map((change) => (
-                  <TableRow key={change.id} hover selected={change.selected}>
-                    <TableCell padding="checkbox">
-                      <Checkbox
-                        checked={change.selected}
-                        disabled={loading || saving}
-                        onChange={() => toggleChange(change.id)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Stack spacing={0.5}>
-                        <Typography>{change.label}</Typography>
-                        <Typography color="text.secondary" sx={{ fontFamily: "monospace", overflowWrap: "anywhere" }}>
-                          {change.topicName}
-                        </Typography>
-                      </Stack>
-                    </TableCell>
-                    <TableCell>
+            <Stack spacing={1}>
+              {changes.map((change) => (
+                <Box
+                  key={change.id}
+                  component="label"
+                  sx={{
+                    alignItems: "center",
+                    border: "1px solid",
+                    borderColor: change.selected ? "primary.main" : "divider",
+                    borderRadius: 1.5,
+                    cursor: loading || saving ? "default" : "pointer",
+                    display: "grid",
+                    gap: 1.25,
+                    gridTemplateColumns: { xs: "auto minmax(0, 1fr)", md: "auto minmax(0, 1fr) auto" },
+                    p: 1.25,
+                    ...(change.selected
+                      ? {
+                          bgcolor: "rgba(255, 204, 0, 0.08)"
+                        }
+                      : {
+                          "&:hover": {
+                            bgcolor: loading || saving ? "transparent" : "action.hover"
+                          }
+                        })
+                  }}
+                >
+                  <Checkbox
+                    checked={change.selected}
+                    disabled={loading || saving}
+                    onChange={() => toggleChange(change.id)}
+                  />
+                  <Stack spacing={0.5} sx={{ minWidth: 0 }}>
+                    <Typography sx={{ fontWeight: 800, overflowWrap: "anywhere" }}>{change.label}</Typography>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
                       <Chip
-                        label={change.target === "subsystem" ? "powerlib-subsystems.json" : "powerlib-bindings.json"}
+                        label={change.target === "subsystem" ? "Subsystem JSON" : "Bindings JSON"}
                         size="small"
                         variant="outlined"
                       />
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                      <Typography color="text.secondary" sx={{ fontFamily: "monospace" }} variant="body2">
                         {change.oldValueText} -&gt; {formatValue(change.newValue)}
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                      </Typography>
+                    </Stack>
+                  </Stack>
+                </Box>
+              ))}
+            </Stack>
           ) : (
             !loading && (
               <Alert severity="info" variant="outlined">
-                No changed tunables were found.
+                No changed tunables were found. Apply tuned values first, then reopen or refresh this dialog.
               </Alert>
             )
           )}

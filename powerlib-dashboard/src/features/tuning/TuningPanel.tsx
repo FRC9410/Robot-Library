@@ -50,7 +50,6 @@ type TunableVariableRowProps = {
   error: string | null;
   topic: NtTopicSnapshot;
   onDraftChange: (topicName: string, draft: string) => void;
-  onRequestApply: () => void;
 };
 
 type TuningSidebarProps = {
@@ -110,13 +109,30 @@ function parseTunableTopic(topic: NtTopicSnapshot): ParsedTunableTopic | null {
   return null;
 }
 
+function formatVariableSegment(segment: string) {
+  if (/^k[A-Z]$/.test(segment)) {
+    return segment;
+  }
+
+  if (/^[A-Z0-9_]+$/.test(segment)) {
+    return segment.replace(/_/g, " ");
+  }
+
+  return segment.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
+}
+
+function formatVariableKey(variableKey: string) {
+  return variableKey.split("/").map(formatVariableSegment).join(" ");
+}
+
 function getVariableDisplayName(topic: NtTopicSnapshot) {
-  return parseTunableTopic(topic)?.variableKey ?? topic.name;
+  const parsed = parseTunableTopic(topic);
+  return parsed ? formatVariableKey(parsed.variableKey) : topic.name;
 }
 
 function formatSidebarValue(topic: NtTopicSnapshot) {
   const value = topicValueToDraft(topic.value);
-  return value.trim().length === 0 ? "—" : value;
+  return value.trim().length === 0 ? "unset" : value;
 }
 
 function buildOwnerGroups(tunableTopics: NtTopicSnapshot[]) {
@@ -166,8 +182,7 @@ function TunableVariableRow({
   draft,
   error,
   topic,
-  onDraftChange,
-  onRequestApply
+  onDraftChange
 }: TunableVariableRowProps) {
   const type = getWritableTopicType(topic);
   const parsed = parseTunableTopic(topic);
@@ -194,9 +209,11 @@ function TunableVariableRow({
         <Typography sx={{ fontFamily: "monospace", fontWeight: 800, overflowWrap: "anywhere" }}>
           {getVariableDisplayName(topic)}
         </Typography>
-        <Typography color="text.secondary" sx={{ overflowWrap: "anywhere" }} variant="caption">
-          {parsed ? `${getOwnerLabel(parsed.kind)} / ${parsed.ownerName}` : "Tunable"} · {topic.name}
-        </Typography>
+        {parsed && (
+          <Typography color="text.secondary" sx={{ overflowWrap: "anywhere" }} variant="caption">
+            {getOwnerLabel(parsed.kind)}: {parsed.ownerName}
+          </Typography>
+        )}
       </Stack>
       <Box sx={{ pt: 0.75 }}>
         <Chip label={writableType} size="small" variant="outlined" />
@@ -208,11 +225,6 @@ function TunableVariableRow({
         size="small"
         value={draft}
         onChange={(event) => onDraftChange(topic.name, event.target.value)}
-        onKeyDown={(event) => {
-          if (!disabled && event.key === "Enter") {
-            onRequestApply();
-          }
-        }}
       />
     </Box>
   );
@@ -376,7 +388,6 @@ export function TuningPanel() {
   const [saveValuesOpen, setSaveValuesOpen] = useState(false);
   const [panelError, setPanelError] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
-  const [selectionPath, setSelectionPath] = useState<string | null>(null);
   const [selectionLoading, setSelectionLoading] = useState(false);
   const [selectedTopicNames, setSelectedTopicNames] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -421,7 +432,6 @@ export function TuningPanel() {
           return;
         }
 
-        setSelectionPath(result.path);
         setSelectedTopicNames(normalizeSelectedTopicNames(result.selectedTopics));
         setSelectionError(result.error ?? null);
       } catch (caught) {
@@ -534,7 +544,6 @@ export function TuningPanel() {
         return;
       }
 
-      setSelectionPath(result.path);
       setSelectedTopicNames(normalizeSelectedTopicNames(result.selectedTopics));
       setSelectionError(null);
     } catch (caught) {
@@ -656,8 +665,7 @@ export function TuningPanel() {
                     )}
                   </Stack>
                   <Typography variant="body2" color="text.secondary">
-                    Checked variables appear here as one edit list. Checkboxes save immediately
-                    {selectionPath ? ` to ${selectionPath}` : " to the tuning selection JSON"}.
+                    Checked variables appear here as one edit list. Checkbox selections are saved automatically.
                   </Typography>
                 </Box>
                 <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
@@ -727,7 +735,6 @@ export function TuningPanel() {
                       error={rowErrors[topic.name] ?? null}
                       topic={topic}
                       onDraftChange={updateDraft}
-                      onRequestApply={() => void applyPendingChanges()}
                     />
                   ))}
                 </Stack>
