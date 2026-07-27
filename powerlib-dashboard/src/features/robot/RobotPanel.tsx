@@ -152,7 +152,12 @@ function normalizeSelectedTopicNames(topicNames: unknown) {
 }
 
 function getTuningVariableLabel(variable: SelectedTuningVariable) {
-  return variable.parsed ? formatVariableKey(variable.parsed.variableKey) : variable.name;
+  if (!variable.parsed) {
+    return variable.name;
+  }
+
+  const variableName = variable.parsed.variableKey.split("/").filter(Boolean).at(-1) ?? variable.parsed.variableKey;
+  return formatVariableKey(variableName);
 }
 
 function getTuningOwnerLabel(variable: SelectedTuningVariable) {
@@ -633,7 +638,7 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
           minHeight: 0,
           overflow: "hidden",
           transition: "width 220ms ease, border-left-width 220ms ease, opacity 180ms ease",
-          width: { xs: tuningDrawerOpen ? 270 : 0, md: tuningDrawerOpen ? 315 : 0 }
+          width: tuningDrawerOpen ? 230 : 0
         }}
       >
         <Box
@@ -646,7 +651,7 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
             opacity: tuningDrawerOpen ? 1 : 0,
             p: 2,
             transition: "opacity 180ms ease",
-            width: { xs: 270, md: 315 }
+            width: 230
           }}
         >
           <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexShrink: 0, mb: 1 }}>
@@ -687,9 +692,6 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
                               <Typography sx={{ fontWeight: 800, overflowWrap: "anywhere" }}>
                                 {getTuningVariableLabel(variable)}
                               </Typography>
-                              <Typography color="text.secondary" variant="caption">
-                                {getTuningOwnerLabel(variable)}
-                              </Typography>
                             </Box>
                             <Chip
                               color={variable.topic ? "success" : "warning"}
@@ -698,14 +700,31 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
                               variant={variable.topic ? "outlined" : "filled"}
                             />
                           </Stack>
+                          <Box
+                            sx={{
+                              alignItems: "center",
+                              display: "flex",
+                              gap: 1,
+                              justifyContent: "space-between",
+                              minWidth: 0
+                            }}
+                          >
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography noWrap color="text.secondary" variant="caption">
+                                {getTuningOwnerLabel(variable)}
+                              </Typography>
+                            </Box>
+                            <Box sx={{ flexShrink: 0 }}>
+                              <Typography color="text.secondary" variant="caption">
+                                {variable.topic ? `Live: ${formatRobotMetricValue(variable.topic.value)}` : "not published"}
+                              </Typography>
+                            </Box>
+                          </Box>
                           <TextField
                             disabled={!variable.topic || !type || status !== "connected" || applying}
                             error={Boolean(rowErrors[variable.name])}
                             fullWidth
-                            helperText={
-                              rowErrors[variable.name] ??
-                              (variable.topic ? `Live: ${formatRobotMetricValue(variable.topic.value)}` : "not published")
-                            }
+                            helperText={rowErrors[variable.name] ?? undefined}
                             size="small"
                             value={drafts[variable.name] ?? (variable.topic ? topicValueToDraft(variable.topic.value) : "")}
                             onChange={(event) => updateDraft(variable.name, event.target.value)}
