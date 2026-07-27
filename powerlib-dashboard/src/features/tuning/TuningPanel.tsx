@@ -337,49 +337,95 @@ function TuningSidebar({
     );
   }
 
+  function renderSection(kind: TuningOwnerKind, title: string, owners: TuningOwnerGroup[]) {
+    const expanded = expandedSections[kind];
+    const variableCount = owners.reduce((count, owner) => count + owner.topics.length, 0);
+
+    return (
+      <Accordion
+        disableGutters
+        expanded={expanded}
+        onChange={(_, nextExpanded) => onToggleSection(kind, nextExpanded)}
+        sx={{
+          bgcolor: "background.paper",
+          border: "1px solid",
+          borderColor: "divider",
+          borderRadius: 1.5,
+          display: "flex",
+          flex: expanded ? "1 1 0" : "0 0 auto",
+          flexDirection: "column",
+          minHeight: 0,
+          overflow: "hidden",
+          "&:before": {
+            display: "none"
+          },
+          "&.Mui-expanded": {
+            m: 0
+          },
+          "& .MuiCollapse-root": {
+            display: expanded ? "flex" : undefined,
+            flex: expanded ? "1 1 auto" : undefined,
+            flexDirection: "column",
+            minHeight: 0,
+            overflow: "hidden"
+          },
+          "& .MuiCollapse-wrapper": {
+            display: "flex",
+            flex: "1 1 auto",
+            flexDirection: "column",
+            minHeight: 0
+          },
+          "& .MuiCollapse-wrapperInner": {
+            display: "flex",
+            flex: "1 1 auto",
+            flexDirection: "column",
+            minHeight: 0
+          }
+        }}
+      >
+        <AccordionSummary
+          expandIcon={<ExpandMoreIcon />}
+          sx={{
+            flexShrink: 0,
+            minHeight: 54,
+            "&.Mui-expanded": {
+              minHeight: 54
+            },
+            "& .MuiAccordionSummary-content": {
+              my: 1.25
+            },
+            "& .MuiAccordionSummary-content.Mui-expanded": {
+              my: 1.25
+            }
+          }}
+        >
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center", minWidth: 0 }}>
+            <Typography sx={{ fontWeight: 800 }}>{title}</Typography>
+            <Chip label={`${owners.length} owner${owners.length === 1 ? "" : "s"}`} size="small" />
+            <Chip label={`${variableCount} variable${variableCount === 1 ? "" : "s"}`} size="small" variant="outlined" />
+          </Stack>
+        </AccordionSummary>
+        <AccordionDetails
+          sx={{
+            borderTop: "1px solid",
+            borderColor: "divider",
+            flex: "1 1 auto",
+            minHeight: 0,
+            overflowY: "auto",
+            p: 1.25
+          }}
+        >
+          {renderOwnerList(kind, owners)}
+        </AccordionDetails>
+      </Accordion>
+    );
+  }
+
   return (
-    <Card variant="outlined" sx={{ minHeight: 0, overflow: "hidden" }}>
-      <CardContent sx={{ height: "100%", overflowY: "auto" }}>
-        <Stack spacing={1.5}>
-          <Box>
-            <Typography variant="subtitle2" color="text.secondary">
-              Tuning Picker
-            </Typography>
-            <Typography color="text.secondary" variant="caption">
-              Check variables to pin them into the list on the right.
-            </Typography>
-          </Box>
-
-          <Accordion
-            disableGutters
-            expanded={expandedSections.subsystem}
-            onChange={(_, expanded) => onToggleSection("subsystem", expanded)}
-          >
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                <Typography sx={{ fontWeight: 800 }}>Subsystems</Typography>
-                <Chip label={subsystemOwners.length} size="small" />
-              </Stack>
-            </AccordionSummary>
-            <AccordionDetails>{renderOwnerList("subsystem", subsystemOwners)}</AccordionDetails>
-          </Accordion>
-
-          <Accordion
-            disableGutters
-            expanded={expandedSections.command}
-            onChange={(_, expanded) => onToggleSection("command", expanded)}
-          >
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                <Typography sx={{ fontWeight: 800 }}>Commands</Typography>
-                <Chip label={commandOwners.length} size="small" />
-              </Stack>
-            </AccordionSummary>
-            <AccordionDetails>{renderOwnerList("command", commandOwners)}</AccordionDetails>
-          </Accordion>
-        </Stack>
-      </CardContent>
-    </Card>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", minHeight: 0, overflow: "hidden" }}>
+      {renderSection("subsystem", "Subsystems", subsystemOwners)}
+      {renderSection("command", "Commands", commandOwners)}
+    </Box>
   );
 }
 
@@ -515,14 +561,13 @@ export function TuningPanel() {
   function updateExpandedSection(kind: TuningOwnerKind, expanded: boolean) {
     setExpandedSections((current) => {
       const otherKind: TuningOwnerKind = kind === "subsystem" ? "command" : "subsystem";
-      if (!expanded && !current[otherKind]) {
+      if (!expanded || current[kind]) {
         return current;
       }
 
-      return {
-        ...current,
-        [kind]: expanded
-      };
+      return kind === "subsystem"
+        ? { subsystem: true, command: false }
+        : { subsystem: false, command: true };
     });
   }
 
