@@ -37,6 +37,8 @@ export function SubsystemEditor({
   onDelete,
   onOpenCharacterization
 }: SubsystemEditorProps) {
+  const subsystemNameHasWhitespace = form ? /\s/.test(form.name) : false;
+
   return (
     <Stack sx={{ minHeight: 0 }}>
       <Card variant="outlined" sx={{ minHeight: 0, overflow: "hidden", flexGrow: 1 }}>
@@ -90,7 +92,12 @@ export function SubsystemEditor({
             py: 1.5
           }}
         >
-          <Button startIcon={saving ? <CircularProgress size={18} /> : <SaveIcon />} variant="contained" onClick={onSave} disabled={saving}>
+          <Button
+            startIcon={saving ? <CircularProgress size={18} /> : <SaveIcon />}
+            variant="contained"
+            onClick={onSave}
+            disabled={saving || subsystemNameHasWhitespace}
+          >
             Save Subsystem
           </Button>
           <Button variant="outlined" onClick={onCancel}>

@@ -140,6 +140,10 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
       onToast("Binding name is required.", "error");
       return;
     }
+    if (/\s/.test(binding.name)) {
+      onToast("Binding names cannot contain spaces. Use TestOff instead of Test Off.", "error");
+      return;
+    }
     if (hasInvalidCommands(binding.commands ?? [])) {
       onToast("Every binding command needs a subsystem and method.", "error");
       return;
@@ -910,6 +914,8 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
     );
   }
 
+  const bindingNameHasWhitespace = form ? /\s/.test(form.name) : false;
+
   return (
     <Box
       sx={{
@@ -1001,7 +1007,13 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
                     gridTemplateColumns: { xs: "1fr", md: "2fr repeat(3, minmax(150px, 1fr))" }
                   }}
                 >
-                  <TextField label="Binding name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+                  <TextField
+                    label="Binding name"
+                    value={form.name}
+                    error={bindingNameHasWhitespace}
+                    helperText={bindingNameHasWhitespace ? "No spaces allowed. Use TestOff instead of Test Off." : undefined}
+                    onChange={(event) => setForm({ ...form, name: event.target.value })}
+                  />
                   <FormControl>
                     <InputLabel>Controller</InputLabel>
                     <Select
@@ -1089,7 +1101,12 @@ export function BindingsPanel({ subsystems, onToast }: BindingsPanelProps) {
         {form && (
           <>
             <Stack direction="row" spacing={1} sx={{ alignItems: "center", borderTop: 1, borderColor: "divider", py: 1.5 }}>
-              <Button startIcon={saving ? <CircularProgress size={18} /> : <SaveIcon />} variant="contained" onClick={saveForm} disabled={saving}>
+              <Button
+                startIcon={saving ? <CircularProgress size={18} /> : <SaveIcon />}
+                variant="contained"
+                onClick={saveForm}
+                disabled={saving || bindingNameHasWhitespace}
+              >
                 Save Binding
               </Button>
               <Button variant="outlined" onClick={() => setForm(null)}>Cancel</Button>

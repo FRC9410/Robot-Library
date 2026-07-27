@@ -152,6 +152,22 @@ function Get-JavaIdentifierParts {
     return @($splitWords -split "[^A-Za-z0-9]+" | Where-Object { $_.Length -gt 0 })
 }
 
+function Assert-NoWhitespaceName {
+    param(
+        [AllowNull()]$Value,
+        [Parameter(Mandatory = $true)][string]$Description
+    )
+
+    $rawText = if ($null -eq $Value) { "" } else { $Value.ToString() }
+    $text = $rawText.Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        throw "$Description is required."
+    }
+    if ($rawText -match '\s') {
+        throw "$Description '$text' cannot contain spaces or other whitespace. Use a single token like IntakeRoller or TestOff."
+    }
+}
+
 function Convert-ToPascalCase {
     param([Parameter(Mandatory = $true)][string]$Value)
 
@@ -421,6 +437,7 @@ function New-InteractivePidConfig {
 
 function New-InteractiveSubsystem {
     $rawName = Prompt-Required "Subsystem name, example shooter"
+    Assert-NoWhitespaceName $rawName "Subsystem name"
     $type = (Prompt-Enum "Subsystem type" @("velocity", "velocityTorque", "absolutePosition", "relativePosition") "velocity").ToLowerInvariant()
     $canonicalType = switch ($type) {
         "velocitytorque" { "velocityTorque" }
@@ -614,6 +631,7 @@ function Ensure-SwerveConfig {
 function Normalize-SubsystemConfig {
     param([Parameter(Mandatory = $true)]$Subsystem)
 
+    Assert-NoWhitespaceName (Get-ObjectPropertyValue $Subsystem "name" "") "Subsystem name"
     Ensure-ObjectProperty $Subsystem "id" (Get-StableSubsystemId $Subsystem)
     Ensure-ObjectProperty $Subsystem "motors" (@())
 
@@ -762,6 +780,11 @@ function Read-BindingDocument {
     }
 
     $document.bindings = @($document.bindings)
+    foreach ($binding in @($document.bindings)) {
+        if (Test-IsJsonObject $binding) {
+            Assert-NoWhitespaceName (Get-ObjectPropertyValue $binding "name" "") "Binding name"
+        }
+    }
     return $document
 }
 

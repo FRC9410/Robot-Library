@@ -22,6 +22,7 @@ import ElectricBoltIcon from "@mui/icons-material/ElectricBolt";
 import GamepadIcon from "@mui/icons-material/Gamepad";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import TuneIcon from "@mui/icons-material/Tune";
+import VideocamIcon from "@mui/icons-material/Videocam";
 import type {
   CharacterizationCommand,
   GeneratedSubsystem,
@@ -48,6 +49,8 @@ import { tuningModeRequestTopicName, tuningModeTopicName } from "./features/netw
 import { RobotPanel } from "./features/robot/RobotPanel";
 import { BindingsPanel } from "./features/bindings/BindingsPanel";
 import { TuningPanel } from "./features/tuning/TuningPanel";
+import { LimelightsPanel } from "./features/limelights/LimelightsPanel";
+import { detectLimelights } from "./features/limelights/limelightUtils";
 import type { AppView } from "./types/app";
 
 type ToastState = {
@@ -56,13 +59,7 @@ type ToastState = {
   severity: "success" | "error" | "info" | "warning";
 };
 
-const networkTableWatchPrefixes = [
-  "/PowerLib/",
-  "/SmartDashboard/",
-  "/Shuffleboard/",
-  "/FMSInfo/",
-  "/LiveWindow/"
-];
+const networkTableWatchPrefixes = ["/"];
 
 export function App() {
   return (
@@ -113,6 +110,7 @@ function AppContent() {
   const networkTuningMode =
     tuningModeRequestTopic?.value === true || (!tuningModeRequestTopic && tuningModeTopic?.value === true);
   const tuningModeEnabled = optimisticTuningMode ?? networkTuningMode;
+  const limelights = useMemo(() => detectLimelights(topics), [topics]);
 
   const characterizationCommands = useMemo<CharacterizationCommand[]>(() => {
     if (!subsystemForm?.name) {
@@ -239,6 +237,10 @@ function AppContent() {
     const subsystem = formToSubsystem(subsystemForm, existing);
     if (!subsystem.name || !subsystem.id) {
       showToast("Subsystem name is required.", "error");
+      return;
+    }
+    if (/\s/.test(subsystem.name)) {
+      showToast("Subsystem names cannot contain spaces. Use IntakeRoller instead of Intake Roller.", "error");
       return;
     }
 
@@ -454,6 +456,12 @@ function AppContent() {
   }, [activeView, subsystemDocument.loading, subsystemDocument.path]);
 
   useEffect(() => {
+    if (activeView === "limelights" && limelights.length === 0) {
+      setActiveView("robot");
+    }
+  }, [activeView, limelights.length]);
+
+  useEffect(() => {
     if (optimisticTuningMode === null) {
       return;
     }
@@ -567,6 +575,15 @@ function AppContent() {
               value="bindings"
               sx={{ minHeight: 44 }}
             />
+            {limelights.length > 0 && (
+              <Tab
+                icon={<VideocamIcon />}
+                iconPosition="start"
+                label="Limelights"
+                value="limelights"
+                sx={{ minHeight: 44 }}
+              />
+            )}
             <Tab
               icon={<DashboardIcon />}
               iconPosition="start"
@@ -650,6 +667,10 @@ function AppContent() {
 
           {activeView === "tuning" && (
             <TuningPanel />
+          )}
+
+          {activeView === "limelights" && (
+            <LimelightsPanel limelights={limelights} />
           )}
 
           {activeView === "subsystems" && (

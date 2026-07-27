@@ -9,6 +9,8 @@ type SubsystemBasicFieldsProps = {
 };
 
 export function SubsystemBasicFields({ form, setForm, updateField }: SubsystemBasicFieldsProps) {
+  const subsystemNameHasWhitespace = /\s/.test(form.name);
+
   return (
     <>
       <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
@@ -16,6 +18,8 @@ export function SubsystemBasicFields({ form, setForm, updateField }: SubsystemBa
           label="Subsystem name"
           size="small"
           value={form.name}
+          error={subsystemNameHasWhitespace}
+          helperText={subsystemNameHasWhitespace ? "No spaces allowed. Use IntakeRoller instead of Intake Roller." : undefined}
           onChange={(event) =>
             setForm((current) =>
               current
