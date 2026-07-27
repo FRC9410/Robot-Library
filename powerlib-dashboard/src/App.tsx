@@ -505,12 +505,7 @@ function AppContent() {
                 </Typography>
               </Stack>
             </Box>
-            <Chip
-              label={status}
-              color={status === "connected" ? "success" : status === "connecting" ? "warning" : "default"}
-              variant={status === "idle" ? "outlined" : "filled"}
-            />
-            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
               <FormControlLabel
                 control={
                   <Switch
@@ -521,9 +516,6 @@ function AppContent() {
                 }
                 label="Tuning"
               />
-            </Stack>
-            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-              <Chip label={`${connectionSettings.host}:${connectionSettings.port}`} variant="outlined" />
               {status === "connected" ? (
                 <Button variant="outlined" size="small" onClick={disconnectNetworkTables}>
                   Disconnect
@@ -539,6 +531,11 @@ function AppContent() {
                   {status === "connecting" ? "Connecting" : "Connect"}
                 </Button>
               )}
+              <Chip
+                color={status === "connected" ? "success" : status === "connecting" ? "warning" : "error"}
+                label={`${connectionSettings.host}:${connectionSettings.port}`}
+                variant="outlined"
+              />
             </Stack>
           </Toolbar>
           <Tabs value={activeView} onChange={(_, value) => setActiveView(value)} sx={{ minHeight: 44 }}>
