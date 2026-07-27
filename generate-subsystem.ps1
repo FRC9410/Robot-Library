@@ -290,14 +290,18 @@ function Convert-MotorsToExpressions {
         throw "Subsystem '$($Subsystem.name)' must have one leader motor."
     }
 
-    $lines = @("MotorConfig.leader($($leader.id), $(Get-NeutralModeExpression $leader.neutralMode), $($leader.reversed.ToString().ToLowerInvariant()))")
+    $leaderNeutralMode = Get-ObjectPropertyValue $leader "neutralMode" "Brake"
+    $leaderReversed = Get-ObjectPropertyValue $leader "reversed" $false
+    $lines = @("MotorConfig.leader($($leader.id), $(Get-NeutralModeExpression $leaderNeutralMode), $($leaderReversed.ToString().ToLowerInvariant()))")
     foreach ($follower in ($motors | Where-Object { $_.role -eq "follower" })) {
-        $neutralMode = if ($null -ne $follower.neutralMode -and -not [string]::IsNullOrWhiteSpace($follower.neutralMode.ToString())) {
-            $follower.neutralMode
+        $followerNeutralMode = Get-ObjectPropertyValue $follower "neutralMode" $null
+        $neutralMode = if ($null -ne $followerNeutralMode -and -not [string]::IsNullOrWhiteSpace($followerNeutralMode.ToString())) {
+            $followerNeutralMode
         } else {
-            $leader.neutralMode
+            $leaderNeutralMode
         }
-        $lines += "MotorConfig.follower($($follower.id), $(Get-NeutralModeExpression $neutralMode), $($follower.reversed.ToString().ToLowerInvariant()))"
+        $followerReversed = Get-ObjectPropertyValue $follower "reversed" $false
+        $lines += "MotorConfig.follower($($follower.id), $(Get-NeutralModeExpression $neutralMode), $($followerReversed.ToString().ToLowerInvariant()))"
     }
 
     return $lines
@@ -323,22 +327,26 @@ function Convert-MotorsToConstantDeclarations {
     param([Parameter(Mandatory = $true)]$Subsystem)
 
     $leader = Get-LeaderMotor $Subsystem
+    $leaderNeutralMode = Get-ObjectPropertyValue $leader "neutralMode" "Brake"
+    $leaderReversed = Get-ObjectPropertyValue $leader "reversed" $false
     $lines = @(
         "  public static final int LEADER_MOTOR_ID = $($leader.id);",
-        "  public static final NeutralModeValue LEADER_NEUTRAL_MODE = $(Get-NeutralModeExpression $leader.neutralMode);",
-        "  public static final boolean LEADER_REVERSED = $($leader.reversed.ToString().ToLowerInvariant());"
+        "  public static final NeutralModeValue LEADER_NEUTRAL_MODE = $(Get-NeutralModeExpression $leaderNeutralMode);",
+        "  public static final boolean LEADER_REVERSED = $($leaderReversed.ToString().ToLowerInvariant());"
     )
 
     $index = 1
     foreach ($follower in (@($Subsystem.motors) | Where-Object { $_.role -eq "follower" })) {
-        $neutralModeExpression = if ($null -ne $follower.neutralMode -and -not [string]::IsNullOrWhiteSpace($follower.neutralMode.ToString())) {
-            Get-NeutralModeExpression $follower.neutralMode
+        $followerNeutralMode = Get-ObjectPropertyValue $follower "neutralMode" $null
+        $neutralModeExpression = if ($null -ne $followerNeutralMode -and -not [string]::IsNullOrWhiteSpace($followerNeutralMode.ToString())) {
+            Get-NeutralModeExpression $followerNeutralMode
         } else {
             "LEADER_NEUTRAL_MODE"
         }
+        $followerReversed = Get-ObjectPropertyValue $follower "reversed" $false
         $lines += "  public static final int FOLLOWER_${index}_MOTOR_ID = $($follower.id);"
         $lines += "  public static final NeutralModeValue FOLLOWER_${index}_NEUTRAL_MODE = $neutralModeExpression;"
-        $lines += "  public static final boolean FOLLOWER_${index}_REVERSED = $($follower.reversed.ToString().ToLowerInvariant());"
+        $lines += "  public static final boolean FOLLOWER_${index}_REVERSED = $($followerReversed.ToString().ToLowerInvariant());"
         $index++
     }
 
@@ -521,6 +529,21 @@ function Get-ObjectProperty {
     return $Object.PSObject.Properties[$Name]
 }
 
+function Get-ObjectPropertyValue {
+    param(
+        [AllowNull()]$Object,
+        [Parameter(Mandatory = $true)][string]$Name,
+        $DefaultValue = $null
+    )
+
+    $property = Get-ObjectProperty $Object $Name
+    if ($null -eq $property -or $null -eq $property.Value) {
+        return $DefaultValue
+    }
+
+    return $property.Value
+}
+
 function Set-ObjectProperty {
     param(
         [Parameter(Mandatory = $true)]$Object,
@@ -588,6 +611,107 @@ function Ensure-SwerveConfig {
     return $Document.swerve
 }
 
+function Normalize-SubsystemConfig {
+    param([Parameter(Mandatory = $true)]$Subsystem)
+
+    Ensure-ObjectProperty $Subsystem "id" (Get-StableSubsystemId $Subsystem)
+    Ensure-ObjectProperty $Subsystem "motors" (@())
+
+    $motors = @($Subsystem.motors)
+    for ($index = 0; $index -lt $motors.Count; $index++) {
+        $motor = $motors[$index]
+        if (-not (Test-IsJsonObject $motor)) {
+            continue
+        }
+
+        $defaultRole = if ($index -eq 0) { "leader" } else { "follower" }
+        Ensure-ObjectProperty $motor "role" $defaultRole
+        Ensure-ObjectProperty $motor "reversed" $false
+    }
+
+    $leader = $motors |
+        Where-Object { (Get-ObjectPropertyValue $_ "role" "").ToString() -ieq "leader" } |
+        Select-Object -First 1
+    $leaderNeutralMode = Get-ObjectPropertyValue $leader "neutralMode" "Brake"
+
+    foreach ($motor in $motors) {
+        if (-not (Test-IsJsonObject $motor)) {
+            continue
+        }
+
+        $role = (Get-ObjectPropertyValue $motor "role" "").ToString()
+        $defaultNeutralMode = if ($role -ieq "follower") { $leaderNeutralMode } else { "Brake" }
+        Ensure-ObjectProperty $motor "neutralMode" $defaultNeutralMode
+    }
+    $Subsystem.motors = @($motors)
+
+    Ensure-ObjectPropertyObject $Subsystem "pid"
+    Ensure-ObjectProperty $Subsystem.pid "kP" "0.0"
+    Ensure-ObjectProperty $Subsystem.pid "kI" "0.0"
+    Ensure-ObjectProperty $Subsystem.pid "kD" "0.0"
+    Ensure-ObjectProperty $Subsystem.pid "kG" "0.0"
+    Ensure-ObjectProperty $Subsystem.pid "kS" $null
+    Ensure-ObjectProperty $Subsystem.pid "kV" $null
+    Ensure-ObjectProperty $Subsystem.pid "kA" $null
+
+    Ensure-ObjectPropertyObject $Subsystem "ratios"
+    Ensure-ObjectProperty $Subsystem.ratios "sensorToMechanism" "1.0"
+    Ensure-ObjectProperty $Subsystem.ratios "rotorToSensor" "1.0"
+
+    Ensure-ObjectPropertyObject $Subsystem "motionMagic"
+    Ensure-ObjectProperty $Subsystem.motionMagic "cruiseVelocity" "0.0"
+    Ensure-ObjectProperty $Subsystem.motionMagic "acceleration" "0.0"
+    Ensure-ObjectProperty $Subsystem "focEnabled" $true
+    Ensure-ObjectProperty $Subsystem "torqueFF" "0.0"
+
+    $type = (Get-ObjectPropertyValue $Subsystem "type" "").ToString().ToLowerInvariant()
+    if ($type -eq "position") {
+        Set-ObjectProperty $Subsystem "type" "absolutePosition"
+        $type = "absoluteposition"
+    }
+
+    if ($type -eq "absoluteposition") {
+        $absolutePositionConfig = Get-ObjectPropertyValue $Subsystem "absolutePosition" $null
+        if (-not (Test-IsJsonObject $absolutePositionConfig)) {
+            $positionConfig = Get-ObjectPropertyValue $Subsystem "position" $null
+            if (Test-IsJsonObject $positionConfig) {
+                Set-ObjectProperty $Subsystem "absolutePosition" $positionConfig
+            } else {
+                Set-ObjectProperty $Subsystem "absolutePosition" ([pscustomobject]@{})
+            }
+        }
+        Ensure-ObjectProperty $Subsystem.absolutePosition "units" "rotations"
+        Ensure-ObjectProperty $Subsystem.absolutePosition "default" $null
+
+        $cancoderConfig = Get-ObjectPropertyValue $Subsystem "cancoder" $null
+        if (Test-IsJsonObject $cancoderConfig) {
+            Ensure-ObjectProperty $Subsystem.cancoder "magnetOffset" "0.0"
+            Ensure-ObjectProperty $Subsystem.cancoder "discontinuityPoint" "0.5"
+        }
+    } elseif ($type -eq "relativeposition") {
+        Ensure-ObjectPropertyObject $Subsystem "slowMotionMagic"
+        Ensure-ObjectProperty $Subsystem.slowMotionMagic "cruiseVelocity" "0.0"
+        Ensure-ObjectProperty $Subsystem.slowMotionMagic "acceleration" "0.0"
+
+        $relativePositionConfig = Get-ObjectPropertyValue $Subsystem "relativePosition" $null
+        if (-not (Test-IsJsonObject $relativePositionConfig)) {
+            $positionConfig = Get-ObjectPropertyValue $Subsystem "position" $null
+            if (Test-IsJsonObject $positionConfig) {
+                Set-ObjectProperty $Subsystem "relativePosition" $positionConfig
+            } else {
+                Set-ObjectProperty $Subsystem "relativePosition" ([pscustomobject]@{})
+            }
+        }
+        Ensure-ObjectProperty $Subsystem.relativePosition "units" "rotations"
+        Ensure-ObjectProperty $Subsystem.relativePosition "homePosition" "0.0"
+        Ensure-ObjectProperty $Subsystem.relativePosition "forwardSoftLimit" "0.0"
+        Ensure-ObjectProperty $Subsystem.relativePosition "reverseSoftLimit" "0.0"
+        Ensure-ObjectProperty $Subsystem.relativePosition "slowThreshold" "0.0"
+        Ensure-ObjectProperty $Subsystem.relativePosition "tolerance" "0.05"
+        Ensure-ObjectProperty $Subsystem.relativePosition "stopVoltage" "0.0"
+    }
+}
+
 function Read-SubsystemDocument {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -607,14 +731,8 @@ function Read-SubsystemDocument {
 
     $document.subsystems = @($document.subsystems)
     foreach ($subsystem in @($document.subsystems)) {
-        if (-not ($subsystem.PSObject.Properties.Name -contains "id") -or [string]::IsNullOrWhiteSpace($subsystem.id)) {
-            $subsystem | Add-Member -MemberType NoteProperty -Name id -Value (Get-StableSubsystemId $subsystem) -Force
-        }
-        if (-not ($subsystem.PSObject.Properties.Name -contains "focEnabled")) {
-            $subsystem | Add-Member -MemberType NoteProperty -Name focEnabled -Value $true -Force
-        }
-        if ($subsystem.type.ToString().ToLowerInvariant() -eq "velocitytorque" -and -not ($subsystem.PSObject.Properties.Name -contains "torqueFF")) {
-            $subsystem | Add-Member -MemberType NoteProperty -Name torqueFF -Value "0.0" -Force
+        if (Test-IsJsonObject $subsystem) {
+            Normalize-SubsystemConfig $subsystem
         }
     }
     return $document
