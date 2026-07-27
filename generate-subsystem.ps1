@@ -190,14 +190,17 @@ function Get-SubsystemMetadata {
 
     $pascal = Convert-ToPascalCase $Subsystem.name
     $type = $Subsystem.type.ToString().ToLowerInvariant()
-    if ($type -ne "velocity" -and $type -ne "velocitytorque" -and $type -ne "position" -and $type -ne "relativeposition") {
-        throw "Unsupported subsystem type '$($Subsystem.type)' for '$($Subsystem.name)'. Accepted values: velocity, velocityTorque, position, relativePosition."
+    if ($type -eq "position") {
+        $type = "absoluteposition"
+    }
+    if ($type -ne "velocity" -and $type -ne "velocitytorque" -and $type -ne "absoluteposition" -and $type -ne "relativeposition") {
+        throw "Unsupported subsystem type '$($Subsystem.type)' for '$($Subsystem.name)'. Accepted values: velocity, velocityTorque, absolutePosition, relativePosition."
     }
 
     $subsystemClassName = switch ($type) {
         "velocity" { "VelocitySubsystem" }
         "velocitytorque" { "VelocityTorqueSubsystem" }
-        "position" { "PositionSubsystem" }
+        "absoluteposition" { "AbsolutePositionSubsystem" }
         "relativeposition" { "RelativePositionSubsystem" }
     }
 
@@ -410,9 +413,10 @@ function New-InteractivePidConfig {
 
 function New-InteractiveSubsystem {
     $rawName = Prompt-Required "Subsystem name, example shooter"
-    $type = (Prompt-Enum "Subsystem type" @("velocity", "velocityTorque", "position", "relativePosition") "velocity").ToLowerInvariant()
+    $type = (Prompt-Enum "Subsystem type" @("velocity", "velocityTorque", "absolutePosition", "relativePosition") "velocity").ToLowerInvariant()
     $canonicalType = switch ($type) {
         "velocitytorque" { "velocityTorque" }
+        "absoluteposition" { "absolutePosition" }
         "relativeposition" { "relativePosition" }
         default { $type }
     }
@@ -433,7 +437,7 @@ function New-InteractiveSubsystem {
         motionMagic = [ordered]@{}
     }
 
-    if ($type -eq "position") {
+    if ($type -eq "absoluteposition") {
         $subsystem.cancoder = [ordered]@{
             id = Prompt-Int "CANcoder CAN ID"
             magnetOffset = Prompt-DoubleText "CANcoder magnet offset rotations" "0.0"
@@ -441,7 +445,7 @@ function New-InteractiveSubsystem {
         }
         $subsystem.motionMagic.cruiseVelocity = Prompt-DoubleText "Motion Magic cruise velocity" "0.0"
         $subsystem.motionMagic.acceleration = Prompt-DoubleText "Motion Magic acceleration" "0.0"
-        $subsystem.position = [ordered]@{
+        $subsystem.absolutePosition = [ordered]@{
             units = Prompt-Value "Position units" "rotations"
             default = Prompt-OptionalDoubleText "Default position"
         }
@@ -625,7 +629,7 @@ $CustomConstantsEndMarker
 "@
 }
 
-function New-PositionConstantsContent {
+function New-AbsolutePositionConstantsContent {
     param(
         [Parameter(Mandatory = $true)]$Subsystem,
         [Parameter(Mandatory = $true)]$Metadata
@@ -633,6 +637,11 @@ function New-PositionConstantsContent {
 
     $motorConstants = Convert-MotorsToConstantDeclarations $Subsystem
     $motorList = Format-IndentedList (Convert-MotorsToConstantExpressions $Subsystem) "              "
+    $absolutePositionConfig = if (($Subsystem.PSObject.Properties.Name -contains "absolutePosition") -and $null -ne $Subsystem.absolutePosition) {
+        $Subsystem.absolutePosition
+    } else {
+        $Subsystem.position
+    }
 
     return @"
 package frc.robot.constants;
@@ -645,7 +654,7 @@ import frc.powerlib.configs.CancoderConfig;
 import frc.powerlib.configs.LeadMotorConfig;
 import frc.powerlib.configs.MotionMagicConfig;
 import frc.powerlib.configs.MotorConfig;
-import frc.powerlib.configs.PositionSubsystemConfig;
+import frc.powerlib.configs.AbsolutePositionSubsystemConfig;
 import java.util.List;
 import java.util.Optional;
 
@@ -667,11 +676,11 @@ $motorConstants
   public static final double MOTION_MAGIC_CRUISE_VELOCITY = $($Subsystem.motionMagic.cruiseVelocity);
   public static final double MOTION_MAGIC_ACCELERATION = $($Subsystem.motionMagic.acceleration);
   public static final String NAME = "$($Metadata.PascalName)";
-  public static final String POSITION_UNITS = "$($Subsystem.position.units)";
-  public static final Optional<Double> DEFAULT_POSITION = $(Get-OptionalDoubleExpression $Subsystem.position.default);
+  public static final String POSITION_UNITS = "$($absolutePositionConfig.units)";
+  public static final Optional<Double> DEFAULT_POSITION = $(Get-OptionalDoubleExpression $absolutePositionConfig.default);
 
-  public static final PositionSubsystemConfig $($Metadata.ConfigConstantName) =
-      new PositionSubsystemConfig(
+  public static final AbsolutePositionSubsystemConfig $($Metadata.ConfigConstantName) =
+      new AbsolutePositionSubsystemConfig(
           List.of(
 $motorList),
           new LeadMotorConfig(
@@ -958,7 +967,7 @@ function Write-ConstantsFile {
     $content = switch ($Metadata.Type) {
         "velocity" { New-VelocityConstantsContent $Subsystem $Metadata }
         "velocitytorque" { New-VelocityConstantsContent $Subsystem $Metadata }
-        "position" { New-PositionConstantsContent $Subsystem $Metadata }
+        "absoluteposition" { New-AbsolutePositionConstantsContent $Subsystem $Metadata }
         "relativeposition" { New-RelativePositionConstantsContent $Subsystem $Metadata }
     }
     $content = Set-CustomConstantsBlock $content $customContent
@@ -1435,12 +1444,12 @@ function Get-BindingMethodNeedsValue {
 
     $type = (Get-SubsystemMetadata $Subsystem).Type
     $valueMethods = switch ($type) {
-        "position" { @("setPositionRotations", "setPositionDegrees", "setVoltage") }
+        "absoluteposition" { @("setPositionRotations", "setPositionDegrees", "setVoltage") }
         "relativeposition" { @("setPosition", "setPositionRotations", "setVoltage") }
         default { @("setVelocity", "setVoltage") }
     }
     $voidMethods = switch ($type) {
-        "position" { @("stopPosition") }
+        "absoluteposition" { @("stopPosition") }
         "relativeposition" { @("zeroEncoder") }
         default { @("stopVelocity", "brake") }
     }

@@ -8,10 +8,10 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Single-parameter config for {@link frc.powerlib.subsystems.PositionSubsystem}.
+ * Single-parameter config for {@link frc.powerlib.subsystems.AbsolutePositionSubsystem}.
  * Holds motor configs, lead/CANcoder/motion magic configs, and display name/units.
  */
-public record PositionSubsystemConfig(
+public record AbsolutePositionSubsystemConfig(
     List<MotorConfig> motorConfigs,
     LeadMotorConfig leadConfig,
     CancoderConfig cancoderConfig,

@@ -91,8 +91,8 @@ export function subsystemToForm(subsystem: GeneratedSubsystem, index: number): S
     id: subsystem.id ?? toCamelCase(subsystem.name ?? ""),
     name: subsystem.name ?? "",
     type:
-      normalizedType === "position"
-        ? "position"
+      normalizedType === "position" || normalizedType === "absoluteposition"
+        ? "absolutePosition"
         : normalizedType === "velocitytorque"
           ? "velocityTorque"
           : normalizedType === "relativeposition"
@@ -118,8 +118,8 @@ export function subsystemToForm(subsystem: GeneratedSubsystem, index: number): S
     cancoderId: toNumberText(subsystem.cancoder?.id, ""),
     cancoderMagnetOffset: toNumberText(subsystem.cancoder?.magnetOffset, "0.0"),
     cancoderDiscontinuityPoint: toNumberText(subsystem.cancoder?.discontinuityPoint, "0.5"),
-    positionUnits: subsystem.position?.units ?? subsystem.relativePosition?.units ?? "rotations",
-    defaultPosition: toNumberText(subsystem.position?.default, ""),
+    positionUnits: subsystem.absolutePosition?.units ?? subsystem.position?.units ?? subsystem.relativePosition?.units ?? "rotations",
+    defaultPosition: toNumberText(subsystem.absolutePosition?.default ?? subsystem.position?.default, ""),
     homePosition: toNumberText(subsystem.relativePosition?.homePosition, "0.0"),
     forwardSoftLimit: toNumberText(subsystem.relativePosition?.forwardSoftLimit, "0.0"),
     reverseSoftLimit: toNumberText(subsystem.relativePosition?.reverseSoftLimit, "0.0"),
@@ -174,7 +174,10 @@ export function formToSubsystem(form: SubsystemFormState, existing?: GeneratedSu
     }
   };
 
-  if (form.type === "position") {
+  if (form.type === "absolutePosition") {
+    delete subsystem.position;
+    delete subsystem.relativePosition;
+    delete subsystem.slowMotionMagic;
     subsystem.cancoder = {
       id: textToNumber(form.cancoderId, 0),
       magnetOffset: textToNumber(form.cancoderMagnetOffset, 0),
@@ -184,13 +187,16 @@ export function formToSubsystem(form: SubsystemFormState, existing?: GeneratedSu
       ...subsystem.motionMagic,
       cruiseVelocity: textToNumber(form.cruiseVelocity, 0)
     };
-    subsystem.position = {
+    subsystem.absolutePosition = {
       units: form.positionUnits.trim() || "rotations",
       default: form.defaultPosition.trim() ? textToNumber(form.defaultPosition, 0) : null
     };
   }
 
   if (form.type === "relativePosition") {
+    delete subsystem.position;
+    delete subsystem.absolutePosition;
+    delete subsystem.cancoder;
     subsystem.slowMotionMagic = {
       cruiseVelocity: textToNumber(form.slowCruiseVelocity, 0),
       acceleration: textToNumber(form.slowAcceleration, 0)

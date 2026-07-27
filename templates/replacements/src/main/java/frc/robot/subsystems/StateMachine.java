@@ -5,7 +5,7 @@
 package frc.robot.subsystems;
 
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
-import frc.powerlib.subsystems.PositionSubsystem;
+import frc.powerlib.subsystems.AbsolutePositionSubsystem;
 import frc.powerlib.subsystems.RelativePositionSubsystem;
 import frc.powerlib.subsystems.VelocitySubsystem;
 import frc.powerlib.subsystems.VelocityTorqueSubsystem;

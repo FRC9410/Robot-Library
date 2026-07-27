@@ -184,8 +184,8 @@ export function commandToBinding(command: BindingCommand): BindingCommand {
 }
 
 export function getMethodsForSubsystem(subsystem: GeneratedSubsystem | undefined) {
-  const type = subsystem?.type ?? "velocity";
-  if (type === "position") {
+  const type = (subsystem?.type ?? "velocity").toLowerCase();
+  if (type === "position" || type === "absoluteposition") {
     return [
       { name: "setPositionRotations", needsValue: true },
       { name: "setPositionDegrees", needsValue: true },
@@ -193,7 +193,7 @@ export function getMethodsForSubsystem(subsystem: GeneratedSubsystem | undefined
       { name: "stopPosition", needsValue: false }
     ];
   }
-  if (type === "relativePosition") {
+  if (type === "relativeposition") {
     return [
       { name: "setPosition", needsValue: true },
       { name: "setPositionRotations", needsValue: true },

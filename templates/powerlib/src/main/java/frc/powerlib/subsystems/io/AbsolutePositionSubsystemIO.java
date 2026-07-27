@@ -1,6 +1,6 @@
 package frc.powerlib.subsystems.io;
 
-public interface PositionSubsystemIO {
+public interface AbsolutePositionSubsystemIO {
   public static class Inputs {
     public boolean connected = false;
     public double positionRotations = 0.0;

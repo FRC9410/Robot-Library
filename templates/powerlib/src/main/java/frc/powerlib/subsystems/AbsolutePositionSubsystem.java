@@ -23,22 +23,22 @@ import edu.wpi.first.wpilibj.RobotBase;
 import frc.powerlib.configs.CancoderConfig;
 import frc.powerlib.configs.LeadMotorConfig;
 import frc.powerlib.configs.MotionMagicConfig;
-import frc.powerlib.configs.PositionSubsystemConfig;
-import frc.powerlib.subsystems.io.PositionSubsystemIO;
-import frc.powerlib.subsystems.io.PositionSubsystemIOReal;
-import frc.powerlib.subsystems.io.PositionSubsystemIOSim;
+import frc.powerlib.configs.AbsolutePositionSubsystemConfig;
+import frc.powerlib.subsystems.io.AbsolutePositionSubsystemIO;
+import frc.powerlib.subsystems.io.AbsolutePositionSubsystemIOReal;
+import frc.powerlib.subsystems.io.AbsolutePositionSubsystemIOSim;
 
 import java.util.Optional;
 
-public class PositionSubsystem extends PowerSubsystem {
+public class AbsolutePositionSubsystem extends PowerSubsystem {
 
   private static final String DEFAULT_CAN_BUS_NAME = "canivore";
 
   /** Primary position-controlled motor (with fused CANcoder from config constructor). */
   protected TalonFX positionMotor;
   private CANcoder cancoder;
-  public final PositionSubsystemIO.Inputs inputs = new PositionSubsystemIO.Inputs();
-  private final PositionSubsystemIO io;
+  public final AbsolutePositionSubsystemIO.Inputs inputs = new AbsolutePositionSubsystemIO.Inputs();
+  private final AbsolutePositionSubsystemIO io;
   private String subsystemName;
   private String units;
   private boolean focEnabled;
@@ -67,11 +67,11 @@ public class PositionSubsystem extends PowerSubsystem {
    *
    * @param config single config containing motor configs, lead, CANcoder, motion magic, name, and units
    */
-  public PositionSubsystem(PositionSubsystemConfig config) {
+  public AbsolutePositionSubsystem(AbsolutePositionSubsystemConfig config) {
     this(config, null);
   }
 
-  public PositionSubsystem(PositionSubsystemConfig config, PositionSubsystemIO io) {
+  public AbsolutePositionSubsystem(AbsolutePositionSubsystemConfig config, AbsolutePositionSubsystemIO io) {
     super(config.motorConfigs(), config.subsystemName());
     TalonFX leader = getLeaderMotor();
     this.cancoder = new CANcoder(config.cancoderConfig().encoderId(), new CANBus(DEFAULT_CAN_BUS_NAME));
@@ -88,8 +88,8 @@ public class PositionSubsystem extends PowerSubsystem {
     this.io = io == null ? createDefaultIO() : io;
   }
 
-  private PositionSubsystemIO createDefaultIO() {
-    return RobotBase.isSimulation() ? new PositionSubsystemIOSim() : new PositionSubsystemIOReal(this);
+  private AbsolutePositionSubsystemIO createDefaultIO() {
+    return RobotBase.isSimulation() ? new AbsolutePositionSubsystemIOSim() : new AbsolutePositionSubsystemIOReal(this);
   }
 
   @Override

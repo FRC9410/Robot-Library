@@ -7,14 +7,14 @@ type CancoderFieldsProps = {
 };
 
 export function CancoderFields({ form, updateField }: CancoderFieldsProps) {
-  if (form.type !== "position") {
+  if (form.type !== "absolutePosition") {
     return null;
   }
 
   return (
     <Stack spacing={1}>
       <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-        CANcoder
+        Absolute Position CANcoder
       </Typography>
       <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
         <TextField

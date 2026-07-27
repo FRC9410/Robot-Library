@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld("powerlib", {
     ipcRenderer.invoke("powerlib:save-tuning-selection", selectedTopics),
   saveTuningMonitorDrawerOpen: (open: boolean) =>
     ipcRenderer.invoke("powerlib:save-tuning-monitor-drawer-open", open),
+  saveTuningSidebarExpandedSection: (section: "subsystem" | "command") =>
+    ipcRenderer.invoke("powerlib:save-tuning-sidebar-expanded-section", section),
   readBindingConstants: () => ipcRenderer.invoke("powerlib:read-binding-constants"),
   updateSubsystemCode: () => ipcRenderer.invoke("powerlib:update-subsystem-code"),
   updateInstallSection: (section: string) => ipcRenderer.invoke("powerlib:update-install-section", section),

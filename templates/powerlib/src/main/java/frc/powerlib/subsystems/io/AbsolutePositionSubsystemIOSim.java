@@ -1,6 +1,6 @@
 package frc.powerlib.subsystems.io;
 
-public class PositionSubsystemIOSim implements PositionSubsystemIO {
+public class AbsolutePositionSubsystemIOSim implements AbsolutePositionSubsystemIO {
   private double positionRotations = 0.0;
   private double velocityRotationsPerSecond = 0.0;
   private double appliedVolts = 0.0;

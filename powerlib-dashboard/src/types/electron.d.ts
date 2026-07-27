@@ -31,6 +31,7 @@ declare global {
         path: string;
         selectedTopics: string[];
         monitorDrawerOpen: boolean;
+        sidebarExpandedSection: "subsystem" | "command";
         error?: string;
       }>;
       saveTuningSelection: (selectedTopics: string[]) => Promise<{
@@ -38,12 +39,21 @@ declare global {
         path: string;
         selectedTopics: string[];
         monitorDrawerOpen: boolean;
+        sidebarExpandedSection: "subsystem" | "command";
       }>;
       saveTuningMonitorDrawerOpen: (open: boolean) => Promise<{
         exists: boolean;
         path: string;
         selectedTopics: string[];
         monitorDrawerOpen: boolean;
+        sidebarExpandedSection: "subsystem" | "command";
+      }>;
+      saveTuningSidebarExpandedSection: (section: "subsystem" | "command") => Promise<{
+        exists: boolean;
+        path: string;
+        selectedTopics: string[];
+        monitorDrawerOpen: boolean;
+        sidebarExpandedSection: "subsystem" | "command";
       }>;
       readBindingConstants: () => Promise<{
         constants: unknown[];

@@ -16,6 +16,7 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import SearchIcon from "@mui/icons-material/Search";
 import TuneIcon from "@mui/icons-material/Tune";
 import type { NtPrimitive, NtTopicSnapshot, NtTopicType } from "../../networktables/nt4Client";
 import { SaveTunedValuesDialog } from "../networktables/SaveTunedValuesDialog";
@@ -169,6 +170,19 @@ function getTuningOwnerLabel(variable: SelectedTuningVariable) {
   return `${variable.parsed.kind === "subsystem" ? "Subsystem" : "Command"}: ${variable.parsed.ownerName}`;
 }
 
+function tuningVariableMatchesSearch(variable: SelectedTuningVariable, normalizedSearchTerm: string) {
+  if (!normalizedSearchTerm) {
+    return true;
+  }
+
+  return (
+    getTuningVariableLabel(variable).toLowerCase().includes(normalizedSearchTerm) ||
+    getTuningOwnerLabel(variable).toLowerCase().includes(normalizedSearchTerm) ||
+    variable.name.toLowerCase().includes(normalizedSearchTerm) ||
+    (variable.parsed?.variableKey.toLowerCase().includes(normalizedSearchTerm) ?? false)
+  );
+}
+
 function getSubsystemDisplayName(subsystem: GeneratedSubsystem, index: number) {
   return subsystem.name || subsystem.id || `Subsystem ${index + 1}`;
 }
@@ -282,6 +296,8 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
   const [applying, setApplying] = useState(false);
   const [selectionLoading, setSelectionLoading] = useState(false);
   const [selectionError, setSelectionError] = useState<string | null>(null);
+  const [tuningDrawerSearchOpen, setTuningDrawerSearchOpen] = useState(false);
+  const [tuningDrawerSearchTerm, setTuningDrawerSearchTerm] = useState("");
   const lastTopicDraftsRef = useRef<Record<string, string>>({});
   const tiles = useMemo(() => createTiles(subsystems, topics), [subsystems, topics]);
   const selectedTuningVariables = useMemo<SelectedTuningVariable[]>(() => {
@@ -303,6 +319,11 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
         );
       });
   }, [selectedTuningTopicNames, topics]);
+  const visibleTuningVariables = useMemo(() => {
+    return selectedTuningVariables.filter((variable) =>
+      tuningVariableMatchesSearch(variable, tuningDrawerSearchTerm.trim().toLowerCase())
+    );
+  }, [selectedTuningVariables, tuningDrawerSearchTerm]);
   const pendingTuningVariables = useMemo(() => {
     return selectedTuningVariables.filter((variable) => {
       if (!variable.topic) {
@@ -418,6 +439,10 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
   async function setSavedTuningDrawerOpen(open: boolean) {
     const nextOpen = open && hasWatchedTuningVariables;
     setTuningDrawerOpen(nextOpen);
+    if (!nextOpen) {
+      setTuningDrawerSearchOpen(false);
+      setTuningDrawerSearchTerm("");
+    }
 
     if (!window.powerlib?.saveTuningMonitorDrawerOpen) {
       setSelectionError("The tuning drawer state can only be saved from the Power Tool desktop app.");
@@ -437,6 +462,16 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
   function updateDraft(topicName: string, draft: string) {
     setDrafts((current) => ({ ...current, [topicName]: draft }));
     setRowErrors((current) => ({ ...current, [topicName]: null }));
+  }
+
+  function toggleTuningDrawerSearch() {
+    setTuningDrawerSearchOpen((current) => {
+      const nextOpen = !current;
+      if (!nextOpen) {
+        setTuningDrawerSearchTerm("");
+      }
+      return nextOpen;
+    });
   }
 
   async function applyAllPendingTunables() {
@@ -675,21 +710,45 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
             width: 230
           }}
         >
-          <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexShrink: 0, mb: 1 }}>
+          <Stack direction="row" spacing={0.25} sx={{ alignItems: "center", flexShrink: 0, mb: 1 }}>
             <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-              <Typography variant="h6">Selected Tunables</Typography>
+              <Typography noWrap variant="h6">
+                Selected Tunables
+              </Typography>
             </Box>
+            <IconButton
+              aria-label={`${tuningDrawerSearchOpen ? "Close" : "Search"} selected tunables`}
+              color={tuningDrawerSearchOpen || tuningDrawerSearchTerm.trim().length > 0 ? "primary" : "default"}
+              disabled={selectedTuningVariables.length === 0}
+              size="small"
+              onClick={toggleTuningDrawerSearch}
+            >
+              <SearchIcon fontSize="small" />
+            </IconButton>
             <IconButton
               aria-label="Refresh selected tunables"
               disabled={selectionLoading}
+              size="small"
               onClick={() => void refreshSelectedTunables()}
             >
-              <RefreshIcon />
+              <RefreshIcon fontSize="small" />
             </IconButton>
-            <IconButton aria-label="Close selected tunables" onClick={() => void setSavedTuningDrawerOpen(false)}>
-              <CloseIcon />
+            <IconButton aria-label="Close selected tunables" size="small" onClick={() => void setSavedTuningDrawerOpen(false)}>
+              <CloseIcon fontSize="small" />
             </IconButton>
           </Stack>
+
+          {tuningDrawerSearchOpen && (
+            <TextField
+              autoFocus
+              fullWidth
+              placeholder="Search variables"
+              size="small"
+              sx={{ flexShrink: 0, mb: 1 }}
+              value={tuningDrawerSearchTerm}
+              onChange={(event) => setTuningDrawerSearchTerm(event.target.value)}
+            />
+          )}
 
           {selectionLoading && <LinearProgress sx={{ flexShrink: 0, mb: 1 }} />}
           {selectionError && (
@@ -700,62 +759,73 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
 
           <Box sx={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", pr: 0.5 }}>
             {selectedTuningVariables.length > 0 ? (
-              <Stack spacing={1}>
-                {selectedTuningVariables.map((variable) => {
-                  const type = variable.topic ? getWritableTopicType(variable.topic) : null;
+              visibleTuningVariables.length > 0 ? (
+                <Stack spacing={1}>
+                  {visibleTuningVariables.map((variable) => {
+                    const type = variable.topic ? getWritableTopicType(variable.topic) : null;
 
-                  return (
-                    <Card key={variable.name} variant="outlined">
-                      <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
-                        <Stack spacing={1}>
-                          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                              <Typography sx={{ fontWeight: 800, overflowWrap: "anywhere" }}>
-                                {getTuningVariableLabel(variable)}
-                              </Typography>
+                    return (
+                      <Card key={variable.name} variant="outlined">
+                        <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
+                          <Stack spacing={1}>
+                            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                              <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                                <Typography sx={{ fontWeight: 800, overflowWrap: "anywhere" }}>
+                                  {getTuningVariableLabel(variable)}
+                                </Typography>
+                              </Box>
+                              <Chip
+                                color={variable.topic ? "success" : "warning"}
+                                label={variable.topic ? String(variable.topic.type) : "offline"}
+                                size="small"
+                                variant={variable.topic ? "outlined" : "filled"}
+                              />
+                            </Stack>
+                            <Box
+                              sx={{
+                                alignItems: "center",
+                                display: "flex",
+                                gap: 1,
+                                justifyContent: "space-between",
+                                minWidth: 0
+                              }}
+                            >
+                              <Box sx={{ minWidth: 0 }}>
+                                <Typography noWrap color="text.secondary" variant="caption">
+                                  {getTuningOwnerLabel(variable)}
+                                </Typography>
+                              </Box>
+                              <Box sx={{ flexShrink: 0 }}>
+                                <Typography color="text.secondary" variant="caption">
+                                  {variable.topic
+                                    ? `Live: ${formatRobotMetricValue(variable.topic.value)}`
+                                    : "not published"}
+                                </Typography>
+                              </Box>
                             </Box>
-                            <Chip
-                              color={variable.topic ? "success" : "warning"}
-                              label={variable.topic ? String(variable.topic.type) : "offline"}
+                            <TextField
+                              disabled={!variable.topic || !type || status !== "connected" || applying}
+                              error={Boolean(rowErrors[variable.name])}
+                              fullWidth
+                              helperText={rowErrors[variable.name] ?? undefined}
                               size="small"
-                              variant={variable.topic ? "outlined" : "filled"}
+                              value={
+                                drafts[variable.name] ??
+                                (variable.topic ? topicValueToDraft(variable.topic.value) : "")
+                              }
+                              onChange={(event) => updateDraft(variable.name, event.target.value)}
                             />
                           </Stack>
-                          <Box
-                            sx={{
-                              alignItems: "center",
-                              display: "flex",
-                              gap: 1,
-                              justifyContent: "space-between",
-                              minWidth: 0
-                            }}
-                          >
-                            <Box sx={{ minWidth: 0 }}>
-                              <Typography noWrap color="text.secondary" variant="caption">
-                                {getTuningOwnerLabel(variable)}
-                              </Typography>
-                            </Box>
-                            <Box sx={{ flexShrink: 0 }}>
-                              <Typography color="text.secondary" variant="caption">
-                                {variable.topic ? `Live: ${formatRobotMetricValue(variable.topic.value)}` : "not published"}
-                              </Typography>
-                            </Box>
-                          </Box>
-                          <TextField
-                            disabled={!variable.topic || !type || status !== "connected" || applying}
-                            error={Boolean(rowErrors[variable.name])}
-                            fullWidth
-                            helperText={rowErrors[variable.name] ?? undefined}
-                            size="small"
-                            value={drafts[variable.name] ?? (variable.topic ? topicValueToDraft(variable.topic.value) : "")}
-                            onChange={(event) => updateDraft(variable.name, event.target.value)}
-                          />
-                        </Stack>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </Stack>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </Stack>
+              ) : (
+                <Alert severity="info" variant="outlined">
+                  No selected tunables match that search.
+                </Alert>
+              )
             ) : (
               !selectionLoading && (
                 <Alert severity="info" variant="outlined">

@@ -46,7 +46,7 @@ export function SubsystemBasicFields({ form, setForm, updateField }: SubsystemBa
           >
             <MenuItem value="velocity">velocity</MenuItem>
             <MenuItem value="velocityTorque">velocity torque</MenuItem>
-            <MenuItem value="position">position</MenuItem>
+            <MenuItem value="absolutePosition">absolute position</MenuItem>
             <MenuItem value="relativePosition">relative position</MenuItem>
           </Select>
         </FormControl>

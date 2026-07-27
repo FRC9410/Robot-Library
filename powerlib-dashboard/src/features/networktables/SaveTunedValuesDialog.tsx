@@ -97,7 +97,7 @@ const subsystemVariableMappings: Record<
     label: "Slow Motion Magic acceleration"
   },
   "Position/Default": {
-    jsonPath: ["position", "default"],
+    jsonPath: ["absolutePosition", "default"],
     label: "Default position"
   }
 };

@@ -137,6 +137,10 @@ function normalizeSelectedTopicNames(value: unknown) {
   ).sort((left, right) => left.localeCompare(right));
 }
 
+function normalizeTuningSidebarExpandedSection(value: unknown): "subsystem" | "command" {
+  return value === "command" ? "command" : "subsystem";
+}
+
 function getRobotRoot(subsystemsJsonPath: string) {
   return path.dirname(subsystemsJsonPath);
 }
@@ -314,11 +318,15 @@ ipcMain.handle("powerlib:read-tuning-selection", async () => {
     try {
       const raw = await fs.readFile(candidate, "utf-8");
       const parsed = JSON.parse(raw);
+      const isDocument = !Array.isArray(parsed);
       return {
         exists: true,
         path: candidate,
         selectedTopics: normalizeSelectedTopicNames(Array.isArray(parsed) ? parsed : parsed?.selectedTopics),
-        monitorDrawerOpen: !Array.isArray(parsed) && parsed?.monitorDrawerOpen === true
+        monitorDrawerOpen: isDocument && parsed?.monitorDrawerOpen === true,
+        sidebarExpandedSection: isDocument
+          ? normalizeTuningSidebarExpandedSection(parsed?.sidebarExpandedSection)
+          : "subsystem"
       };
     } catch (error) {
       const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
@@ -328,6 +336,7 @@ ipcMain.handle("powerlib:read-tuning-selection", async () => {
           path: candidate,
           selectedTopics: [],
           monitorDrawerOpen: false,
+          sidebarExpandedSection: "subsystem",
           error: error instanceof Error ? error.message : "Could not read powerlib-tuning-selection.json."
         };
       }
@@ -338,13 +347,15 @@ ipcMain.handle("powerlib:read-tuning-selection", async () => {
     exists: false,
     path: getTuningSelectionJsonCandidates()[0],
     selectedTopics: [],
-    monitorDrawerOpen: false
+    monitorDrawerOpen: false,
+    sidebarExpandedSection: "subsystem"
   };
 });
 
 ipcMain.handle("powerlib:save-tuning-selection", async (_event, selectedTopics: unknown) => {
   let targetPath = getTuningSelectionJsonCandidates()[0];
   let monitorDrawerOpen = false;
+  let sidebarExpandedSection: "subsystem" | "command" = "subsystem";
 
   for (const candidate of getTuningSelectionJsonCandidates()) {
     try {
@@ -352,7 +363,11 @@ ipcMain.handle("powerlib:save-tuning-selection", async (_event, selectedTopics: 
       targetPath = candidate;
       const raw = await fs.readFile(candidate, "utf-8");
       const parsed = JSON.parse(raw);
-      monitorDrawerOpen = !Array.isArray(parsed) && parsed?.monitorDrawerOpen === true;
+      const isDocument = !Array.isArray(parsed);
+      monitorDrawerOpen = isDocument && parsed?.monitorDrawerOpen === true;
+      sidebarExpandedSection = isDocument
+        ? normalizeTuningSidebarExpandedSection(parsed?.sidebarExpandedSection)
+        : "subsystem";
       break;
     } catch {
       // Keep looking. If none exist, write to the installed robot root candidate.
@@ -362,7 +377,8 @@ ipcMain.handle("powerlib:save-tuning-selection", async (_event, selectedTopics: 
   const document = {
     version: 1,
     selectedTopics: normalizeSelectedTopicNames(selectedTopics),
-    monitorDrawerOpen
+    monitorDrawerOpen,
+    sidebarExpandedSection
   };
 
   await fs.writeFile(targetPath, `${JSON.stringify(document, null, 2)}\n`, "utf-8");
@@ -370,13 +386,15 @@ ipcMain.handle("powerlib:save-tuning-selection", async (_event, selectedTopics: 
     exists: true,
     path: targetPath,
     selectedTopics: document.selectedTopics,
-    monitorDrawerOpen: document.monitorDrawerOpen
+    monitorDrawerOpen: document.monitorDrawerOpen,
+    sidebarExpandedSection: document.sidebarExpandedSection
   };
 });
 
 ipcMain.handle("powerlib:save-tuning-monitor-drawer-open", async (_event, monitorDrawerOpen: unknown) => {
   let targetPath = getTuningSelectionJsonCandidates()[0];
   let selectedTopics: string[] = [];
+  let sidebarExpandedSection: "subsystem" | "command" = "subsystem";
 
   for (const candidate of getTuningSelectionJsonCandidates()) {
     try {
@@ -384,7 +402,11 @@ ipcMain.handle("powerlib:save-tuning-monitor-drawer-open", async (_event, monito
       targetPath = candidate;
       const raw = await fs.readFile(candidate, "utf-8");
       const parsed = JSON.parse(raw);
+      const isDocument = !Array.isArray(parsed);
       selectedTopics = normalizeSelectedTopicNames(Array.isArray(parsed) ? parsed : parsed?.selectedTopics);
+      sidebarExpandedSection = isDocument
+        ? normalizeTuningSidebarExpandedSection(parsed?.sidebarExpandedSection)
+        : "subsystem";
       break;
     } catch {
       // Keep looking. If none exist, write to the installed robot root candidate.
@@ -394,7 +416,8 @@ ipcMain.handle("powerlib:save-tuning-monitor-drawer-open", async (_event, monito
   const document = {
     version: 1,
     selectedTopics,
-    monitorDrawerOpen: monitorDrawerOpen === true
+    monitorDrawerOpen: monitorDrawerOpen === true,
+    sidebarExpandedSection
   };
 
   await fs.writeFile(targetPath, `${JSON.stringify(document, null, 2)}\n`, "utf-8");
@@ -402,7 +425,45 @@ ipcMain.handle("powerlib:save-tuning-monitor-drawer-open", async (_event, monito
     exists: true,
     path: targetPath,
     selectedTopics: document.selectedTopics,
-    monitorDrawerOpen: document.monitorDrawerOpen
+    monitorDrawerOpen: document.monitorDrawerOpen,
+    sidebarExpandedSection: document.sidebarExpandedSection
+  };
+});
+
+ipcMain.handle("powerlib:save-tuning-sidebar-expanded-section", async (_event, sidebarExpandedSection: unknown) => {
+  let targetPath = getTuningSelectionJsonCandidates()[0];
+  let selectedTopics: string[] = [];
+  let monitorDrawerOpen = false;
+
+  for (const candidate of getTuningSelectionJsonCandidates()) {
+    try {
+      await fs.access(candidate);
+      targetPath = candidate;
+      const raw = await fs.readFile(candidate, "utf-8");
+      const parsed = JSON.parse(raw);
+      const isDocument = !Array.isArray(parsed);
+      selectedTopics = normalizeSelectedTopicNames(Array.isArray(parsed) ? parsed : parsed?.selectedTopics);
+      monitorDrawerOpen = isDocument && parsed?.monitorDrawerOpen === true;
+      break;
+    } catch {
+      // Keep looking. If none exist, write to the installed robot root candidate.
+    }
+  }
+
+  const document = {
+    version: 1,
+    selectedTopics,
+    monitorDrawerOpen,
+    sidebarExpandedSection: normalizeTuningSidebarExpandedSection(sidebarExpandedSection)
+  };
+
+  await fs.writeFile(targetPath, `${JSON.stringify(document, null, 2)}\n`, "utf-8");
+  return {
+    exists: true,
+    path: targetPath,
+    selectedTopics: document.selectedTopics,
+    monitorDrawerOpen: document.monitorDrawerOpen,
+    sidebarExpandedSection: document.sidebarExpandedSection
   };
 });
 

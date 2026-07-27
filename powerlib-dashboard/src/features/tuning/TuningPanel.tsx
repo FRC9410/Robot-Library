@@ -75,6 +75,13 @@ function getOwnerLabel(kind: TuningOwnerKind) {
   return kind === "subsystem" ? "Subsystem" : "Command";
 }
 
+function toExpandedSections(kind: TuningOwnerKind): ExpandedSections {
+  return {
+    subsystem: kind === "subsystem",
+    command: kind === "command"
+  };
+}
+
 function normalizeSelectedTopicNames(topicNames: string[]) {
   return Array.from(new Set(topicNames.map((topicName) => topicName.trim()).filter(Boolean))).sort((left, right) =>
     left.localeCompare(right)
@@ -200,6 +207,21 @@ function filterOwnerGroups(owners: TuningOwnerGroup[], searchTerm: string) {
     const matchingTopics = owner.topics.filter((topic) => topicMatchesSearch(topic, normalizedSearchTerm));
     return matchingTopics.length > 0 ? [{ ...owner, topics: matchingTopics }] : [];
   });
+}
+
+function selectedTopicMatchesSearch(topic: NtTopicSnapshot, normalizedSearchTerm: string) {
+  if (!normalizedSearchTerm) {
+    return true;
+  }
+
+  const parsed = parseTunableTopic(topic);
+  return (
+    getVariableDisplayName(topic).toLowerCase().includes(normalizedSearchTerm) ||
+    topic.name.toLowerCase().includes(normalizedSearchTerm) ||
+    (parsed?.ownerName.toLowerCase().includes(normalizedSearchTerm) ?? false) ||
+    (parsed?.variableKey.toLowerCase().includes(normalizedSearchTerm) ?? false) ||
+    (parsed ? getOwnerLabel(parsed.kind).toLowerCase().includes(normalizedSearchTerm) : false)
+  );
 }
 
 function TunableVariableRow({
@@ -519,12 +541,15 @@ export function TuningPanel() {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [rowErrors, setRowErrors] = useState<Record<string, string | null>>({});
   const [applying, setApplying] = useState(false);
+  const [selectedSearchOpen, setSelectedSearchOpen] = useState(false);
+  const [selectedSearchTerm, setSelectedSearchTerm] = useState("");
   const [expandedSections, setExpandedSections] = useState<ExpandedSections>({
     subsystem: true,
     command: false
   });
   const lastTopicDraftsRef = useRef<Record<string, string>>({});
   const selectionSaveSequenceRef = useRef(0);
+  const sidebarSaveSequenceRef = useRef(0);
 
   const tunableTopics = useMemo(() => {
     return topics.filter(isTunableTopic).sort((left, right) => left.name.localeCompare(right.name));
@@ -537,6 +562,9 @@ export function TuningPanel() {
       .map((topicName) => tunableTopicMap.get(topicName))
       .filter((topic): topic is NtTopicSnapshot => Boolean(topic));
   }, [selectedTopicNames, tunableTopicMap]);
+  const visibleSelectedTopics = useMemo(() => {
+    return selectedTopics.filter((topic) => selectedTopicMatchesSearch(topic, selectedSearchTerm.trim().toLowerCase()));
+  }, [selectedSearchTerm, selectedTopics]);
   const unavailableSelectionCount = selectedTopicNames.length - selectedTopics.length;
   const tuningModeTopic = topics.find((topic) => topic.name === tuningModeTopicName);
   const tuningModeRequestTopic = topics.find((topic) => topic.name === tuningModeRequestTopicName);
@@ -559,6 +587,7 @@ export function TuningPanel() {
         }
 
         setSelectedTopicNames(normalizeSelectedTopicNames(result.selectedTopics));
+        setExpandedSections(toExpandedSections(result.sidebarExpandedSection));
         setSelectionError(result.error ?? null);
       } catch (caught) {
         if (!active) {
@@ -638,17 +667,49 @@ export function TuningPanel() {
     setRowErrors((current) => ({ ...current, [topicName]: null }));
   }
 
+  function toggleSelectedSearch() {
+    setSelectedSearchOpen((current) => {
+      const nextOpen = !current;
+      if (!nextOpen) {
+        setSelectedSearchTerm("");
+      }
+      return nextOpen;
+    });
+  }
+
   function updateExpandedSection(kind: TuningOwnerKind, expanded: boolean) {
-    setExpandedSections((current) => {
-      const otherKind: TuningOwnerKind = kind === "subsystem" ? "command" : "subsystem";
-      if (!expanded || current[kind]) {
-        return current;
+    if (!expanded || expandedSections[kind]) {
+      return;
+    }
+
+    setExpandedSections(toExpandedSections(kind));
+    void persistSidebarExpandedSection(kind);
+  }
+
+  async function persistSidebarExpandedSection(kind: TuningOwnerKind) {
+    if (!window.powerlib?.saveTuningSidebarExpandedSection) {
+      return;
+    }
+
+    const saveSequence = sidebarSaveSequenceRef.current + 1;
+    sidebarSaveSequenceRef.current = saveSequence;
+
+    try {
+      const result = await window.powerlib.saveTuningSidebarExpandedSection(kind);
+      if (sidebarSaveSequenceRef.current !== saveSequence) {
+        return;
       }
 
-      return kind === "subsystem"
-        ? { subsystem: true, command: false }
-        : { subsystem: false, command: true };
-    });
+      setExpandedSections(toExpandedSections(result.sidebarExpandedSection));
+      setSelectionError(null);
+    } catch (caught) {
+      if (sidebarSaveSequenceRef.current !== saveSequence) {
+        return;
+      }
+
+      const message = caught instanceof Error ? caught.message : String(caught);
+      setSelectionError(`Could not save tuning sidebar state: ${message}`);
+    }
   }
 
   async function persistSelectedTopicNames(nextTopicNames: string[]) {
@@ -804,6 +865,15 @@ export function TuningPanel() {
                       variant="outlined"
                     />
                   )}
+                  <IconButton
+                    aria-label={`${selectedSearchOpen ? "Close" : "Search"} selected tunables`}
+                    color={selectedSearchOpen || selectedSearchTerm.trim().length > 0 ? "primary" : "default"}
+                    disabled={selectedTopics.length === 0}
+                    size="small"
+                    onClick={toggleSelectedSearch}
+                  >
+                    <SearchIcon fontSize="small" />
+                  </IconButton>
                   <Button
                     disabled={status !== "connected" || applying || selectedPendingTopics.length === 0}
                     onClick={() => void applyPendingChanges()}
@@ -824,6 +894,17 @@ export function TuningPanel() {
                   </Button>
                 </Stack>
               </Stack>
+
+              {selectedSearchOpen && (
+                <TextField
+                  autoFocus
+                  fullWidth
+                  placeholder="Search selected tunables"
+                  size="small"
+                  value={selectedSearchTerm}
+                  onChange={(event) => setSelectedSearchTerm(event.target.value)}
+                />
+              )}
 
               <Alert severity={tuningModeEnabled ? "warning" : "info"} variant="outlined">
                 {tuningModeEnabled
@@ -851,19 +932,25 @@ export function TuningPanel() {
               )}
 
               {selectedTopics.length > 0 ? (
-                <Stack spacing={1}>
-                  {selectedTopics.map((topic) => (
-                    <TunableVariableRow
-                      key={topic.name}
-                      disabled={status !== "connected" || applying}
-                      draft={drafts[topic.name] ?? topicValueToDraft(topic.value)}
-                      error={rowErrors[topic.name] ?? null}
-                      topic={topic}
-                      onDraftChange={updateDraft}
-                      onRemove={(topicName) => toggleTopicSelection(topicName, false)}
-                    />
-                  ))}
-                </Stack>
+                visibleSelectedTopics.length > 0 ? (
+                  <Stack spacing={1}>
+                    {visibleSelectedTopics.map((topic) => (
+                      <TunableVariableRow
+                        key={topic.name}
+                        disabled={status !== "connected" || applying}
+                        draft={drafts[topic.name] ?? topicValueToDraft(topic.value)}
+                        error={rowErrors[topic.name] ?? null}
+                        topic={topic}
+                        onDraftChange={updateDraft}
+                        onRemove={(topicName) => toggleTopicSelection(topicName, false)}
+                      />
+                    ))}
+                  </Stack>
+                ) : (
+                  <Alert severity="info" variant="outlined">
+                    No selected tunables match that search.
+                  </Alert>
+                )
               ) : (
                 <Alert severity="info" variant="outlined">
                   Check variables in the sidebar to build your tuning list. Generated subsystem control values and

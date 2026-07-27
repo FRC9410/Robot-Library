@@ -42,8 +42,8 @@ def templateFiles = [
         replacement: false
     ),
     new TemplateFile(
-        source: 'powerlib/src/main/java/frc/powerlib/configs/PositionSubsystemConfig.java',
-        destination: 'src/main/java/frc/powerlib/configs/PositionSubsystemConfig.java',
+        source: 'powerlib/src/main/java/frc/powerlib/configs/AbsolutePositionSubsystemConfig.java',
+        destination: 'src/main/java/frc/powerlib/configs/AbsolutePositionSubsystemConfig.java',
         replacement: false
     ),
     new TemplateFile(
@@ -67,8 +67,8 @@ def templateFiles = [
         replacement: false
     ),
     new TemplateFile(
-        source: 'powerlib/src/main/java/frc/powerlib/subsystems/PositionSubsystem.java',
-        destination: 'src/main/java/frc/powerlib/subsystems/PositionSubsystem.java',
+        source: 'powerlib/src/main/java/frc/powerlib/subsystems/AbsolutePositionSubsystem.java',
+        destination: 'src/main/java/frc/powerlib/subsystems/AbsolutePositionSubsystem.java',
         replacement: false
     ),
     new TemplateFile(
@@ -102,18 +102,18 @@ def templateFiles = [
         replacement: false
     ),
     new TemplateFile(
-        source: 'powerlib/src/main/java/frc/powerlib/subsystems/io/PositionSubsystemIO.java',
-        destination: 'src/main/java/frc/powerlib/subsystems/io/PositionSubsystemIO.java',
+        source: 'powerlib/src/main/java/frc/powerlib/subsystems/io/AbsolutePositionSubsystemIO.java',
+        destination: 'src/main/java/frc/powerlib/subsystems/io/AbsolutePositionSubsystemIO.java',
         replacement: false
     ),
     new TemplateFile(
-        source: 'powerlib/src/main/java/frc/powerlib/subsystems/io/PositionSubsystemIOReal.java',
-        destination: 'src/main/java/frc/powerlib/subsystems/io/PositionSubsystemIOReal.java',
+        source: 'powerlib/src/main/java/frc/powerlib/subsystems/io/AbsolutePositionSubsystemIOReal.java',
+        destination: 'src/main/java/frc/powerlib/subsystems/io/AbsolutePositionSubsystemIOReal.java',
         replacement: false
     ),
     new TemplateFile(
-        source: 'powerlib/src/main/java/frc/powerlib/subsystems/io/PositionSubsystemIOSim.java',
-        destination: 'src/main/java/frc/powerlib/subsystems/io/PositionSubsystemIOSim.java',
+        source: 'powerlib/src/main/java/frc/powerlib/subsystems/io/AbsolutePositionSubsystemIOSim.java',
+        destination: 'src/main/java/frc/powerlib/subsystems/io/AbsolutePositionSubsystemIOSim.java',
         replacement: false
     ),
     new TemplateFile(
@@ -556,11 +556,11 @@ def deleteOldDashboardBuildScript = { Project project ->
 }
 
 def deprecatedPowerLibFiles = [
-    'src/main/java/frc/powerlib/configs/AbsolutePositionSubsystemConfig.java',
-    'src/main/java/frc/powerlib/subsystems/AbsolutePositionSubsystem.java',
-    'src/main/java/frc/powerlib/subsystems/io/AbsolutePositionSubsystemIO.java',
-    'src/main/java/frc/powerlib/subsystems/io/AbsolutePositionSubsystemIOReal.java',
-    'src/main/java/frc/powerlib/subsystems/io/AbsolutePositionSubsystemIOSim.java'
+    'src/main/java/frc/powerlib/configs/PositionSubsystemConfig.java',
+    'src/main/java/frc/powerlib/subsystems/PositionSubsystem.java',
+    'src/main/java/frc/powerlib/subsystems/io/PositionSubsystemIO.java',
+    'src/main/java/frc/powerlib/subsystems/io/PositionSubsystemIOReal.java',
+    'src/main/java/frc/powerlib/subsystems/io/PositionSubsystemIOSim.java'
 ]
 
 def deleteDeprecatedPowerLibFiles = { Project project ->
