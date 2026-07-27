@@ -786,22 +786,25 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
                                 alignItems: "center",
                                 display: "flex",
                                 gap: 1,
-                                justifyContent: "space-between",
                                 minWidth: 0
                               }}
                             >
-                              <Box sx={{ minWidth: 0 }}>
-                                <Typography noWrap color="text.secondary" variant="caption">
-                                  {getTuningOwnerLabel(variable)}
-                                </Typography>
-                              </Box>
-                              <Box sx={{ flexShrink: 0 }}>
-                                <Typography color="text.secondary" variant="caption">
-                                  {variable.topic
-                                    ? `Live: ${formatRobotMetricValue(variable.topic.value)}`
-                                    : "not published"}
-                                </Typography>
-                              </Box>
+                              <Typography
+                                noWrap
+                                color="text.secondary"
+                                sx={{ flex: "1 1 auto", minWidth: 0 }}
+                                variant="caption"
+                              >
+                                {getTuningOwnerLabel(variable)}
+                              </Typography>
+                              <Typography
+                                noWrap
+                                color="text.secondary"
+                                sx={{ flex: "0 0 auto" }}
+                                variant="caption"
+                              >
+                                {variable.topic ? `Live: ${formatRobotMetricValue(variable.topic.value)}` : "not published"}
+                              </Typography>
                             </Box>
                             <TextField
                               disabled={!variable.topic || !type || status !== "connected" || applying}

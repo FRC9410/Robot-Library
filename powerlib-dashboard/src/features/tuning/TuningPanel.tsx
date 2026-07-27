@@ -541,7 +541,6 @@ export function TuningPanel() {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [rowErrors, setRowErrors] = useState<Record<string, string | null>>({});
   const [applying, setApplying] = useState(false);
-  const [selectedSearchOpen, setSelectedSearchOpen] = useState(false);
   const [selectedSearchTerm, setSelectedSearchTerm] = useState("");
   const [expandedSections, setExpandedSections] = useState<ExpandedSections>({
     subsystem: true,
@@ -665,16 +664,6 @@ export function TuningPanel() {
   function updateDraft(topicName: string, draft: string) {
     setDrafts((current) => ({ ...current, [topicName]: draft }));
     setRowErrors((current) => ({ ...current, [topicName]: null }));
-  }
-
-  function toggleSelectedSearch() {
-    setSelectedSearchOpen((current) => {
-      const nextOpen = !current;
-      if (!nextOpen) {
-        setSelectedSearchTerm("");
-      }
-      return nextOpen;
-    });
   }
 
   function updateExpandedSection(kind: TuningOwnerKind, expanded: boolean) {
@@ -865,15 +854,6 @@ export function TuningPanel() {
                       variant="outlined"
                     />
                   )}
-                  <IconButton
-                    aria-label={`${selectedSearchOpen ? "Close" : "Search"} selected tunables`}
-                    color={selectedSearchOpen || selectedSearchTerm.trim().length > 0 ? "primary" : "default"}
-                    disabled={selectedTopics.length === 0}
-                    size="small"
-                    onClick={toggleSelectedSearch}
-                  >
-                    <SearchIcon fontSize="small" />
-                  </IconButton>
                   <Button
                     disabled={status !== "connected" || applying || selectedPendingTopics.length === 0}
                     onClick={() => void applyPendingChanges()}
@@ -895,17 +875,6 @@ export function TuningPanel() {
                 </Stack>
               </Stack>
 
-              {selectedSearchOpen && (
-                <TextField
-                  autoFocus
-                  fullWidth
-                  placeholder="Search selected tunables"
-                  size="small"
-                  value={selectedSearchTerm}
-                  onChange={(event) => setSelectedSearchTerm(event.target.value)}
-                />
-              )}
-
               <Alert severity={tuningModeEnabled ? "warning" : "info"} variant="outlined">
                 {tuningModeEnabled
                   ? "Tuning mode is on: applied values can change subsystem gains and generated command targets live."
@@ -914,6 +883,15 @@ export function TuningPanel() {
                   ? ` Requested mode is ${tuningModeRequested ? "on" : "off"}; waiting for robot acknowledgement.`
                   : ""}
               </Alert>
+
+              <TextField
+                fullWidth
+                disabled={selectedTopics.length === 0}
+                placeholder="Search selected tunables"
+                size="small"
+                value={selectedSearchTerm}
+                onChange={(event) => setSelectedSearchTerm(event.target.value)}
+              />
               {selectionError && (
                 <Alert severity="error" onClose={() => setSelectionError(null)}>
                   {selectionError}
