@@ -773,9 +773,11 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
                           <Stack spacing={1}>
                             <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
                               <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                                <Typography sx={{ fontWeight: 800, overflowWrap: "anywhere" }}>
-                                  {getTuningVariableLabel(variable)}
-                                </Typography>
+                              <Typography
+                                sx={{ fontWeight: 800, overflowWrap: "break-word", whiteSpace: "normal", wordBreak: "normal" }}
+                              >
+                                {getTuningVariableLabel(variable)}
+                              </Typography>
                               </Box>
                               <Chip
                                 color={variable.topic ? "success" : "warning"}
@@ -793,17 +795,28 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
                               }}
                             >
                               <Typography
-                                noWrap
                                 color="text.secondary"
-                                sx={{ flex: "1 1 auto", minWidth: 0 }}
+                                sx={{
+                                  flex: "1 1 auto",
+                                  minWidth: 0,
+                                  overflowWrap: "break-word",
+                                  whiteSpace: "normal",
+                                  wordBreak: "normal"
+                                }}
                                 variant="caption"
                               >
                                 {getTuningOwnerLabel(variable)}
                               </Typography>
                               <Typography
-                                noWrap
                                 color="text.secondary"
-                                sx={{ flex: "0 0 auto" }}
+                                sx={{
+                                  flex: "0 1 auto",
+                                  minWidth: 0,
+                                  overflowWrap: "break-word",
+                                  textAlign: "right",
+                                  whiteSpace: "normal",
+                                  wordBreak: "normal"
+                                }}
                                 variant="caption"
                               >
                                 {variable.topic ? `Live: ${formatRobotMetricValue(variable.topic.value)}` : "not published"}

@@ -259,11 +259,17 @@ function TunableVariableRow({
       }}
     >
       <Stack spacing={0.25} sx={{ gridArea: "label", minWidth: 0 }}>
-        <Typography sx={{ fontFamily: "monospace", fontWeight: 800, overflowWrap: "anywhere" }}>
+        <Typography
+          sx={{ fontFamily: "monospace", fontWeight: 800, overflowWrap: "break-word", whiteSpace: "normal", wordBreak: "normal" }}
+        >
           {displayName}
         </Typography>
         {parsed && (
-          <Typography color="text.secondary" sx={{ overflowWrap: "anywhere" }} variant="caption">
+          <Typography
+            color="text.secondary"
+            sx={{ overflowWrap: "break-word", whiteSpace: "normal", wordBreak: "normal" }}
+            variant="caption"
+          >
             {getOwnerLabel(parsed.kind)}: {parsed.ownerName}
           </Typography>
         )}
@@ -336,10 +342,17 @@ function TuningSidebarTopicRow({
         onChange={(event) => onToggle(topic.name, event.target.checked)}
       />
       <Stack spacing={0.15} sx={{ minWidth: 0 }}>
-        <Typography noWrap variant="body2" sx={{ fontFamily: "monospace", fontWeight: 800 }}>
+        <Typography
+          variant="body2"
+          sx={{ fontFamily: "monospace", fontWeight: 800, overflowWrap: "break-word", whiteSpace: "normal", wordBreak: "normal" }}
+        >
           {getVariableDisplayName(topic)}
         </Typography>
-        <Typography noWrap color="text.secondary" variant="caption" sx={{ fontFamily: "monospace" }}>
+        <Typography
+          color="text.secondary"
+          variant="caption"
+          sx={{ fontFamily: "monospace", overflowWrap: "break-word", whiteSpace: "normal", wordBreak: "normal" }}
+        >
           {formatSidebarValue(topic)}
         </Typography>
       </Stack>
@@ -386,7 +399,9 @@ function TuningSidebar({
           return (
             <Box key={getOwnerKey(group)}>
               <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 0.75, minWidth: 0 }}>
-                <Typography noWrap sx={{ flexGrow: 1, fontWeight: 900 }}>
+                <Typography
+                  sx={{ flexGrow: 1, fontWeight: 900, overflowWrap: "break-word", whiteSpace: "normal", wordBreak: "normal" }}
+                >
                   {group.ownerName}
                 </Typography>
                 <Chip label={group.topics.length} size="small" variant="outlined" />
