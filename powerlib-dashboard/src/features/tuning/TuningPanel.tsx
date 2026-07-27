@@ -7,11 +7,13 @@ import {
   CardContent,
   Checkbox,
   Chip,
+  IconButton,
   Stack,
   TextField,
   Typography
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import SearchIcon from "@mui/icons-material/Search";
 import type { NtPrimitive, NtTopicSnapshot, NtTopicType } from "../../networktables/nt4Client";
 import { SaveTunedValuesDialog } from "../networktables/SaveTunedValuesDialog";
 import { useNetworkTables } from "../networktables/NetworkTablesContext";
@@ -174,6 +176,30 @@ function buildOwnerGroups(tunableTopics: NtTopicSnapshot[]) {
   };
 }
 
+function topicMatchesSearch(topic: NtTopicSnapshot, normalizedSearchTerm: string) {
+  const parsed = parseTunableTopic(topic);
+  return (
+    getVariableDisplayName(topic).toLowerCase().includes(normalizedSearchTerm) ||
+    (parsed?.variableKey.toLowerCase().includes(normalizedSearchTerm) ?? false)
+  );
+}
+
+function filterOwnerGroups(owners: TuningOwnerGroup[], searchTerm: string) {
+  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+  if (!normalizedSearchTerm) {
+    return owners;
+  }
+
+  return owners.flatMap((owner) => {
+    if (owner.ownerName.toLowerCase().includes(normalizedSearchTerm)) {
+      return [owner];
+    }
+
+    const matchingTopics = owner.topics.filter((topic) => topicMatchesSearch(topic, normalizedSearchTerm));
+    return matchingTopics.length > 0 ? [{ ...owner, topics: matchingTopics }] : [];
+  });
+}
+
 function TunableVariableRow({
   disabled,
   draft,
@@ -293,11 +319,22 @@ function TuningSidebar({
   selectedTopicNames,
   subsystemOwners
 }: TuningSidebarProps) {
-  function renderOwnerList(kind: TuningOwnerKind, owners: TuningOwnerGroup[]) {
+  const [searchOpen, setSearchOpen] = useState<ExpandedSections>({
+    subsystem: false,
+    command: false
+  });
+  const [searchTerms, setSearchTerms] = useState<Record<TuningOwnerKind, string>>({
+    subsystem: "",
+    command: ""
+  });
+
+  function renderOwnerList(kind: TuningOwnerKind, owners: TuningOwnerGroup[], searching: boolean) {
     if (owners.length === 0) {
       return (
         <Typography color="text.secondary" sx={{ py: 2, textAlign: "center" }}>
-          No {kind === "subsystem" ? "subsystem" : "command"} variables yet.
+          {searching
+            ? `No matching ${kind === "subsystem" ? "subsystem" : "command"} variables.`
+            : `No ${kind === "subsystem" ? "subsystem" : "command"} variables yet.`}
         </Typography>
       );
     }
@@ -334,9 +371,23 @@ function TuningSidebar({
     );
   }
 
+  function toggleSearch(kind: TuningOwnerKind) {
+    const sectionWasExpanded = expandedSections[kind];
+    onToggleSection(kind, true);
+    setSearchOpen((current) => {
+      const nextOpen = !sectionWasExpanded || !current[kind];
+      if (!nextOpen) {
+        setSearchTerms((terms) => ({ ...terms, [kind]: "" }));
+      }
+      return { ...current, [kind]: nextOpen };
+    });
+  }
+
   function renderSection(kind: TuningOwnerKind, title: string, itemName: string, owners: TuningOwnerGroup[]) {
     const expanded = expandedSections[kind];
-    const variableCount = owners.reduce((count, owner) => count + owner.topics.length, 0);
+    const searchTerm = searchTerms[kind];
+    const visibleOwners = filterOwnerGroups(owners, searchTerm);
+    const searching = searchTerm.trim().length > 0;
 
     return (
       <Box
@@ -352,33 +403,56 @@ function TuningSidebar({
           overflow: "hidden"
         }}
       >
-        <Button
+        <Box
           aria-expanded={expanded}
-          color="inherit"
-          fullWidth
+          role="button"
+          tabIndex={0}
           onClick={() => onToggleSection(kind, true)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onToggleSection(kind, true);
+            }
+          }}
           sx={{
-            borderRadius: 0,
+            alignItems: "center",
+            cursor: "pointer",
+            display: "flex",
             flexShrink: 0,
             justifyContent: "space-between",
             minHeight: 56,
             px: 1.5,
+            py: 0.75,
             textAlign: "left",
-            textTransform: "none"
+            "&:hover": {
+              bgcolor: "action.hover"
+            }
           }}
         >
           <Stack direction="row" spacing={1} sx={{ alignItems: "center", minWidth: 0 }}>
             <Typography sx={{ fontWeight: 800 }}>{title}</Typography>
             <Chip label={`${owners.length} ${itemName}${owners.length === 1 ? "" : "s"}`} size="small" />
-            <Chip label={`${variableCount} variable${variableCount === 1 ? "" : "s"}`} size="small" variant="outlined" />
           </Stack>
-          <ExpandMoreIcon
-            sx={{
-              transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
-              transition: "transform 160ms ease"
-            }}
-          />
-        </Button>
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+            <IconButton
+              aria-label={`${searchOpen[kind] ? "Close" : "Search"} ${title.toLowerCase()}`}
+              color={searchOpen[kind] || searching ? "primary" : "default"}
+              size="small"
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleSearch(kind);
+              }}
+            >
+              <SearchIcon fontSize="small" />
+            </IconButton>
+            <ExpandMoreIcon
+              sx={{
+                transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
+                transition: "transform 160ms ease"
+              }}
+            />
+          </Stack>
+        </Box>
         {expanded && (
           <Box
             sx={{
@@ -390,7 +464,20 @@ function TuningSidebar({
               p: 1.25
             }}
           >
-            {renderOwnerList(kind, owners)}
+            {searchOpen[kind] && (
+              <TextField
+                autoFocus
+                fullWidth
+                placeholder={`Search ${title.toLowerCase()} or variables`}
+                size="small"
+                sx={{ mb: 1.25 }}
+                value={searchTerm}
+                onChange={(event) =>
+                  setSearchTerms((current) => ({ ...current, [kind]: event.target.value }))
+                }
+              />
+            )}
+            {renderOwnerList(kind, visibleOwners, searching)}
           </Box>
         )}
       </Box>
