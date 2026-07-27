@@ -1,8 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
   Alert,
   Box,
   Button,
@@ -337,15 +334,12 @@ function TuningSidebar({
     );
   }
 
-  function renderSection(kind: TuningOwnerKind, title: string, owners: TuningOwnerGroup[]) {
+  function renderSection(kind: TuningOwnerKind, title: string, itemName: string, owners: TuningOwnerGroup[]) {
     const expanded = expandedSections[kind];
     const variableCount = owners.reduce((count, owner) => count + owner.topics.length, 0);
 
     return (
-      <Accordion
-        disableGutters
-        expanded={expanded}
-        onChange={(_, nextExpanded) => onToggleSection(kind, nextExpanded)}
+      <Box
         sx={{
           bgcolor: "background.paper",
           border: "1px solid",
@@ -355,76 +349,58 @@ function TuningSidebar({
           flex: expanded ? "1 1 0" : "0 0 auto",
           flexDirection: "column",
           minHeight: 0,
-          overflow: "hidden",
-          "&:before": {
-            display: "none"
-          },
-          "&.Mui-expanded": {
-            m: 0
-          },
-          "& .MuiCollapse-root": {
-            display: expanded ? "flex" : undefined,
-            flex: expanded ? "1 1 auto" : undefined,
-            flexDirection: "column",
-            minHeight: 0,
-            overflow: "hidden"
-          },
-          "& .MuiCollapse-wrapper": {
-            display: "flex",
-            flex: "1 1 auto",
-            flexDirection: "column",
-            minHeight: 0
-          },
-          "& .MuiCollapse-wrapperInner": {
-            display: "flex",
-            flex: "1 1 auto",
-            flexDirection: "column",
-            minHeight: 0
-          }
+          overflow: "hidden"
         }}
       >
-        <AccordionSummary
-          expandIcon={<ExpandMoreIcon />}
+        <Button
+          aria-expanded={expanded}
+          color="inherit"
+          fullWidth
+          onClick={() => onToggleSection(kind, true)}
           sx={{
+            borderRadius: 0,
             flexShrink: 0,
-            minHeight: 54,
-            "&.Mui-expanded": {
-              minHeight: 54
-            },
-            "& .MuiAccordionSummary-content": {
-              my: 1.25
-            },
-            "& .MuiAccordionSummary-content.Mui-expanded": {
-              my: 1.25
-            }
+            justifyContent: "space-between",
+            minHeight: 56,
+            px: 1.5,
+            textAlign: "left",
+            textTransform: "none"
           }}
         >
           <Stack direction="row" spacing={1} sx={{ alignItems: "center", minWidth: 0 }}>
             <Typography sx={{ fontWeight: 800 }}>{title}</Typography>
-            <Chip label={`${owners.length} owner${owners.length === 1 ? "" : "s"}`} size="small" />
+            <Chip label={`${owners.length} ${itemName}${owners.length === 1 ? "" : "s"}`} size="small" />
             <Chip label={`${variableCount} variable${variableCount === 1 ? "" : "s"}`} size="small" variant="outlined" />
           </Stack>
-        </AccordionSummary>
-        <AccordionDetails
-          sx={{
-            borderTop: "1px solid",
-            borderColor: "divider",
-            flex: "1 1 auto",
-            minHeight: 0,
-            overflowY: "auto",
-            p: 1.25
-          }}
-        >
-          {renderOwnerList(kind, owners)}
-        </AccordionDetails>
-      </Accordion>
+          <ExpandMoreIcon
+            sx={{
+              transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
+              transition: "transform 160ms ease"
+            }}
+          />
+        </Button>
+        {expanded && (
+          <Box
+            sx={{
+              borderTop: "1px solid",
+              borderColor: "divider",
+              flex: "1 1 auto",
+              minHeight: 0,
+              overflowY: "auto",
+              p: 1.25
+            }}
+          >
+            {renderOwnerList(kind, owners)}
+          </Box>
+        )}
+      </Box>
     );
   }
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", minHeight: 0, overflow: "hidden" }}>
-      {renderSection("subsystem", "Subsystems", subsystemOwners)}
-      {renderSection("command", "Commands", commandOwners)}
+      {renderSection("subsystem", "Subsystems", "subsystem", subsystemOwners)}
+      {renderSection("command", "Commands", "command", commandOwners)}
     </Box>
   );
 }
