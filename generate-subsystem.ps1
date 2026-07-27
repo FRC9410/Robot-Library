@@ -500,15 +500,59 @@ function New-DefaultSwerveConfig {
     }
 }
 
+function Test-IsJsonObject {
+    param([AllowNull()]$Value)
+
+    return $null -ne $Value -and
+        $Value -isnot [array] -and
+        $Value -is [System.Management.Automation.PSCustomObject]
+}
+
+function Get-ObjectProperty {
+    param(
+        [AllowNull()]$Object,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    if ($null -eq $Object) {
+        return $null
+    }
+
+    return $Object.PSObject.Properties[$Name]
+}
+
+function Set-ObjectProperty {
+    param(
+        [Parameter(Mandatory = $true)]$Object,
+        [Parameter(Mandatory = $true)][string]$Name,
+        $Value
+    )
+
+    $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
+}
+
 function Ensure-ObjectProperty {
     param(
         [Parameter(Mandatory = $true)]$Object,
         [Parameter(Mandatory = $true)][string]$Name,
-        [Parameter(Mandatory = $true)]$DefaultValue
+        $DefaultValue
     )
 
-    if (-not ($Object.PSObject.Properties.Name -contains $Name) -or $null -eq $Object.$Name) {
-        $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $DefaultValue -Force
+    $property = Get-ObjectProperty $Object $Name
+    if ($null -eq $property -or $null -eq $property.Value) {
+        Set-ObjectProperty $Object $Name $DefaultValue
+    }
+}
+
+function Ensure-ObjectPropertyObject {
+    param(
+        [Parameter(Mandatory = $true)]$Object,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    $property = Get-ObjectProperty $Object $Name
+    if ($null -eq $property -or -not (Test-IsJsonObject $property.Value)) {
+        Set-ObjectProperty $Object $Name ([pscustomobject]@{})
     }
 }
 
@@ -516,11 +560,11 @@ function Ensure-SwerveConfig {
     param([Parameter(Mandatory = $true)]$Document)
 
     $defaults = New-DefaultSwerveConfig
-    Ensure-ObjectProperty $Document "swerve" ([pscustomobject]@{})
-    Ensure-ObjectProperty $Document.swerve "driver" ([pscustomobject]@{})
-    Ensure-ObjectProperty $Document.swerve "requests" ([pscustomobject]@{})
-    Ensure-ObjectProperty $Document.swerve "driveToPoint" ([pscustomobject]@{})
-    Ensure-ObjectProperty $Document.swerve "heading" ([pscustomobject]@{})
+    Ensure-ObjectPropertyObject $Document "swerve"
+    Ensure-ObjectPropertyObject $Document.swerve "driver"
+    Ensure-ObjectPropertyObject $Document.swerve "requests"
+    Ensure-ObjectPropertyObject $Document.swerve "driveToPoint"
+    Ensure-ObjectPropertyObject $Document.swerve "heading"
 
     Ensure-ObjectProperty $Document.swerve.driver "maxSpeedCoefficient" $defaults.driver.maxSpeedCoefficient
     Ensure-ObjectProperty $Document.swerve.driver "velocityScale" $defaults.driver.velocityScale
@@ -555,9 +599,10 @@ function Read-SubsystemDocument {
     }
 
     $document = Get-Content -Path $Path -Raw | ConvertFrom-Json
-    if (-not ($document.PSObject.Properties.Name -contains "subsystems")) {
-        $document | Add-Member -MemberType NoteProperty -Name subsystems -Value @()
+    if (-not (Test-IsJsonObject $document)) {
+        $document = [pscustomobject]@{}
     }
+    Ensure-ObjectProperty $document "subsystems" (@())
     Ensure-SwerveConfig $document | Out-Null
 
     $document.subsystems = @($document.subsystems)
@@ -621,10 +666,11 @@ function Get-SwerveConfigValue {
 
     $current = $SwerveConfig
     foreach ($segment in $Path) {
-        if ($null -eq $current -or -not ($current.PSObject.Properties.Name -contains $segment)) {
+        $property = Get-ObjectProperty $current $segment
+        if ($null -eq $property) {
             return $DefaultValue
         }
-        $current = $current.$segment
+        $current = $property.Value
     }
 
     if ($null -eq $current) {
