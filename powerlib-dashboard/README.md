@@ -48,7 +48,7 @@ npm start        Run the built Electron app.
 
 ## Publish The App
 
-The GitHub installer downloads this source into the robot project and runs `npm install`. It does not ship the compiled app because the packaged output is too large for normal repository pushes.
+The GitHub installer downloads this source into the robot project, runs `npm ci` using the dependency lockfile, and builds the app. Installation fails if dependency installation or the build fails. It does not ship the compiled app because the packaged output is too large for normal repository pushes.
 
 From an installed robot project, start Power Tool with:
 

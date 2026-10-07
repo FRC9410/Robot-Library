@@ -155,7 +155,7 @@ vendor dependencies
 Power Tool source, npm dependencies, and scripts
 ```
 
-The Power Tool option downloads the app source, runs `npm install`, builds the app, and writes the run/update/generation scripts. Updating Power Tool refreshes those scripts and project-local skills too. PowerLib skills are installed to the robot project's root-level `skills/` directory.
+The Power Tool option downloads the app source, runs `npm ci` using the committed dependency lockfile, builds the app, and writes the run/update/generation scripts. An npm or build failure fails the install instead of reporting success without a launcher. Updating Power Tool refreshes those scripts and project-local skills too. PowerLib skills are installed to the robot project's root-level `skills/` directory.
 
 Set `-PpowerlibInteractive=false` to skip prompts and use the flag/default values directly.
 
@@ -165,7 +165,7 @@ To skip the complete PowerLib install:
 -PpowerlibInstall=false
 ```
 
-To skip the Power Tool download/npm install:
+To skip the Power Tool installation:
 
 ```powershell
 -PpowerlibInstallDashboard=false
@@ -194,7 +194,7 @@ Or:
 powershell -ExecutionPolicy Bypass -File .\power-tool\scripts\power-tool.ps1
 ```
 
-The Power Tool source stays in the robot project so it can be run or edited locally. The installer builds the app once, then the launchers run the built Electron app with `npm start`. Its `node_modules` folder is created by `npm install` and should not be committed.
+The Power Tool source stays in the robot project so it can be run or edited locally. The installer builds the app once, then the launchers run the built Electron app with `npm start`. Its `node_modules` folder is created by `npm ci` and should not be committed.
 
 Use `Update Power Tool` inside the app to download the latest Power Tool source, refresh the scripts and project-local skills, reinstall npm dependencies, and restart the app.
 

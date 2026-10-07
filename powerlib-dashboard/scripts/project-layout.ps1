@@ -56,7 +56,21 @@ function Reset-PowerToolAppFiles {
 function Copy-PowerToolAppFiles {
     param([string]$Source, [string]$Destination)
     foreach ($item in Get-ChildItem -LiteralPath $Source -Force) {
-        if ($item.Name -in @('generated', 'scripts')) { continue }
+        if ($item.Name -in @('generated', 'scripts', 'node_modules', 'dist-electron', 'dist-renderer')) { continue }
         Copy-Item -LiteralPath $item.FullName -Destination $Destination -Recurse -Force
+    }
+}
+
+function Invoke-PowerToolNpm {
+    param([Parameter(Mandatory = $true)][string[]]$Arguments)
+    $isWindowsHost = [System.Environment]::OSVersion.Platform -eq 'Win32NT'
+    $commandName = if ($isWindowsHost) { 'npm.cmd' } else { 'npm' }
+    $npmCommand = Get-Command $commandName -CommandType Application -ErrorAction Stop
+    # npm warnings on stderr must not terminate Windows PowerShell before npm finishes.
+    $ErrorActionPreference = 'Continue'
+    $PSNativeCommandUseErrorActionPreference = $false
+    & $npmCommand.Source @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "npm $($Arguments -join ' ') failed with exit code $LASTEXITCODE."
     }
 }

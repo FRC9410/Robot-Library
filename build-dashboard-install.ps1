@@ -159,17 +159,11 @@ try {
     try {
         if (-not $SkipNpmInstall) {
             Write-Host "Installing Power Tool npm dependencies..."
-            npm install
-            if ($LASTEXITCODE -ne 0) {
-                throw "npm install failed with exit code $LASTEXITCODE."
-            }
+            Invoke-PowerToolNpm -Arguments @('ci')
         }
 
         Write-Host "Building Power Tool..."
-        npm run build
-        if ($LASTEXITCODE -ne 0) {
-            throw "npm run build failed with exit code $LASTEXITCODE."
-        }
+        Invoke-PowerToolNpm -Arguments @('run', 'build')
     } finally {
         Pop-Location
     }

@@ -638,7 +638,7 @@ def installDashboardTools = { Project project ->
 
         runCommand(project.rootDir, installDashboardCommand)
     } catch (Exception exception) {
-        logger.warn("Skipped Power Tool install: ${exception.message}")
+        throw new GradleException('Power Tool installation failed. See the npm/build output above for details.', exception)
     } finally {
         if (dashboardInstallScript.exists() && !dashboardInstallScript.delete()) {
             dashboardInstallScript.deleteOnExit()
@@ -708,13 +708,13 @@ gradle.projectsLoaded {
                 List<File> backups = []
                 boolean keepBackups = findBooleanProperty(project, keepBackupsPropertyName, false)
                 boolean useLatestVendordeps = findBooleanProperty(project, latestVendordepsPropertyName, false)
-                boolean installPowerLib = findInstallChoice(project, installPowerLibPropertyName, 'PowerLib install?', true)
+                boolean installPowerLib = findInstallChoice(project, installPowerLibPropertyName, 'Install PowerLib?', true)
                 boolean installLib = findBooleanProperty(project, installLibPropertyName, installPowerLib)
                 boolean installTemplates = findBooleanProperty(project, installTemplatesPropertyName, installPowerLib)
                 boolean shouldInstallSkills = findBooleanProperty(project, installSkillsPropertyName, installPowerLib)
                 boolean installVendordeps = findInstallChoice(project, installVendordepsPropertyName, 'Install vendor dependencies?', true)
                 boolean installTools = findBooleanProperty(project, installToolsPropertyName, true)
-                boolean installDashboard = installTools && findInstallChoice(project, installDashboardPropertyName, 'Download Power Tool source and run npm install?', true)
+                boolean installDashboard = installTools && findInstallChoice(project, installDashboardPropertyName, 'Install Power Tool?', true)
                 boolean vendordepsOnly = installVendordeps && !installLib && !installTemplates && !installDashboard && !shouldInstallSkills
                 boolean priorPowerLibInstall = hasPriorPowerLibInstall(project)
 
