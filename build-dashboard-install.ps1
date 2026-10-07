@@ -91,6 +91,8 @@ function Stop-PowerToolProcesses {
     $toolRootPrefix = "$resolvedToolRoot\"
 
     $processes = Get-CimInstance Win32_Process | Where-Object {
+        # The Gradle and PowerShell installers also reference power-tool/scripts.
+        $isAppProcess = $_.Name -in @('electron.exe', 'node.exe')
         $executableMatches = $false
         if (-not [string]::IsNullOrWhiteSpace($_.ExecutablePath)) {
             $executablePath = [System.IO.Path]::GetFullPath($_.ExecutablePath)
@@ -101,7 +103,7 @@ function Stop-PowerToolProcesses {
         $commandLineMatches = -not [string]::IsNullOrWhiteSpace($_.CommandLine) -and
             $_.CommandLine.IndexOf($resolvedToolRoot, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
 
-        $_.ProcessId -ne $PID -and ($executableMatches -or $commandLineMatches)
+        $isAppProcess -and $_.ProcessId -ne $PID -and ($executableMatches -or $commandLineMatches)
     }
 
     foreach ($process in @($processes)) {
