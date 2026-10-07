@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Box, Button, Card, CardContent, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton, MenuItem, Select, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Button, Card, CardContent, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, MenuItem, Select, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import RefreshIcon from "@mui/icons-material/Refresh";
@@ -121,22 +121,16 @@ export function ConstantsPanel({ active }: { active: boolean }) {
         <CardContent sx={{ height: "100%", overflowY: "auto" }}>
           <Stack spacing={2}>
             <Button fullWidth startIcon={loading ? <CircularProgress size={18} /> : <RefreshIcon />} variant="outlined" disabled={loading || saving} onClick={() => hasDrafts ? setDiscardOpen(true) : void refresh()}>Refresh</Button>
-            <Divider />
-            <Typography variant="subtitle2" color="text.secondary">Subsystem Constants</Typography>
-            {files.filter((file) => file.kind === "subsystem").length === 0 && <Typography variant="body2" color="text.secondary">Generated subsystems will appear here after they are created.</Typography>}
-            {(["subsystem", "robot"] as const).map((kind) => (
-              <Stack spacing={1} key={kind}>
-                {kind === "robot" && <><Divider /><Typography variant="subtitle2" color="text.secondary">Robot Constants</Typography></>}
-                {files.filter((file) => file.kind === kind).map((file) => (
-                  <Button key={file.id} variant={selectedId === file.id ? "contained" : "outlined"} color={selectedId === file.id ? "primary" : "inherit"} disabled={saving || loading || Boolean(editor)} onClick={() => { setSelectedId(file.id); setMessage(null); setError(null); }} sx={{ justifyContent: "flex-start", minHeight: 64, textAlign: "left", textTransform: "none" }}>
-                    <Stack spacing={0.5} sx={{ minWidth: 0 }}>
-                      <Typography sx={{ fontWeight: 700 }}>{displayName(file)}</Typography>
-                      <Chip size="small" label={file.error ? "Unavailable" : `${file.constants.length} constants`} />
-                    </Stack>
-                  </Button>
-                ))}
-              </Stack>
-            ))}
+            <Stack spacing={1}>
+              {(["subsystem", "robot"] as const).flatMap((kind) => files.filter((file) => file.kind === kind)).map((file) => (
+                <Button key={file.id} variant={selectedId === file.id ? "contained" : "outlined"} color={selectedId === file.id ? "primary" : "inherit"} disabled={saving || loading || Boolean(editor)} onClick={() => { setSelectedId(file.id); setMessage(null); setError(null); }} sx={{ justifyContent: "flex-start", minHeight: 64, textAlign: "left", textTransform: "none" }}>
+                  <Stack spacing={0.5} sx={{ minWidth: 0 }}>
+                    <Typography sx={{ fontWeight: 700 }}>{displayName(file)}</Typography>
+                    <Chip size="small" label={file.error ? "Unavailable" : `${file.constants.length} constants`} />
+                  </Stack>
+                </Button>
+              ))}
+            </Stack>
           </Stack>
         </CardContent>
       </Card>
