@@ -13,7 +13,6 @@ import {
   Typography
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import SearchIcon from "@mui/icons-material/Search";
 import type { NtPrimitive, NtTopicSnapshot, NtTopicType } from "../../networktables/nt4Client";
 import { SaveTunedValuesDialog } from "../networktables/SaveTunedValuesDialog";
@@ -42,8 +41,6 @@ type TuningOwnerGroup = TuningOwner & {
   topics: NtTopicSnapshot[];
 };
 
-type ExpandedSections = Record<TuningOwnerKind, boolean>;
-
 type TunableVariableRowProps = {
   disabled: boolean;
   draft: string;
@@ -54,10 +51,7 @@ type TunableVariableRowProps = {
 };
 
 type TuningSidebarProps = {
-  commandOwners: TuningOwnerGroup[];
-  expandedSections: ExpandedSections;
   getPendingCount: (topics: NtTopicSnapshot[]) => number;
-  onToggleSection: (kind: TuningOwnerKind, expanded: boolean) => void;
   onToggleTopicSelection: (topicName: string, selected: boolean) => void;
   pendingTopicNames: Set<string>;
   selectedTopicNames: Set<string>;
@@ -73,13 +67,6 @@ function getOwnerKey(owner: TuningOwner) {
 
 function getOwnerLabel(kind: TuningOwnerKind) {
   return kind === "subsystem" ? "Subsystem" : "Command";
-}
-
-function toExpandedSections(kind: TuningOwnerKind): ExpandedSections {
-  return {
-    subsystem: kind === "subsystem",
-    command: kind === "command"
-  };
 }
 
 function normalizeSelectedTopicNames(topicNames: string[]) {
@@ -143,46 +130,32 @@ function formatSidebarValue(topic: NtTopicSnapshot) {
   return value.trim().length === 0 ? "unset" : value;
 }
 
-function buildOwnerGroups(tunableTopics: NtTopicSnapshot[]) {
-  const groups: Record<TuningOwnerKind, Map<string, TuningOwnerGroup>> = {
-    subsystem: new Map(),
-    command: new Map()
-  };
+function buildSubsystemGroups(tunableTopics: NtTopicSnapshot[]) {
+  const groups = new Map<string, TuningOwnerGroup>();
 
   tunableTopics.forEach((topic) => {
     const parsed = parseTunableTopic(topic);
-    if (!parsed) {
+    if (!parsed || parsed.kind !== "subsystem") {
       return;
     }
 
-    const ownerGroups = groups[parsed.kind];
-    const group = ownerGroups.get(parsed.ownerName) ?? {
+    const group = groups.get(parsed.ownerName) ?? {
       kind: parsed.kind,
       ownerName: parsed.ownerName,
       topics: []
     };
     group.topics.push(topic);
-    ownerGroups.set(parsed.ownerName, group);
+    groups.set(parsed.ownerName, group);
   });
 
-  return {
-    subsystems: [...groups.subsystem.values()]
+  return [...groups.values()]
       .map((group) => ({
         ...group,
         topics: [...group.topics].sort((left, right) =>
           getVariableDisplayName(left).localeCompare(getVariableDisplayName(right))
         )
       }))
-      .sort((left, right) => left.ownerName.localeCompare(right.ownerName)),
-    commands: [...groups.command.values()]
-      .map((group) => ({
-        ...group,
-        topics: [...group.topics].sort((left, right) =>
-          getVariableDisplayName(left).localeCompare(getVariableDisplayName(right))
-        )
-      }))
-      .sort((left, right) => left.ownerName.localeCompare(right.ownerName))
-  };
+      .sort((left, right) => left.ownerName.localeCompare(right.ownerName));
 }
 
 function topicMatchesSearch(topic: NtTopicSnapshot, normalizedSearchTerm: string) {
@@ -362,31 +335,22 @@ function TuningSidebarTopicRow({
 }
 
 function TuningSidebar({
-  commandOwners,
-  expandedSections,
   getPendingCount,
-  onToggleSection,
   onToggleTopicSelection,
   pendingTopicNames,
   selectedTopicNames,
   subsystemOwners
 }: TuningSidebarProps) {
-  const [searchOpen, setSearchOpen] = useState<ExpandedSections>({
-    subsystem: false,
-    command: false
-  });
-  const [searchTerms, setSearchTerms] = useState<Record<TuningOwnerKind, string>>({
-    subsystem: "",
-    command: ""
-  });
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
-  function renderOwnerList(kind: TuningOwnerKind, owners: TuningOwnerGroup[], searching: boolean) {
+  function renderOwnerList(owners: TuningOwnerGroup[], searching: boolean) {
     if (owners.length === 0) {
       return (
         <Typography color="text.secondary" sx={{ py: 2, textAlign: "center" }}>
           {searching
-            ? `No matching ${kind === "subsystem" ? "subsystem" : "command"} variables.`
-            : `No ${kind === "subsystem" ? "subsystem" : "command"} variables yet.`}
+            ? "No matching subsystem variables."
+            : "No subsystem variables yet."}
         </Typography>
       );
     }
@@ -425,22 +389,13 @@ function TuningSidebar({
     );
   }
 
-  function toggleSearch(kind: TuningOwnerKind) {
-    const sectionWasExpanded = expandedSections[kind];
-    onToggleSection(kind, true);
-    setSearchOpen((current) => {
-      const nextOpen = !sectionWasExpanded || !current[kind];
-      if (!nextOpen) {
-        setSearchTerms((terms) => ({ ...terms, [kind]: "" }));
-      }
-      return { ...current, [kind]: nextOpen };
-    });
+  function toggleSearch() {
+    if (searchOpen) setSearchTerm("");
+    setSearchOpen(!searchOpen);
   }
 
-  function renderSection(kind: TuningOwnerKind, title: string, itemName: string, owners: TuningOwnerGroup[]) {
-    const expanded = expandedSections[kind];
-    const searchTerm = searchTerms[kind];
-    const visibleOwners = filterOwnerGroups(owners, searchTerm);
+  function renderSection() {
+    const visibleOwners = filterOwnerGroups(subsystemOwners, searchTerm);
     const searching = searchTerm.trim().length > 0;
 
     return (
@@ -451,63 +406,42 @@ function TuningSidebar({
           borderColor: "divider",
           borderRadius: 1.5,
           display: "flex",
-          flex: expanded ? "1 1 0" : "0 0 auto",
+          flex: "1 1 0",
           flexDirection: "column",
           minHeight: 0,
           overflow: "hidden"
         }}
       >
         <Box
-          aria-expanded={expanded}
-          role="button"
-          tabIndex={0}
-          onClick={() => onToggleSection(kind, true)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              onToggleSection(kind, true);
-            }
-          }}
           sx={{
             alignItems: "center",
-            cursor: "pointer",
             display: "flex",
             flexShrink: 0,
             justifyContent: "space-between",
             minHeight: 56,
             px: 1.5,
             py: 0.75,
-            textAlign: "left",
-            "&:hover": {
-              bgcolor: "action.hover"
-            }
+            textAlign: "left"
           }}
         >
           <Stack direction="row" spacing={1} sx={{ alignItems: "center", minWidth: 0 }}>
-            <Typography sx={{ fontWeight: 800 }}>{title}</Typography>
-            <Chip label={`${owners.length} ${itemName}${owners.length === 1 ? "" : "s"}`} size="small" />
+            <Typography sx={{ fontWeight: 800 }}>Subsystems</Typography>
+            <Chip label={`${subsystemOwners.length} subsystem${subsystemOwners.length === 1 ? "" : "s"}`} size="small" />
           </Stack>
           <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
             <IconButton
-              aria-label={`${searchOpen[kind] ? "Close" : "Search"} ${title.toLowerCase()}`}
-              color={searchOpen[kind] || searching ? "primary" : "default"}
+              aria-label={`${searchOpen ? "Close" : "Search"} subsystems`}
+              color={searchOpen || searching ? "primary" : "default"}
               size="small"
               onClick={(event) => {
                 event.stopPropagation();
-                toggleSearch(kind);
+                toggleSearch();
               }}
             >
               <SearchIcon fontSize="small" />
             </IconButton>
-            <ExpandMoreIcon
-              sx={{
-                transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
-                transition: "transform 160ms ease"
-              }}
-            />
           </Stack>
         </Box>
-        {expanded && (
           <Box
             sx={{
               borderTop: "1px solid",
@@ -518,30 +452,28 @@ function TuningSidebar({
               p: 1.25
             }}
           >
-            {searchOpen[kind] && (
+            {searchOpen && (
               <TextField
                 autoFocus
                 fullWidth
-                placeholder={`Search ${title.toLowerCase()} or variables`}
+                placeholder="Search subsystems or variables"
                 size="small"
                 sx={{ mb: 1.25 }}
                 value={searchTerm}
                 onChange={(event) =>
-                  setSearchTerms((current) => ({ ...current, [kind]: event.target.value }))
+                  setSearchTerm(event.target.value)
                 }
               />
             )}
-            {renderOwnerList(kind, visibleOwners, searching)}
+            {renderOwnerList(visibleOwners, searching)}
           </Box>
-        )}
       </Box>
     );
   }
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", minHeight: 0, overflow: "hidden" }}>
-      {renderSection("subsystem", "Subsystems", "subsystem", subsystemOwners)}
-      {renderSection("command", "Commands", "command", commandOwners)}
+      {renderSection()}
     </Box>
   );
 }
@@ -557,19 +489,14 @@ export function TuningPanel() {
   const [rowErrors, setRowErrors] = useState<Record<string, string | null>>({});
   const [applying, setApplying] = useState(false);
   const [selectedSearchTerm, setSelectedSearchTerm] = useState("");
-  const [expandedSections, setExpandedSections] = useState<ExpandedSections>({
-    subsystem: true,
-    command: false
-  });
   const lastTopicDraftsRef = useRef<Record<string, string>>({});
   const selectionSaveSequenceRef = useRef(0);
-  const sidebarSaveSequenceRef = useRef(0);
 
   const tunableTopics = useMemo(() => {
     return topics.filter(isTunableTopic).sort((left, right) => left.name.localeCompare(right.name));
   }, [topics]);
   const tunableTopicMap = useMemo(() => new Map(tunableTopics.map((topic) => [topic.name, topic])), [tunableTopics]);
-  const ownerGroups = useMemo(() => buildOwnerGroups(tunableTopics), [tunableTopics]);
+  const subsystemGroups = useMemo(() => buildSubsystemGroups(tunableTopics), [tunableTopics]);
   const selectedTopicNameSet = useMemo(() => new Set(selectedTopicNames), [selectedTopicNames]);
   const selectedTopics = useMemo(() => {
     return selectedTopicNames
@@ -601,7 +528,6 @@ export function TuningPanel() {
         }
 
         setSelectedTopicNames(normalizeSelectedTopicNames(result.selectedTopics));
-        setExpandedSections(toExpandedSections(result.sidebarExpandedSection));
         setSelectionError(result.error ?? null);
       } catch (caught) {
         if (!active) {
@@ -679,41 +605,6 @@ export function TuningPanel() {
   function updateDraft(topicName: string, draft: string) {
     setDrafts((current) => ({ ...current, [topicName]: draft }));
     setRowErrors((current) => ({ ...current, [topicName]: null }));
-  }
-
-  function updateExpandedSection(kind: TuningOwnerKind, expanded: boolean) {
-    if (!expanded || expandedSections[kind]) {
-      return;
-    }
-
-    setExpandedSections(toExpandedSections(kind));
-    void persistSidebarExpandedSection(kind);
-  }
-
-  async function persistSidebarExpandedSection(kind: TuningOwnerKind) {
-    if (!window.powerlib?.saveTuningSidebarExpandedSection) {
-      return;
-    }
-
-    const saveSequence = sidebarSaveSequenceRef.current + 1;
-    sidebarSaveSequenceRef.current = saveSequence;
-
-    try {
-      const result = await window.powerlib.saveTuningSidebarExpandedSection(kind);
-      if (sidebarSaveSequenceRef.current !== saveSequence) {
-        return;
-      }
-
-      setExpandedSections(toExpandedSections(result.sidebarExpandedSection));
-      setSelectionError(null);
-    } catch (caught) {
-      if (sidebarSaveSequenceRef.current !== saveSequence) {
-        return;
-      }
-
-      const message = caught instanceof Error ? caught.message : String(caught);
-      setSelectionError(`Could not save tuning sidebar state: ${message}`);
-    }
   }
 
   async function persistSelectedTopicNames(nextTopicNames: string[]) {
@@ -832,13 +723,10 @@ export function TuningPanel() {
         }}
       >
         <TuningSidebar
-          commandOwners={ownerGroups.commands}
-          expandedSections={expandedSections}
           getPendingCount={getPendingCount}
           pendingTopicNames={selectedPendingTopicNames}
           selectedTopicNames={selectedTopicNameSet}
-          subsystemOwners={ownerGroups.subsystems}
-          onToggleSection={updateExpandedSection}
+          subsystemOwners={subsystemGroups}
           onToggleTopicSelection={toggleTopicSelection}
         />
 
@@ -892,7 +780,7 @@ export function TuningPanel() {
 
               <Alert severity={tuningModeEnabled ? "warning" : "info"} variant="outlined">
                 {tuningModeEnabled
-                  ? "Tuning mode is on: applied values can change subsystem gains and command targets live."
+                  ? "Tuning mode is on: applied values can change subsystem gains and targets live."
                   : "Tuning mode is off: the robot keeps its last applied values. Further edits are staged until tuning is enabled."}
                 {tuningModeRequestTopic && tuningModeRequested !== tuningModeEnabled
                   ? ` Requested mode is ${tuningModeRequested ? "on" : "off"}; waiting for robot acknowledgement.`
@@ -946,8 +834,8 @@ export function TuningPanel() {
                 )
               ) : (
                 <Alert severity="info" variant="outlined">
-                  Check variables in the sidebar to build your tuning list. Generated subsystem control values and
-                  command values will appear there while robot code is running.
+                  Check variables in the sidebar to build your tuning list. Subsystem variables will appear there
+                  while robot code is running.
                 </Alert>
               )}
             </Stack>

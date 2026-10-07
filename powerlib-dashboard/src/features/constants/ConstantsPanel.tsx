@@ -153,7 +153,7 @@ export function ConstantsPanel({ active }: { active: boolean }) {
               {selected.error ? <Alert severity="warning">{selected.error}</Alert> : <>
                 {rows.length === 0 && <Alert severity="info">No custom constants yet. Add a constant to get started.</Alert>}
                 <TableContainer sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-                  <Table stickyHeader size="small" aria-label="Constants" sx={{ minWidth: 700, "& th, & td": { border: 0 }, "& th": { bgcolor: "background.paper", fontWeight: 700, borderBottom: "1px solid", borderColor: "text.secondary" }, "& td": { verticalAlign: "top", py: 1.5 } }}>
+                  <Table stickyHeader size="small" aria-label="Constants" sx={{ minWidth: 700, "& th, & td": { border: 0 }, "& th": { bgcolor: "background.paper", fontWeight: 700, borderBottom: "1px solid", borderColor: "text.secondary" }, "& td": { verticalAlign: "middle", py: 1.5 } }}>
                     <TableHead><TableRow><TableCell>Name</TableCell><TableCell>Java type</TableCell><TableCell>Value</TableCell><TableCell>Tunable</TableCell><TableCell>Actions</TableCell></TableRow></TableHead>
                     <TableBody>
                       {visibleRows.map((storedRow, index) => {
