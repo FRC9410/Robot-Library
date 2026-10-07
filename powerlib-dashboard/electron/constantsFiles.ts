@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { generatedJsonPath } from "./projectPaths.js";
 
 const customStart = "// POWERLIB CUSTOM CONSTANTS START - DO NOT DELETE";
 const customEnd = "// POWERLIB CUSTOM CONSTANTS END - DO NOT DELETE";
@@ -34,7 +35,7 @@ type ConstantsConfiguration = { version: 1; files: Record<string, { constants: S
 
 async function readConfiguration(robotRoot: string): Promise<ConstantsConfiguration> {
   try {
-    const result = JSON.parse((await fs.readFile(path.join(robotRoot, "powerlib-constants.json"), "utf8")).replace(/^\uFEFF/, ""));
+    const result = JSON.parse((await fs.readFile(await generatedJsonPath(robotRoot, "powerlib-constants.json"), "utf8")).replace(/^\uFEFF/, ""));
     if (result.version !== 1 || !result.files || typeof result.files !== "object" || Array.isArray(result.files)) throw new Error("Invalid powerlib-constants.json configuration.");
     return result;
   } catch (error) {
@@ -118,7 +119,7 @@ function pascalName(name: string) {
 async function targets(robotRoot: string) {
   let document: { subsystems?: Array<{ id?: string; name?: string }> } = {};
   try {
-    document = JSON.parse(await fs.readFile(path.join(robotRoot, "powerlib-subsystems.json"), "utf8"));
+    document = JSON.parse(await fs.readFile(await generatedJsonPath(robotRoot, "powerlib-subsystems.json"), "utf8"));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
@@ -164,7 +165,7 @@ async function readTarget(target: ConstantsTarget, configuration?: ConstantsConf
   } catch (error) {
     const missing = (error as NodeJS.ErrnoException).code === "ENOENT";
     return { ...target, exists: !missing, source, constants: [], error: missing
-      ? target.kind === "subsystem" ? "Run Update Code to generate this constants file." : "Update Robot Templates to install this constants file."
+      ? target.kind === "subsystem" ? "Run Update Code to generate this constants file." : "Run the PowerLib installer to install this constants file."
       : error instanceof Error ? error.message : "Could not read constants." };
   }
 }
@@ -172,7 +173,7 @@ async function readTarget(target: ConstantsTarget, configuration?: ConstantsConf
 export async function readConstantsFiles(robotRoot: string) {
   const configuration = await readConfiguration(robotRoot);
   let swerve: Record<string, Record<string, unknown>> | undefined;
-  try { swerve = JSON.parse(await fs.readFile(path.join(robotRoot, "powerlib-subsystems.json"), "utf8")).swerve; }
+  try { swerve = JSON.parse(await fs.readFile(await generatedJsonPath(robotRoot, "powerlib-subsystems.json"), "utf8")).swerve; }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
   return Promise.all((await targets(robotRoot)).map((target) => readTarget(target, configuration, swerve)));
 }
@@ -322,7 +323,7 @@ async function writeConstantsFile(robotRoot: string, id: string, expectedSource:
   let previousJson: string | undefined;
   let nextJson: string | undefined;
   if (target.id === "robot:Swerve") {
-    jsonPath = path.join(robotRoot, "powerlib-subsystems.json");
+    jsonPath = await generatedJsonPath(robotRoot, "powerlib-subsystems.json");
     try { previousJson = await fs.readFile(jsonPath, "utf8"); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
     const document = JSON.parse(previousJson ?? '{"subsystems":[]}');
     document.swerve ??= {};
@@ -355,7 +356,7 @@ async function writeConstantsFile(robotRoot: string, id: string, expectedSource:
     configuration.files[target.storageKey] = { constants: declarations(content)
       .filter((row) => (target.kind === "robot" || row.custom) && !isNativeSwerveTunable(target, row.name))
       .map(({ name, type, value, custom }) => ({ name, type, value, custom, tunable: isNumericType(type) })) };
-    await replaceFile(path.join(robotRoot, "powerlib-constants.json"), `${JSON.stringify(configuration, null, 2)}\n`);
+    await replaceFile(await generatedJsonPath(robotRoot, "powerlib-constants.json"), `${JSON.stringify(configuration, null, 2)}\n`);
   } catch (error) {
     if (jsonPath && nextJson) {
       if (previousJson === undefined) await fs.unlink(jsonPath); else await replaceFile(jsonPath, previousJson);

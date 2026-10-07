@@ -17,8 +17,8 @@ $tempRoot = Join-Path $installRoot "build\power-tool-source"
 $archivePath = Join-Path $tempRoot "Robot-Library.zip"
 $extractRoot = Join-Path $tempRoot "extract"
 $dashboardOutput = Join-Path $installRoot "power-tool"
-$windowsLauncherPath = Join-Path $installRoot "power-tool.cmd"
 $dashboardScriptsPath = Join-Path $dashboardOutput "scripts"
+$windowsLauncherPath = Join-Path $dashboardScriptsPath "power-tool.cmd"
 $powershellLauncherPath = Join-Path $dashboardScriptsPath "power-tool.ps1"
 $updaterPath = Join-Path $dashboardScriptsPath "update-power-tool.ps1"
 $sourceRootStatePath = Join-Path $installRoot ".powerlib-source-root"
@@ -27,6 +27,7 @@ $legacyDashboardOutput = Join-Path $installRoot "powerlib-dashboard"
 $legacyWindowsLauncherPath = Join-Path $installRoot "powerlib-dashboard.cmd"
 $legacyPowershellLauncherPath = Join-Path $installRoot "powerlib-dashboard.ps1"
 $legacyScriptPaths = @(
+    (Join-Path $installRoot "power-tool.cmd"),
     (Join-Path $installRoot ".robot-library-generate-subsystem.gradle"),
     (Join-Path $installRoot ".robot-library-generate-subsystem.ps1"),
     (Join-Path $installRoot "powerlib-generate-subsystem.cmd"),
@@ -53,6 +54,12 @@ if (-not [string]::IsNullOrWhiteSpace($SourceRoot)) {
 
 function Remove-DirectoryIfExists {
     param([Parameter(Mandatory = $true)][string]$Path)
+
+    $resolvedPath = [System.IO.Path]::GetFullPath($Path)
+    $projectPrefix = [System.IO.Path]::GetFullPath($installRoot).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $resolvedPath.StartsWith($projectPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove a directory outside the robot project: $resolvedPath"
+    }
 
     if (Test-Path $Path) {
         $lastError = $null
@@ -133,15 +140,20 @@ try {
 
         $sourceRoot = Split-Path -Parent $dashboardSource
     }
+    . (Join-Path $dashboardSource 'scripts/project-layout.ps1')
+    Initialize-PowerToolLayout -RobotRoot $installRoot
     Stop-PowerToolProcesses $dashboardOutput
-    Remove-DirectoryIfExists $dashboardOutput
+    Reset-PowerToolAppFiles -ToolRoot $dashboardOutput
     Remove-DirectoryIfExists $legacyDashboardOutput
     Remove-Item -LiteralPath $legacyWindowsLauncherPath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $legacyPowershellLauncherPath -Force -ErrorAction SilentlyContinue
     foreach ($legacyScriptPath in $legacyScriptPaths) {
         Remove-Item -LiteralPath $legacyScriptPath -Force -ErrorAction SilentlyContinue
     }
-    Copy-Item -Path $dashboardSource -Destination $dashboardOutput -Recurse
+    Copy-PowerToolAppFiles -Source $dashboardSource -Destination $dashboardOutput
+    New-Item -ItemType Directory -Force -Path $dashboardScriptsPath | Out-Null
+    Copy-Item -LiteralPath (Join-Path $sourceRoot 'install.ps1') -Destination (Join-Path $dashboardScriptsPath 'install.ps1') -Force
+    Copy-Item -LiteralPath (Join-Path $dashboardSource 'scripts/project-layout.ps1') -Destination (Join-Path $dashboardScriptsPath 'project-layout.ps1') -Force
 
     Push-Location $dashboardOutput
     try {
@@ -165,7 +177,7 @@ try {
     New-Item -ItemType Directory -Force -Path $dashboardScriptsPath | Out-Null
 
     Set-Content -Path $windowsLauncherPath -Encoding ascii -Value '@echo off
-set "TOOL_ROOT=%~dp0power-tool"
+for %%I in ("%~dp0..") do set "TOOL_ROOT=%%~fI"
 set "ELECTRON_EXE=%TOOL_ROOT%\node_modules\electron\dist\electron.exe"
 if exist "%ELECTRON_EXE%" (
   start "" "%ELECTRON_EXE%" "%TOOL_ROOT%"

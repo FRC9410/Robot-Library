@@ -38,7 +38,7 @@ Power Tool:
 
 ```text
 power-tool/
-power-tool.cmd
+power-tool/scripts/power-tool.cmd
 power-tool/scripts/power-tool.ps1
 power-tool/scripts/generate-subsystem.ps1
 power-tool/scripts/powerlib-generate-subsystem.cmd
@@ -95,10 +95,10 @@ powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -Ppowerlib
 powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -PpowerlibInstallVendordeps=false
 
 # Update only vendordeps.
-powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -PpowerlibInstallLib=false -PpowerlibInstallTemplates=false -PpowerlibInstallTools=false
+powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -PpowerlibInstall=false -PpowerlibInstallTools=false
 ```
 
-When run from an interactive terminal, the installer asks at the beginning whether to install each section, including Power Tool and PowerLib skills.
+When run from an interactive terminal, the installer asks whether to install PowerLib, vendor dependencies, and Power Tool. PowerLib includes library files, robot templates, and skills.
 
 The downloaded `.robot-library-install.ps1` deletes itself after the run. Add `-KeepInstaller` if you want to reuse it for repeated update tests.
 
@@ -130,22 +130,19 @@ pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1 -PpowerlibInstal
 pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1 -PpowerlibInstallVendordeps=false
 
 # Update only vendordeps.
-pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1 -PpowerlibInstallLib=false -PpowerlibInstallTemplates=false -PpowerlibInstallTools=false
+pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1 -PpowerlibInstall=false -PpowerlibInstallTools=false
 ```
 
-When run from an interactive terminal, the installer asks at the beginning whether to install each section, including Power Tool and PowerLib skills.
+When run from an interactive terminal, the installer asks whether to install PowerLib, vendor dependencies, and Power Tool. PowerLib includes library files, robot templates, and skills.
 
 ## Install Sections
 
-These flags control which sections the installer updates. They all default to `true`.
+These flags control the three install choices. They default to `true`.
 
 ```text
--PpowerlibInstallLib=true
--PpowerlibInstallTemplates=true
+-PpowerlibInstall=true
 -PpowerlibInstallVendordeps=true
--PpowerlibInstallTools=true
 -PpowerlibInstallDashboard=true
--PpowerlibInstallSkills=true
 -PpowerlibInteractive=true
 -PpowerlibRepoRef=main
 ```
@@ -153,30 +150,33 @@ These flags control which sections the installer updates. They all default to `t
 At the beginning of an interactive install, the installer asks whether to install:
 
 ```text
-PowerLib library files
-robot starter/template files
+PowerLib install (library files, robot templates, and skills)
 vendor dependencies
 Power Tool source, npm dependencies, and scripts
-PowerLib skills
 ```
 
 The Power Tool option downloads the app source, runs `npm install`, builds the app, and writes the run/update/generation scripts. Updating Power Tool refreshes those scripts and project-local skills too. PowerLib skills are installed to the robot project's root-level `skills/` directory.
 
 Set `-PpowerlibInteractive=false` to skip prompts and use the flag/default values directly.
 
-To skip PowerLib tools, including Power Tool and skills, during install or update:
+To skip the complete PowerLib install:
 
 ```powershell
--PpowerlibInstallTools=false
+-PpowerlibInstall=false
 ```
 
-To install tools but skip the Power Tool download/npm install:
+To skip the Power Tool download/npm install:
 
 ```powershell
 -PpowerlibInstallDashboard=false
 ```
 
-To install tools but skip PowerLib skills:
+For targeted updates, `powerlibInstallLib`, `powerlibInstallTemplates`, and
+`powerlibInstallSkills` override individual parts of the PowerLib choice without
+adding prompts. `powerlibInstallTools=false` disables Power Tool; skills follow
+the PowerLib choice independently.
+
+To install PowerLib but skip its skills:
 
 ```powershell
 -PpowerlibInstallSkills=false
@@ -185,7 +185,7 @@ To install tools but skip PowerLib skills:
 To start Power Tool after it is installed:
 
 ```powershell
-.\power-tool.cmd
+.\power-tool\scripts\power-tool.cmd
 ```
 
 Or:
@@ -255,7 +255,7 @@ Windows:
 .\power-tool\scripts\powerlib-generate-subsystem.cmd
 ```
 
-If `powerlib-subsystems.json` already exists, the command first asks whether to update the generated code from that JSON. Answer no to add subsystems interactively instead.
+If `power-tool/generated/powerlib-subsystems.json` already exists, the command first asks whether to update the generated code from that JSON. Answer no to add subsystems interactively instead.
 
 To skip the build check after generation:
 
@@ -273,7 +273,7 @@ The generator script stays in the robot project so you can run it again later. T
 
 By default, generation runs the robot project's `build` task after the prompts finish. Add `-SkipBuild` to skip the build check.
 
-The generator also maintains `powerlib-subsystems.json` in the robot project. Interactive generation adds or updates subsystem entries in that JSON document, then rewrites the generated Java files from the document. After each subsystem, the script asks whether to add another.
+The generator maintains `power-tool/generated/powerlib-subsystems.json`. Interactive generation adds or updates subsystem entries in that JSON document, then rewrites the generated Java files from the document. After each subsystem, the script asks whether to add another. Saved constants and tuning selections also live in `power-tool/generated/`. Root-level files migrate automatically; conflicting root copies are archived in `generated/legacy/`. Installing or updating Power Tool preserves this directory.
 
 Enum prompts show the accepted values in the prompt. For example:
 
@@ -284,7 +284,7 @@ Leader neutral mode (accepted: Brake, Coast) [Brake]
 
 By default, interactive generation skips PID/feedforward tuning and writes zero PID values with empty feedforward optionals. Answer yes to `Configure PID/feedforward values?` when you want to enter `kP`, `kI`, `kD`, `kG`, `kS`, `kV`, and `kA`.
 
-You can edit `powerlib-subsystems.json` directly, then run the generator and answer yes when it asks to update from JSON:
+You can edit `power-tool/generated/powerlib-subsystems.json` directly, then run the generator and answer yes when it asks to update from JSON:
 
 ```powershell
 .\power-tool\scripts\powerlib-generate-subsystem.cmd
@@ -305,7 +305,7 @@ Generated subsystem constants files include a protected custom block:
   // POWERLIB CUSTOM CONSTANTS END - DO NOT DELETE
 ```
 
-Add hand-written constants between those markers. Updates preserve that block while regenerating the subsystem config from `powerlib-subsystems.json`.
+Add hand-written constants between those markers. Updates preserve that block while regenerating the subsystem config from `power-tool/generated/powerlib-subsystems.json`.
 
 Each JSON subsystem has a stable `id`. To rename a subsystem, change its `name` but keep its `id` the same. The update flow uses that id to carry custom constants from the old generated constants file to the renamed one.
 ## Build Check
@@ -317,7 +317,7 @@ By default, the installer runs the robot project's `build` task in a fresh Gradl
 ```
 ## After Install
 
-The `.robot-library-install.ps1` and `.robot-library-install.gradle` files are only needed for the install run. The installer deletes them automatically unless you pass `-KeepInstaller`.
+The initial `.robot-library-install.ps1` is a temporary bootstrap file in the project root. The Gradle installer runs from `power-tool/scripts/.robot-library-install.gradle`. The installer deletes these temporary files automatically unless you pass `-KeepInstaller`. Power Tool's persistent installer, launcher, generator, updater, and update runner all live in `power-tool/scripts/`.
 
 Future installer steps can live in `install.gradle`.
 

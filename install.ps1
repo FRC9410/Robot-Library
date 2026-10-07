@@ -9,7 +9,13 @@ param(
 $ErrorActionPreference = "Stop"
 
 $installRoot = (Get-Location).Path
-$installerPath = Join-Path $installRoot ".robot-library-install.gradle"
+$layoutScript = Join-Path $PSScriptRoot 'project-layout.ps1'
+if (Test-Path -LiteralPath $layoutScript) {
+    . $layoutScript
+    $installRoot = Get-PowerLibRobotRoot
+}
+$scriptsRoot = Join-Path $installRoot "power-tool/scripts"
+$installerPath = Join-Path $scriptsRoot ".robot-library-install.gradle"
 $isWindowsHost = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
 $gradleWrapper = if ($isWindowsHost) { Join-Path $installRoot "gradlew.bat" } else { Join-Path $installRoot "gradlew" }
 $repoRefGradleArg = "-PpowerlibRepoRef=$RepoRef"
@@ -21,6 +27,7 @@ if ([string]::IsNullOrWhiteSpace($InstallerUrl)) {
 if (-not (Test-Path $gradleWrapper)) {
     throw "Could not find Gradle wrapper at $gradleWrapper. Run this from the root of a WPILib robot project."
 }
+New-Item -ItemType Directory -Force -Path $scriptsRoot | Out-Null
 
 $localInstaller = Join-Path $PSScriptRoot "install.gradle"
 if (Test-Path $localInstaller) {
@@ -29,6 +36,7 @@ if (Test-Path $localInstaller) {
     Invoke-WebRequest -Uri $InstallerUrl -OutFile $installerPath
 }
 
+Push-Location -LiteralPath $installRoot
 try {
     if (-not ($GradleArgs | Where-Object { $_ -like "-PpowerlibRepoRef=*" })) {
         $GradleArgs = @($repoRefGradleArg) + @($GradleArgs)
@@ -46,4 +54,5 @@ try {
             Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
         }
     }
+    Pop-Location
 }

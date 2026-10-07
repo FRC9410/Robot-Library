@@ -331,19 +331,16 @@ function AppContent() {
 
   const installSectionLabels: Record<string, string> = {
     lib: "PowerLib library files",
-    templates: "robot templates",
     vendordeps: "vendor dependencies"
   };
 
   const installSectionSuccessMessages: Record<string, string> = {
     lib: "Updated PowerLib library files.",
-    templates: "Updated robot templates. Existing files were preserved when templates already existed.",
     vendordeps: "Updated vendor dependencies."
   };
 
   const installSectionFailureMessages: Record<string, string> = {
     lib: "Could not update PowerLib library files.",
-    templates: "Could not update robot templates.",
     vendordeps: "Could not update vendor dependencies."
   };
 
@@ -362,7 +359,7 @@ function AppContent() {
 
       await window.powerlib.updateInstallSection(section);
       showToast(installSectionSuccessMessages[section] ?? `Updated ${label}.`, "success");
-      if (section === "templates" || section === "lib") {
+      if (section === "lib") {
         await loadSubsystems();
       }
     } catch (caught) {

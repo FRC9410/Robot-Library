@@ -5,7 +5,7 @@ package frc.robot.constants;
  *
  * <p>Phoenix/Tuner X hardware constants stay in {@link TunerConstants}; these values are the driver
  * feel and heading-control defaults that Power Tool can live-tune and then save back to
- * powerlib-subsystems.json.
+ * power-tool/generated/powerlib-subsystems.json.
  */
 public class SwerveConstants {
   public static final double DRIVER_MAX_SPEED_COEFFICIENT = 0.75;

@@ -53,7 +53,7 @@ The GitHub installer downloads this source into the robot project and runs `npm 
 From an installed robot project, start Power Tool with:
 
 ```powershell
-.\power-tool.cmd
+.\power-tool\scripts\power-tool.cmd
 ```
 
 Or:

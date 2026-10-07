@@ -7,7 +7,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$robotRoot = (Get-Location).Path
+$layoutScript = Join-Path $PSScriptRoot 'project-layout.ps1'
+if (-not (Test-Path -LiteralPath $layoutScript)) { $layoutScript = Join-Path $PSScriptRoot 'powerlib-dashboard/scripts/project-layout.ps1' }
+. $layoutScript
+$robotRoot = Get-PowerLibRobotRoot
 $toolRoot = Join-Path $robotRoot "power-tool"
 $scriptsRoot = Join-Path $toolRoot "scripts"
 $repoRefPath = Join-Path $robotRoot ".powerlib-repo-ref"
@@ -30,12 +33,13 @@ if ($useDefaultRepositoryArchiveUrl) {
 $tempRoot = Join-Path $robotRoot "build\power-tool-update"
 $archivePath = Join-Path $tempRoot "Robot-Library.zip"
 $extractRoot = Join-Path $tempRoot "extract"
-$launcherPath = Join-Path $robotRoot "power-tool.cmd"
+$launcherPath = Join-Path $scriptsRoot "power-tool.cmd"
 $scriptLauncherPath = Join-Path $scriptsRoot "power-tool.ps1"
 $updaterPath = Join-Path $scriptsRoot "update-power-tool.ps1"
 $logPath = Join-Path $robotRoot "build\power-tool-update.log"
-$runnerPath = Join-Path $robotRoot "build\run-power-tool-update.ps1"
+$runnerPath = Join-Path $scriptsRoot "run-power-tool-update.ps1"
 $legacyScriptPaths = @(
+    (Join-Path $robotRoot "power-tool.cmd"),
     (Join-Path $robotRoot ".robot-library-generate-subsystem.gradle"),
     (Join-Path $robotRoot ".robot-library-generate-subsystem.ps1"),
     (Join-Path $robotRoot "powerlib-generate-subsystem.cmd"),
@@ -78,6 +82,12 @@ $transcriptStarted = $true
 
 function Remove-DirectoryIfExists {
     param([Parameter(Mandatory = $true)][string]$Path)
+
+    $resolvedPath = [System.IO.Path]::GetFullPath($Path)
+    $projectPrefix = [System.IO.Path]::GetFullPath($robotRoot).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $resolvedPath.StartsWith($projectPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove a directory outside the robot project: $resolvedPath"
+    }
 
     if (Test-Path $Path) {
         $lastError = $null
@@ -181,12 +191,13 @@ try {
     }
     $sourceSkills = Join-Path $sourceRoot "skills"
     $robotSkills = Join-Path $robotRoot "skills"
+    Initialize-PowerToolLayout -RobotRoot $robotRoot
     Stop-PowerToolProcesses $toolRoot
-    Remove-DirectoryIfExists $toolRoot
+    Reset-PowerToolAppFiles -ToolRoot $toolRoot
     foreach ($legacyScriptPath in $legacyScriptPaths) {
         Remove-Item -LiteralPath $legacyScriptPath -Force -ErrorAction SilentlyContinue
     }
-    Copy-Item -Path $source -Destination $toolRoot -Recurse
+    Copy-PowerToolAppFiles -Source $source -Destination $toolRoot
     if (Test-Path $sourceSkills) {
         Copy-DirectoryContents -Source $sourceSkills -Destination $robotSkills
         Write-Host "PowerLib skills updated in $robotSkills"
@@ -194,6 +205,8 @@ try {
         Write-Warning "Skipped PowerLib skills update because no skills directory was found in the downloaded source."
     }
     New-Item -ItemType Directory -Force -Path $scriptsRoot | Out-Null
+    Copy-Item -LiteralPath (Join-Path $sourceRoot 'install.ps1') -Destination (Join-Path $scriptsRoot 'install.ps1') -Force
+    Copy-DirectoryContents -Source (Join-Path $source 'scripts') -Destination $scriptsRoot
 
     $latestUpdater = Join-Path $sourceRoot "update-power-tool.ps1"
     if (Test-Path $latestUpdater) {
@@ -226,7 +239,7 @@ powershell -ExecutionPolicy Bypass -File "%~dp0generate-subsystem.ps1" -UpdateSu
     }
 
     Set-Content -Path $launcherPath -Encoding ascii -Value '@echo off
-set "TOOL_ROOT=%~dp0power-tool"
+for %%I in ("%~dp0..") do set "TOOL_ROOT=%%~fI"
 set "ELECTRON_EXE=%TOOL_ROOT%\node_modules\electron\dist\electron.exe"
 if exist "%ELECTRON_EXE%" (
   start "" "%ELECTRON_EXE%" "%TOOL_ROOT%"
@@ -276,4 +289,7 @@ if (Test-Path $electron) {
     }
     Remove-DirectoryIfExists $tempRoot
     Remove-Item -LiteralPath $runnerPath -Force -ErrorAction SilentlyContinue
+    if ((Split-Path -Leaf $PSCommandPath) -eq 'power-tool-update.ps1') {
+        Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+    }
 }

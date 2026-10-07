@@ -6,6 +6,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { readConstantsFiles, saveConstantsFile } from "./constantsFiles.js";
+import { generatedJsonPath } from "./projectPaths.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,10 +40,6 @@ function createAppMenu(window: BrowserWindow) {
         {
           label: "Update PowerLib Library Files",
           click: () => window.webContents.send("powerlib:menu-update-install-section", "lib")
-        },
-        {
-          label: "Update Robot Templates",
-          click: () => window.webContents.send("powerlib:menu-update-install-section", "templates")
         },
         {
           label: "Update Vendor Dependencies",
@@ -85,30 +82,12 @@ function createAppMenu(window: BrowserWindow) {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-function getSubsystemJsonCandidates() {
-  const robotRoot = getDetectedRobotRoot();
-  return Array.from(
-    new Set([
-      path.resolve(robotRoot, "powerlib-subsystems.json"),
-      path.resolve(process.cwd(), "powerlib-subsystems.json"),
-      path.resolve(process.cwd(), "..", "powerlib-subsystems.json"),
-      path.resolve(app.getAppPath(), "powerlib-subsystems.json"),
-      path.resolve(app.getAppPath(), "..", "powerlib-subsystems.json")
-    ])
-  );
+async function getSubsystemJsonCandidates() {
+  return [await generatedJsonPath(getDetectedRobotRoot(), "powerlib-subsystems.json")];
 }
 
-function getTuningSelectionJsonCandidates() {
-  const robotRoot = getDetectedRobotRoot();
-  return Array.from(
-    new Set([
-      path.resolve(robotRoot, "powerlib-tuning-selection.json"),
-      path.resolve(process.cwd(), "powerlib-tuning-selection.json"),
-      path.resolve(process.cwd(), "..", "powerlib-tuning-selection.json"),
-      path.resolve(app.getAppPath(), "powerlib-tuning-selection.json"),
-      path.resolve(app.getAppPath(), "..", "powerlib-tuning-selection.json")
-    ])
-  );
+async function getTuningSelectionJsonCandidates() {
+  return [await generatedJsonPath(getDetectedRobotRoot(), "powerlib-tuning-selection.json")];
 }
 
 function normalizeSelectedTopicNames(value: unknown) {
@@ -127,10 +106,6 @@ function normalizeSelectedTopicNames(value: unknown) {
 
 function normalizeTuningSidebarExpandedSection(value: unknown): "subsystem" | "command" {
   return value === "command" ? "command" : "subsystem";
-}
-
-function getRobotRoot(subsystemsJsonPath: string) {
-  return path.dirname(subsystemsJsonPath);
 }
 
 function pathExistsSync(candidate: string) {
@@ -192,7 +167,7 @@ function getPowerToolRootCandidates() {
 }
 
 ipcMain.handle("powerlib:read-subsystems", async () => {
-  for (const candidate of getSubsystemJsonCandidates()) {
+  for (const candidate of await getSubsystemJsonCandidates()) {
     try {
       const raw = await fs.readFile(candidate, "utf-8");
       const parsed = JSON.parse(raw);
@@ -218,17 +193,17 @@ ipcMain.handle("powerlib:read-subsystems", async () => {
 
   return {
     exists: false,
-    path: getSubsystemJsonCandidates()[0],
+    path: (await getSubsystemJsonCandidates())[0],
     subsystems: [],
     swerve: {}
   };
 });
 
 ipcMain.handle("powerlib:save-subsystems", async (_event, subsystems: unknown[], swerve?: unknown) => {
-  let targetPath = getSubsystemJsonCandidates()[0];
+  let targetPath = (await getSubsystemJsonCandidates())[0];
   let existingDocument: Record<string, unknown> = {};
 
-  for (const candidate of getSubsystemJsonCandidates()) {
+  for (const candidate of await getSubsystemJsonCandidates()) {
     try {
       await fs.access(candidate);
       targetPath = candidate;
@@ -263,14 +238,6 @@ ipcMain.handle("powerlib:save-subsystems", async (_event, subsystems: unknown[],
 });
 
 async function getConstantsRobotRoot() {
-  for (const candidate of getSubsystemJsonCandidates()) {
-    try {
-      await fs.access(candidate);
-      return path.dirname(candidate);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-  }
   return getDetectedRobotRoot();
 }
 
@@ -279,7 +246,7 @@ ipcMain.handle("powerlib:save-constants", async (_event, id, source, constants) 
   saveConstantsFile(await getConstantsRobotRoot(), id, source, constants));
 
 ipcMain.handle("powerlib:read-tuning-selection", async () => {
-  for (const candidate of getTuningSelectionJsonCandidates()) {
+  for (const candidate of await getTuningSelectionJsonCandidates()) {
     try {
       const raw = await fs.readFile(candidate, "utf-8");
       const parsed = JSON.parse(raw);
@@ -310,7 +277,7 @@ ipcMain.handle("powerlib:read-tuning-selection", async () => {
 
   return {
     exists: false,
-    path: getTuningSelectionJsonCandidates()[0],
+    path: (await getTuningSelectionJsonCandidates())[0],
     selectedTopics: [],
     monitorDrawerOpen: false,
     sidebarExpandedSection: "subsystem"
@@ -318,11 +285,11 @@ ipcMain.handle("powerlib:read-tuning-selection", async () => {
 });
 
 ipcMain.handle("powerlib:save-tuning-selection", async (_event, selectedTopics: unknown) => {
-  let targetPath = getTuningSelectionJsonCandidates()[0];
+  let targetPath = (await getTuningSelectionJsonCandidates())[0];
   let monitorDrawerOpen = false;
   let sidebarExpandedSection: "subsystem" | "command" = "subsystem";
 
-  for (const candidate of getTuningSelectionJsonCandidates()) {
+  for (const candidate of await getTuningSelectionJsonCandidates()) {
     try {
       await fs.access(candidate);
       targetPath = candidate;
@@ -357,11 +324,11 @@ ipcMain.handle("powerlib:save-tuning-selection", async (_event, selectedTopics: 
 });
 
 ipcMain.handle("powerlib:save-tuning-monitor-drawer-open", async (_event, monitorDrawerOpen: unknown) => {
-  let targetPath = getTuningSelectionJsonCandidates()[0];
+  let targetPath = (await getTuningSelectionJsonCandidates())[0];
   let selectedTopics: string[] = [];
   let sidebarExpandedSection: "subsystem" | "command" = "subsystem";
 
-  for (const candidate of getTuningSelectionJsonCandidates()) {
+  for (const candidate of await getTuningSelectionJsonCandidates()) {
     try {
       await fs.access(candidate);
       targetPath = candidate;
@@ -396,11 +363,11 @@ ipcMain.handle("powerlib:save-tuning-monitor-drawer-open", async (_event, monito
 });
 
 ipcMain.handle("powerlib:save-tuning-sidebar-expanded-section", async (_event, sidebarExpandedSection: unknown) => {
-  let targetPath = getTuningSelectionJsonCandidates()[0];
+  let targetPath = (await getTuningSelectionJsonCandidates())[0];
   let selectedTopics: string[] = [];
   let monitorDrawerOpen = false;
 
-  for (const candidate of getTuningSelectionJsonCandidates()) {
+  for (const candidate of await getTuningSelectionJsonCandidates()) {
     try {
       await fs.access(candidate);
       targetPath = candidate;
@@ -434,10 +401,10 @@ ipcMain.handle("powerlib:save-tuning-sidebar-expanded-section", async (_event, s
 
 ipcMain.handle("powerlib:update-subsystem-code", async () => {
   const robotRoot = getDetectedRobotRoot();
-  const subsystemsPath = path.join(robotRoot, "powerlib-subsystems.json");
+  const subsystemsPath = await generatedJsonPath(robotRoot, "powerlib-subsystems.json");
   let targetPath = subsystemsPath;
 
-  for (const candidate of getSubsystemJsonCandidates()) {
+  for (const candidate of await getSubsystemJsonCandidates()) {
     try {
       await fs.access(candidate);
       targetPath = candidate;
@@ -496,7 +463,7 @@ ipcMain.handle("powerlib:update-subsystem-code", async () => {
 
 ipcMain.handle("powerlib:update-install-section", async (_event, section: string) => {
   const robotRoot = getDetectedRobotRoot();
-  const installerPath = path.join(robotRoot, "build", "powerlib-section-install.ps1");
+  const installerPath = path.join(robotRoot, "power-tool", "scripts", "install.ps1");
   const repoRefPath = path.join(robotRoot, ".powerlib-repo-ref");
   let repoRef = "main";
   try {
@@ -510,7 +477,7 @@ ipcMain.handle("powerlib:update-install-section", async (_event, section: string
   await fs.mkdir(path.dirname(installerPath), { recursive: true });
 
   const installScriptCandidates = [
-    path.join(robotRoot, "power-tool", "scripts", "install.ps1"),
+    installerPath,
     path.join(robotRoot, "power-tool", "install.ps1"),
     path.join(robotRoot, "install.ps1")
   ];
@@ -533,28 +500,15 @@ ipcMain.handle("powerlib:update-install-section", async (_event, section: string
   if (installScriptContent) {
     await fs.writeFile(installerPath, installScriptContent, "utf-8");
   } else {
-    await fs.writeFile(
-      installerPath,
-      [
-        "param([Parameter(ValueFromRemainingArguments = $true)][string[]]$GradleArgs)",
-        "$ErrorActionPreference = 'Stop'",
-        `Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FRC9410/Robot-Library/${repoRef}/install.ps1" -OutFile ".robot-library-install.ps1"`,
-        '& powershell -ExecutionPolicy Bypass -File .\\.robot-library-install.ps1 @GradleArgs'
-      ].join("\r\n"),
-      "utf-8"
-    );
+    const response = await fetch(`https://raw.githubusercontent.com/FRC9410/Robot-Library/${repoRef}/install.ps1`);
+    if (!response.ok) throw new Error(`Could not download the PowerLib installer: ${response.status}`);
+    await fs.writeFile(installerPath, await response.text(), "utf-8");
   }
 
   const sectionArgs: Record<string, string[]> = {
     lib: [
       "-PpowerlibInstallLib=true",
       "-PpowerlibInstallTemplates=false",
-      "-PpowerlibInstallVendordeps=false",
-      "-PpowerlibInstallDashboard=false"
-    ],
-    templates: [
-      "-PpowerlibInstallLib=false",
-      "-PpowerlibInstallTemplates=true",
       "-PpowerlibInstallVendordeps=false",
       "-PpowerlibInstallDashboard=false"
     ],
@@ -617,8 +571,8 @@ ipcMain.handle("powerlib:update-power-tool", async () => {
 
   const toolRoot = path.dirname(path.dirname(updaterPath));
   const robotRoot = path.dirname(toolRoot);
-  const tempUpdaterPath = path.join(robotRoot, "build", "power-tool-update.ps1");
-  const tempUpdaterRunnerPath = path.join(robotRoot, "build", "run-power-tool-update.ps1");
+  const tempUpdaterPath = path.join(toolRoot, "scripts", "power-tool-update.ps1");
+  const tempUpdaterRunnerPath = path.join(toolRoot, "scripts", "run-power-tool-update.ps1");
   await fs.mkdir(path.dirname(tempUpdaterPath), { recursive: true });
   await fs.copyFile(updaterPath, tempUpdaterPath);
 

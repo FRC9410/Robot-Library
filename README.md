@@ -30,11 +30,9 @@ pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1
 The installer asks which sections to install:
 
 ```text
-PowerLib library files
-robot starter/template files
+PowerLib install (library files, robot templates, and skills)
 vendor dependencies
 Power Tool source, npm dependencies, and scripts
-PowerLib skills
 ```
 
 ## Added Library Files
@@ -135,7 +133,7 @@ vendordeps/Phoenix5-replay-<latest>.json
 
 Define controller button commands directly in `RobotContainer.configureBindings()`.
 Power Tool's Update Code action generates subsystem and Swerve code from
-`powerlib-subsystems.json`.
+`power-tool/generated/powerlib-subsystems.json`.
 
 The Constants tab provides a left-hand menu for generated subsystems, Vision,
 StateMachine, OI, RobotContainer, and Swerve. Edit constant values or add custom constants
@@ -143,14 +141,14 @@ one row at a time. Custom types are string, boolean, int, and double. Boolean va
 use a checkbox; numeric values require finite numbers, and int values must be whole
 numbers in range. Constant names automatically use uppercase with underscores in
 place of spaces. Use the pencil to edit, the green check to save to
-`powerlib-constants.json`, and the red X to cancel. Reset discards the current
+`power-tool/generated/powerlib-constants.json`, and the red X to cancel. Reset discards the current
 unsaved row edit and restores its last saved values. Editing another row also
 cancels the previous unsaved edit. Deleting a custom constant requires confirmation.
 Update Code applies the saved JSON to Java; row saves do not change Java directly.
 Existing Java constants are imported when the configuration is first created.
 Generated subsystem entries show only custom constants, keyed by subsystem ID so
-renames preserve them. Swerve defaults remain in `powerlib-subsystems.json`, and its
-custom constants use `powerlib-constants.json`. TunerConstants is excluded.
+renames preserve them. Swerve defaults remain in `power-tool/generated/powerlib-subsystems.json`, and its
+custom constants use `power-tool/generated/powerlib-constants.json`. TunerConstants is excluded.
 Save, run Update Code, rebuild, and deploy to use changes.
 
 Update PowerLib Library Files once to install the numeric tuning support in an existing
@@ -165,7 +163,7 @@ remain discoverable. The tuning-toggle check and normal telemetry continue runni
 This applies to custom constants, motor and position subsystem settings, Swerve,
 and drive-to-point settings. Restarting the robot loads the configured defaults;
 use Save Tuned Values, Update Code, and rebuild/deploy to retain changes across restarts.
-Save Tuned Values writes custom numeric defaults back to `powerlib-constants.json`.
+Save Tuned Values writes custom numeric defaults back to `power-tool/generated/powerlib-constants.json`.
 Existing Swerve defaults are already tunable and show Yes automatically.
 
 Tunable fields are mutable rather than Java compile-time constants, so robot code
@@ -183,18 +181,28 @@ Power Tool is installed into the robot project as source:
 
 ```text
 power-tool/
-power-tool.cmd
+power-tool/scripts/power-tool.cmd
 power-tool/scripts/power-tool.ps1
 power-tool/scripts/update-power-tool.ps1
+power-tool/scripts/install.ps1
+power-tool/scripts/project-layout.ps1
 power-tool/scripts/generate-subsystem.ps1
 power-tool/scripts/powerlib-generate-subsystem.cmd
 power-tool/scripts/powerlib-update-subsystems.cmd
+power-tool/generated/powerlib-subsystems.json
+power-tool/generated/powerlib-constants.json
+power-tool/generated/powerlib-tuning-selection.json
 ```
+
+Existing JSON files in the robot project root move into `power-tool/generated/`
+automatically. If both locations contain a file, the generated copy stays active
+and the old root copy is archived under `power-tool/generated/legacy/`.
+Power Tool updates preserve generated configuration and refresh the scripts.
 
 Open it on Windows from the robot project root:
 
 ```powershell
-.\power-tool.cmd
+.\power-tool\scripts\power-tool.cmd
 ```
 
 Or run the PowerShell launcher directly:

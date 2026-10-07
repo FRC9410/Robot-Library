@@ -291,6 +291,7 @@ def repoRefPropertyName = 'powerlibRepoRef'
 def keepBackupsPropertyName = 'powerlibKeepBackups'
 def latestVendordepsPropertyName = 'powerlibLatestVendordeps'
 def skipBuildPropertyName = 'powerlibSkipBuild'
+def installPowerLibPropertyName = 'powerlibInstall'
 def installLibPropertyName = 'powerlibInstallLib'
 def installTemplatesPropertyName = 'powerlibInstallTemplates'
 def installVendordepsPropertyName = 'powerlibInstallVendordeps'
@@ -608,7 +609,7 @@ def deleteDeprecatedPowerLibFiles = { Project project ->
 }
 
 def installDashboardTools = { Project project ->
-    File dashboardInstallScript = project.file("build/${dashboardInstallScriptName}")
+    File dashboardInstallScript = project.file("power-tool/scripts/${dashboardInstallScriptName}")
     try {
         dashboardInstallScript.parentFile.mkdirs()
 
@@ -707,21 +708,20 @@ gradle.projectsLoaded {
                 List<File> backups = []
                 boolean keepBackups = findBooleanProperty(project, keepBackupsPropertyName, false)
                 boolean useLatestVendordeps = findBooleanProperty(project, latestVendordepsPropertyName, false)
-                boolean installLib = findInstallChoice(project, installLibPropertyName, 'Install PowerLib library files?', true)
-                boolean installTemplates = findInstallChoice(project, installTemplatesPropertyName, 'Install robot starter/template files?', true)
+                boolean installPowerLib = findInstallChoice(project, installPowerLibPropertyName, 'PowerLib install?', true)
+                boolean installLib = findBooleanProperty(project, installLibPropertyName, installPowerLib)
+                boolean installTemplates = findBooleanProperty(project, installTemplatesPropertyName, installPowerLib)
+                boolean shouldInstallSkills = findBooleanProperty(project, installSkillsPropertyName, installPowerLib)
                 boolean installVendordeps = findInstallChoice(project, installVendordepsPropertyName, 'Install vendor dependencies?', true)
                 boolean installTools = findBooleanProperty(project, installToolsPropertyName, true)
                 boolean installDashboard = installTools && findInstallChoice(project, installDashboardPropertyName, 'Download Power Tool source and run npm install?', true)
-                boolean shouldInstallSkills = installTools && findInstallChoice(project, installSkillsPropertyName, 'Install PowerLib skills to ./skills/?', true)
                 boolean vendordepsOnly = installVendordeps && !installLib && !installTemplates && !installDashboard && !shouldInstallSkills
                 boolean priorPowerLibInstall = hasPriorPowerLibInstall(project)
 
                 logger.lifecycle('PowerLib install selections:')
-                logger.lifecycle("  PowerLib library files: ${installLib}")
-                logger.lifecycle("  Robot starter/template files: ${installTemplates}")
+                logger.lifecycle("  PowerLib install: ${installLib || installTemplates || shouldInstallSkills}")
                 logger.lifecycle("  Vendor dependencies: ${installVendordeps}")
                 logger.lifecycle("  Power Tool and scripts: ${installDashboard}")
-                logger.lifecycle("  PowerLib skills: ${shouldInstallSkills}")
 
                 if (installVendordeps) {
                     vendorDependencies.each { dependency ->
@@ -801,7 +801,7 @@ gradle.projectsLoaded {
 }
 
 gradle.buildFinished {
-    File downloadedInstaller = gradle.rootProject.file('.robot-library-install.gradle')
+    File downloadedInstaller = gradle.rootProject.file('power-tool/scripts/.robot-library-install.gradle')
     if (!downloadedInstaller.exists()) {
         return
     }
