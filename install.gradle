@@ -719,7 +719,7 @@ gradle.projectsLoaded {
                 boolean priorPowerLibInstall = hasPriorPowerLibInstall(project)
 
                 logger.lifecycle('PowerLib install selections:')
-                logger.lifecycle("  PowerLib install: ${installLib || installTemplates || shouldInstallSkills}")
+                logger.lifecycle("  PowerLib: ${installLib || installTemplates || shouldInstallSkills}")
                 logger.lifecycle("  Vendor dependencies: ${installVendordeps}")
                 logger.lifecycle("  Power Tool and scripts: ${installDashboard}")
 
