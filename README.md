@@ -137,6 +137,48 @@ Define controller button commands directly in `RobotContainer.configureBindings(
 Power Tool's Update Code action generates subsystem and Swerve code from
 `powerlib-subsystems.json`.
 
+The Constants tab provides a left-hand menu for generated subsystems, Vision,
+StateMachine, OI, RobotContainer, and Swerve. Edit constant values or add custom constants
+one row at a time. Custom types are string, boolean, int, and double. Boolean values
+use a checkbox; numeric values require finite numbers, and int values must be whole
+numbers in range. Constant names automatically use uppercase with underscores in
+place of spaces. Use the pencil to edit, the green check to save to
+`powerlib-constants.json`, and the red X to cancel. Reset discards the current
+unsaved row edit and restores its last saved values. Editing another row also
+cancels the previous unsaved edit. Deleting a custom constant requires confirmation.
+Update Code applies the saved JSON to Java; row saves do not change Java directly.
+Existing Java constants are imported when the configuration is first created.
+Generated subsystem entries show only custom constants, keyed by subsystem ID so
+renames preserve them. Swerve defaults remain in `powerlib-subsystems.json`, and its
+custom constants use `powerlib-constants.json`. TunerConstants is excluded.
+Save, run Update Code, rebuild, and deploy to use changes.
+
+Update PowerLib Library Files once to install the numeric tuning support in an existing
+robot project. The **Tunable** column automatically shows **Yes** for numeric constants
+and **No** for other types. Saving makes numeric fields tunable. Update Code
+registers them under `/PowerLib/Subsystems/<Name>/Variables/Custom/<ConstantName>`.
+Save, regenerate, rebuild, and deploy; the Tuning tab then discovers these values
+under their subsystem. Turning tuning off keeps the last applied values and skips
+constant updates, subsystem tuning checks, and NetworkTables variable synchronization.
+Variables are published once at startup and when new tunables are registered so they
+remain discoverable. The tuning-toggle check and normal telemetry continue running.
+This applies to custom constants, motor and position subsystem settings, Swerve,
+and drive-to-point settings. Restarting the robot loads the configured defaults;
+use Save Tuned Values, Update Code, and rebuild/deploy to retain changes across restarts.
+Save Tuned Values writes custom numeric defaults back to `powerlib-constants.json`.
+Existing Swerve defaults are already tunable and show Yes automatically.
+
+Tunable fields are mutable rather than Java compile-time constants, so robot code
+must read them during execution to use live edits. Values copied only during
+initialization, such as a controller port, still require a restart to change the
+initialized object. Numeric types include byte, short, int, long, float, double,
+and their boxed equivalents; integer edits must fit the type's whole-number range.
+
+The robot templates include `StateMachineConstants` for the default robot state and
+`OIConstants` for the driver controller port, accessible through
+`Constants.StateMachine` and `Constants.OI`. `RobotContainerConstants` holds custom
+constants for robot container setup.
+
 Power Tool is installed into the robot project as source:
 
 ```text

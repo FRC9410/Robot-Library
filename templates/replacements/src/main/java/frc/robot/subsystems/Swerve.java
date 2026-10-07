@@ -284,6 +284,10 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
         kTuningSubsystemName, "Driver/SkewCompensation", kDefaultDriverSkewCompensation);
     PowerRobotContainer.setSubsystemVariableDefault(
         kTuningSubsystemName,
+        "Requests/MaxAngularRateRadiansPerSecond",
+        kDefaultRequestMaxAngularRateRadiansPerSecond);
+    PowerRobotContainer.setSubsystemVariableDefault(
+        kTuningSubsystemName,
         "Requests/TranslationDeadbandMetersPerSecond",
         kDefaultTranslationDeadbandMetersPerSecond);
     PowerRobotContainer.setSubsystemVariableDefault(
@@ -315,6 +319,10 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
   }
 
   private void applyTunableValues() {
+    if (!PowerRobotContainer.isTuningEnabled()) {
+      return;
+    }
+    frc.powerlib.utils.DriveUtil.syncTunableValues();
     double nextDriverMaxSpeedCoefficient =
         getSwerveVariable("Driver/MaxSpeedCoefficient", kDefaultDriverMaxSpeedCoefficient);
     double nextDriverVelocityScale =
@@ -348,6 +356,8 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
     driverMaxAngularRateRadiansPerSecond = nextDriverMaxAngularRateRadiansPerSecond;
     driverJoystickDeadband = nextDriverJoystickDeadband;
     driverSkewCompensation = nextDriverSkewCompensation;
+    MAX_ANGULAR_RATE = getSwerveVariable(
+        "Requests/MaxAngularRateRadiansPerSecond", kDefaultRequestMaxAngularRateRadiansPerSecond);
 
     if (changed(nextTranslationDeadbandMetersPerSecond, translationDeadbandMetersPerSecond)
         || changed(nextRotationalDeadbandRadiansPerSecond, rotationalDeadbandRadiansPerSecond)) {
@@ -372,10 +382,6 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
   }
 
   private double getSwerveVariable(String key, double defaultValue) {
-    if (!PowerRobotContainer.isTuningEnabled()) {
-      return defaultValue;
-    }
-
     return PowerRobotContainer.getSubsystemVariable(kTuningSubsystemName, key, defaultValue);
   }
 

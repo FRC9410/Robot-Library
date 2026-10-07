@@ -25,6 +25,9 @@ public class DriveUtil {
       SwerveConstants.DRIVE_TO_POINT_SLOW_SPEED_COEFFICIENT;
   private static final double DEFAULT_DRIVE_TO_POINT_STATIC_FRICTION_CONSTANT =
       SwerveConstants.DRIVE_TO_POINT_STATIC_FRICTION_CONSTANT;
+  private static double driveToPointMaxSpeedCoefficient = DEFAULT_DRIVE_TO_POINT_MAX_SPEED_COEFFICIENT;
+  private static double driveToPointSlowSpeedCoefficient = DEFAULT_DRIVE_TO_POINT_SLOW_SPEED_COEFFICIENT;
+  private static double driveToPointStaticFrictionConstant = DEFAULT_DRIVE_TO_POINT_STATIC_FRICTION_CONSTANT;
 
   public static final double MAX_SPEED = Constants.Tuner.kSpeedAt12Volts.in(MetersPerSecond);
   public static final double MAX_DRIVE_TO_POINT_SPEED =
@@ -63,25 +66,15 @@ public class DriveUtil {
     final Translation2d translationToPoint =
         currentPose.getTranslation().minus(targetPose.getTranslation());
     final double linearDistance = translationToPoint.getNorm();
-    double maxSpeedCoefficient =
-        getSwerveVariable(
-            "DriveToPoint/MaxSpeedCoefficient", DEFAULT_DRIVE_TO_POINT_MAX_SPEED_COEFFICIENT);
-    double slowSpeedCoefficient =
-        getSwerveVariable(
-            "DriveToPoint/SlowSpeedCoefficient", DEFAULT_DRIVE_TO_POINT_SLOW_SPEED_COEFFICIENT);
-    double staticFrictionConstant =
-        getSwerveVariable(
-            "DriveToPoint/StaticFrictionConstant",
-            DEFAULT_DRIVE_TO_POINT_STATIC_FRICTION_CONSTANT);
 
     double ff = 0;
     if (linearDistance >= Units.inchesToMeters(0.5)) {
-      ff = staticFrictionConstant * MAX_SPEED;
+      ff = driveToPointStaticFrictionConstant * MAX_SPEED;
     }
 
     double cappedSpeed = isClose(currentPose, targetPose) && poseTolerance < 6
-        ? MAX_SPEED * slowSpeedCoefficient
-        : MAX_SPEED * maxSpeedCoefficient;
+        ? MAX_SPEED * driveToPointSlowSpeedCoefficient
+        : MAX_SPEED * driveToPointMaxSpeedCoefficient;
 
     final Rotation2d directionOfTravel = translationToPoint.getAngle();
     final double velocity =
@@ -138,8 +131,20 @@ public class DriveUtil {
         currentPose.getRotation().plus(skewCompensationFactor));
   }
 
-  private static double getSwerveVariable(String key, double defaultValue) {
-    return PowerRobotContainer.getSubsystemVariable(SWERVE_TUNING_SUBSYSTEM_NAME, key, defaultValue);
+  /** Called by Swerve while tuning; driving reads the cached settings without tuning lookups. */
+  public static void syncTunableValues() {
+    if (!PowerRobotContainer.isTuningEnabled()) {
+      return;
+    }
+    driveToPointMaxSpeedCoefficient = PowerRobotContainer.getSubsystemVariable(
+        SWERVE_TUNING_SUBSYSTEM_NAME, "DriveToPoint/MaxSpeedCoefficient",
+        DEFAULT_DRIVE_TO_POINT_MAX_SPEED_COEFFICIENT);
+    driveToPointSlowSpeedCoefficient = PowerRobotContainer.getSubsystemVariable(
+        SWERVE_TUNING_SUBSYSTEM_NAME, "DriveToPoint/SlowSpeedCoefficient",
+        DEFAULT_DRIVE_TO_POINT_SLOW_SPEED_COEFFICIENT);
+    driveToPointStaticFrictionConstant = PowerRobotContainer.getSubsystemVariable(
+        SWERVE_TUNING_SUBSYSTEM_NAME, "DriveToPoint/StaticFrictionConstant",
+        DEFAULT_DRIVE_TO_POINT_STATIC_FRICTION_CONSTANT);
   }
 }
 

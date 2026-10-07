@@ -140,7 +140,7 @@ public class VelocitySubsystem extends PowerSubsystem {
   }
 
   private void applyTunableValues() {
-    if (velocityMotor == null) {
+    if (!frc.powerlib.PowerRobotContainer.isTuningEnabled() || velocityMotor == null) {
       return;
     }
 

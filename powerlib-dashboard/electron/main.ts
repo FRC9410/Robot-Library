@@ -1,10 +1,11 @@
-import { app, BrowserWindow, ipcMain, Menu, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import { execFile, spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { readConstantsFiles, saveConstantsFile } from "./constantsFiles.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -260,6 +261,22 @@ ipcMain.handle("powerlib:save-subsystems", async (_event, subsystems: unknown[],
     swerve: document.swerve ?? {}
   };
 });
+
+async function getConstantsRobotRoot() {
+  for (const candidate of getSubsystemJsonCandidates()) {
+    try {
+      await fs.access(candidate);
+      return path.dirname(candidate);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+  return getDetectedRobotRoot();
+}
+
+ipcMain.handle("powerlib:read-constants", async () => readConstantsFiles(await getConstantsRobotRoot()));
+ipcMain.handle("powerlib:save-constants", async (_event, id, source, constants) =>
+  saveConstantsFile(await getConstantsRobotRoot(), id, source, constants));
 
 ipcMain.handle("powerlib:read-tuning-selection", async () => {
   for (const candidate of getTuningSelectionJsonCandidates()) {
@@ -666,6 +683,18 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false
     }
+  });
+
+  window.webContents.on("will-prevent-unload", (event) => {
+    const choice = dialog.showMessageBoxSync(window, {
+      type: "question",
+      buttons: ["Keep Editing", "Discard Changes"],
+      defaultId: 0,
+      cancelId: 0,
+      message: "Discard unsaved constants?",
+      detail: "Closing or reloading Power Tool will discard your unsaved constant edits."
+    });
+    if (choice === 1) event.preventDefault();
   });
 
   window.webContents.setWindowOpenHandler(({ url }) => {

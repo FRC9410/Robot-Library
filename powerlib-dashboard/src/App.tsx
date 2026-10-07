@@ -22,6 +22,8 @@ import ElectricBoltIcon from "@mui/icons-material/ElectricBolt";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import TuneIcon from "@mui/icons-material/Tune";
 import VideocamIcon from "@mui/icons-material/Videocam";
+import DataObjectIcon from "@mui/icons-material/DataObject";
+import { ConstantsPanel } from "./features/constants/ConstantsPanel";
 import type {
   CharacterizationCommand,
   GeneratedSubsystem,
@@ -566,6 +568,7 @@ function AppContent() {
               value="subsystems"
               sx={{ minHeight: 44 }}
             />
+            <Tab icon={<DataObjectIcon />} iconPosition="start" label="Constants" value="constants" sx={{ minHeight: 44 }} />
             {limelights.length > 0 && (
               <Tab
                 icon={<VideocamIcon />}
@@ -645,6 +648,9 @@ function AppContent() {
 
       <Container maxWidth={false} sx={{ py: 2 }}>
         <Stack spacing={2}>
+          <Box sx={{ display: activeView === "constants" ? "block" : "none" }}>
+            <ConstantsPanel active={activeView === "constants"} />
+          </Box>
           {activeView === "robot" && (
             <RobotPanel
               subsystems={subsystemDocument.subsystems}

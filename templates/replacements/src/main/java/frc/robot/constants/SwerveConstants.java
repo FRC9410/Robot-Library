@@ -27,4 +27,7 @@ public class SwerveConstants {
   public static final double HEADING_KP = 7.0;
   public static final double HEADING_KI = 0.0;
   public static final double HEADING_KD = 0.0;
+
+  // POWERLIB CUSTOM CONSTANTS START - DO NOT DELETE
+  // POWERLIB CUSTOM CONSTANTS END - DO NOT DELETE
 }

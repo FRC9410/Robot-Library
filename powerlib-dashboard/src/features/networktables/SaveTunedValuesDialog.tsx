@@ -15,8 +15,10 @@ import {
 } from "@mui/material";
 import type { NtTopicSnapshot } from "../../networktables/nt4Client";
 import type { GeneratedSubsystem, GeneratedSwerveConstants } from "../subsystems/types";
+import type { ConstantsFile } from "../constants/types";
+import { formatNumericConstantValue } from "../constants/types";
 
-type SaveTarget = "subsystem" | "swerve";
+type SaveTarget = "subsystem" | "swerve" | "constant";
 type JsonPathSegment = string | number;
 type JsonContainer = Record<string | number, unknown>;
 type SaveValue = number | boolean | string;
@@ -32,6 +34,8 @@ type SaveValueChange = {
   subsystemIndex?: number;
   subsystemPath?: JsonPathSegment[];
   swervePath?: JsonPathSegment[];
+  constantsFileId?: string;
+  constantName?: string;
 };
 
 type SaveTunedValuesDialogProps = {
@@ -43,6 +47,7 @@ type SaveTunedValuesDialogProps = {
 type LoadedDocuments = {
   subsystems: GeneratedSubsystem[];
   swerve: GeneratedSwerveConstants;
+  constants: ConstantsFile[];
 };
 
 const subsystemVariablesPrefix = "/PowerLib/Subsystems/";
@@ -145,6 +150,10 @@ const swerveVariableMappings: Record<string, { jsonPath: JsonPathSegment[]; labe
   "Driver/SkewCompensation": {
     jsonPath: ["driver", "skewCompensation"],
     label: "Driver skew compensation"
+  },
+  "Requests/MaxAngularRateRadiansPerSecond": {
+    jsonPath: ["requests", "maxAngularRateRadiansPerSecond"],
+    label: "Request max angular rate"
   },
   "Requests/TranslationDeadbandMetersPerSecond": {
     jsonPath: ["requests", "translationDeadbandMetersPerSecond"],
@@ -493,14 +502,30 @@ function buildSubsystemChanges(
 }
 
 function buildChanges(topics: NtTopicSnapshot[], documents: LoadedDocuments) {
-  return buildSubsystemChanges(topics, documents.subsystems, documents.swerve)
+  const constantChanges: SaveValueChange[] = [];
+  for (const topic of topics) {
+    const parsed = parseVariableTopic(topic.name, subsystemVariablesPrefix);
+    const value = getTopicNumber(topic);
+    if (!parsed || !parsed.variableKey.startsWith("Custom/") || value === null) continue;
+    const name = parsed.variableKey.slice("Custom/".length);
+    const file = documents.constants.find((candidate) => toPascalName(candidate.name) === parsed.ownerName);
+    const row = file?.constants.find((candidate) => candidate.name === name && candidate.tunable);
+    if (!file || !row) continue;
+    let formatted: string;
+    try { formatted = formatNumericConstantValue(value, row.type); } catch { continue; }
+    if (row.value === formatted || !valuesDiffer(row.value.replace(/[fFLlDd]$/, ""), value)) continue;
+    constantChanges.push({ id: topic.name, selected: true, target: "constant", label: `${parsed.ownerName}: ${name}`,
+      oldValueText: row.value, newValue: value, constantsFileId: file.id, constantName: name });
+  }
+  return [...buildSubsystemChanges(topics, documents.subsystems, documents.swerve), ...constantChanges]
     .sort((left, right) => left.label.localeCompare(right.label));
 }
 
 export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValuesDialogProps) {
   const [documents, setDocuments] = useState<LoadedDocuments>({
     subsystems: [],
-    swerve: {}
+    swerve: {},
+    constants: []
   });
   const [changes, setChanges] = useState<SaveValueChange[]>([]);
   const [loading, setLoading] = useState(false);
@@ -527,18 +552,19 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
     setMessage(null);
 
     try {
-      if (!window.powerlib?.readSubsystems) {
+      if (!window.powerlib?.readSubsystems || !window.powerlib?.readConstants) {
         throw new Error("PowerLib file bridge is not available.");
       }
 
-      const subsystemsResult = await window.powerlib.readSubsystems();
+      const [subsystemsResult, constants] = await Promise.all([window.powerlib.readSubsystems(), window.powerlib.readConstants()]);
       if (subsystemsResult.error) {
         throw new Error(subsystemsResult.error);
       }
 
       const loaded = {
         subsystems: subsystemsResult.subsystems as GeneratedSubsystem[],
-        swerve: (subsystemsResult.swerve ?? {}) as GeneratedSwerveConstants
+        swerve: (subsystemsResult.swerve ?? {}) as GeneratedSwerveConstants,
+        constants
       };
       setDocuments(loaded);
       setChanges(buildChanges(topics, loaded));
@@ -571,12 +597,14 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
     setMessage(null);
 
     try {
-      if (!window.powerlib?.saveSubsystems) {
+      if (!window.powerlib?.saveSubsystems || !window.powerlib?.saveConstants) {
         throw new Error("PowerLib file bridge is not available.");
       }
 
       const nextSubsystems = cloneJson(documents.subsystems);
       const nextSwerve = cloneJson(documents.swerve);
+      const nextConstants = cloneJson(documents.constants);
+      const changedFiles = new Set<string>();
       const unselectedIds = new Set(changes.filter((change) => !change.selected).map((change) => change.id));
       let subsystemChanged = false;
       let swerveChanged = false;
@@ -591,17 +619,32 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
           setNestedValue(nextSwerve, change.swervePath, change.newValue);
           swerveChanged = true;
         }
+        if (change.target === "constant" && change.constantsFileId && change.constantName && typeof change.newValue === "number") {
+          const file = nextConstants.find((candidate) => candidate.id === change.constantsFileId);
+          const row = file?.constants.find((candidate) => candidate.name === change.constantName);
+          if (!file || !row) throw new Error("Could not find the custom constant to save. Refresh the values.");
+          row.value = formatNumericConstantValue(change.newValue, row.type);
+          changedFiles.add(file.id);
+        }
       });
 
       const savedDocuments = {
         subsystems: nextSubsystems,
-        swerve: nextSwerve
+        swerve: nextSwerve,
+        constants: nextConstants
       };
 
       if (subsystemChanged || swerveChanged) {
         const result = await window.powerlib.saveSubsystems(nextSubsystems, nextSwerve);
         savedDocuments.subsystems = result.subsystems as GeneratedSubsystem[];
         savedDocuments.swerve = (result.swerve ?? nextSwerve) as GeneratedSwerveConstants;
+      }
+      for (const id of changedFiles) {
+        const index = savedDocuments.constants.findIndex((file) => file.id === id);
+        const file = savedDocuments.constants[index];
+        const result = await window.powerlib.saveConstants(file.id, file.source, file.constants);
+        if (result.error) throw new Error(result.error);
+        savedDocuments.constants[index] = result;
       }
 
       setDocuments(savedDocuments);
@@ -632,7 +675,7 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
           {message && <Alert severity="success">{message}</Alert>}
 
           <Typography color="text.secondary">
-            Review live NetworkTables tunables that differ from JSON defaults. Select the values to save, then regenerate
+            Review live NetworkTables tunables that differ from configured defaults. Select the values to save, then regenerate
             robot code when you are ready.
           </Typography>
 
@@ -686,7 +729,7 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
                         label={
                           change.target === "subsystem"
                             ? "Subsystem JSON"
-                            : "Swerve JSON"
+                            : change.target === "swerve" ? "Swerve JSON" : "Constants JSON"
                         }
                         size="small"
                         variant="outlined"

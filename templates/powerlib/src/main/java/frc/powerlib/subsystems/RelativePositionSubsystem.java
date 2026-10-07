@@ -243,7 +243,7 @@ public class RelativePositionSubsystem extends PowerSubsystem {
   }
 
   private void applyTunableValues() {
-    if (positionMotor == null) {
+    if (!frc.powerlib.PowerRobotContainer.isTuningEnabled() || positionMotor == null) {
       return;
     }
 

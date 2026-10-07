@@ -31,9 +31,12 @@ public class PowerDashboard extends SubsystemBase {
       NetworkTableInstance.getDefault().getTable("PowerLib").getSubTable("Characterization");
   private final Map<String, CharacterizationCommandBinding> characterizationCommands = new HashMap<>();
   private double nextTuningModeSyncTime = 0.0;
+  private long syncedSubsystemVariablesRevision = -1;
+  private long syncedCommandVariablesRevision = -1;
 
   public PowerDashboard(StateMachine stateMachine) {
     this.stateMachine = stateMachine;
+    frc.robot.constants.GeneratedTunableConstants.register();
     initCharacterizationRoutines();
   }
 
@@ -47,6 +50,7 @@ public class PowerDashboard extends SubsystemBase {
     syncTuningMode();
     publishSubsystemData();
     syncSubsystemVariables();
+    frc.powerlib.tuning.TunableConstants.sync();
     syncCommandVariables();
     pollCharacterizationCommands();
   }
@@ -74,17 +78,27 @@ public class PowerDashboard extends SubsystemBase {
   }
 
   private void syncSubsystemVariables() {
+    long revision = PowerRobotContainer.getSubsystemVariablesRevision();
+    if (!PowerRobotContainer.isTuningEnabled() && revision == syncedSubsystemVariablesRevision) {
+      return;
+    }
     syncVariables(
         PowerRobotContainer.getAllSubsystemVariables(),
         subsystemsTable,
         PowerRobotContainer::updateSubsystemVariable);
+    syncedSubsystemVariablesRevision = revision;
   }
 
   private void syncCommandVariables() {
+    long revision = PowerRobotContainer.getCommandVariablesRevision();
+    if (!PowerRobotContainer.isTuningEnabled() && revision == syncedCommandVariablesRevision) {
+      return;
+    }
     syncVariables(
         PowerRobotContainer.getAllCommandVariables(),
         commandsTable,
         PowerRobotContainer::updateCommandVariable);
+    syncedCommandVariablesRevision = revision;
   }
 
   private void syncVariables(

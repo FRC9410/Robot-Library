@@ -893,7 +893,7 @@ export function TuningPanel() {
               <Alert severity={tuningModeEnabled ? "warning" : "info"} variant="outlined">
                 {tuningModeEnabled
                   ? "Tuning mode is on: applied values can change subsystem gains and command targets live."
-                  : "Tuning mode is off: applied values are staged in NetworkTables, but robot code uses generated constants/defaults."}
+                  : "Tuning mode is off: the robot keeps its last applied values. Further edits are staged until tuning is enabled."}
                 {tuningModeRequestTopic && tuningModeRequested !== tuningModeEnabled
                   ? ` Requested mode is ${tuningModeRequested ? "on" : "off"}; waiting for robot acknowledgement.`
                   : ""}

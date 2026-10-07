@@ -17,6 +17,21 @@ class VendorDependency {
 
 def templateFiles = [
     new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/tuning/TunableConstant.java',
+        destination: 'src/main/java/frc/powerlib/tuning/TunableConstant.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/tuning/TunableConstants.java',
+        destination: 'src/main/java/frc/powerlib/tuning/TunableConstants.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/constants/GeneratedTunableConstants.java',
+        destination: 'src/main/java/frc/robot/constants/GeneratedTunableConstants.java',
+        replacement: true
+    ),
+    new TemplateFile(
         source: 'powerlib/src/main/java/frc/powerlib/configs/LimelightVisionConfig.java',
         destination: 'src/main/java/frc/powerlib/configs/LimelightVisionConfig.java',
         replacement: false
@@ -184,6 +199,16 @@ def templateFiles = [
     new TemplateFile(
         source: 'replacements/src/main/java/frc/robot/constants/SwerveConstants.java',
         destination: 'src/main/java/frc/robot/constants/SwerveConstants.java',
+        replacement: true
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/constants/StateMachineConstants.java',
+        destination: 'src/main/java/frc/robot/constants/StateMachineConstants.java',
+        replacement: true
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/constants/RobotContainerConstants.java',
+        destination: 'src/main/java/frc/robot/constants/RobotContainerConstants.java',
         replacement: true
     ),
     new TemplateFile(

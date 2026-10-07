@@ -22,7 +22,7 @@ public class StateMachine extends SubsystemBase {
   // POWERLIB GENERATED SUBSYSTEMS START - DO NOT DELETE
   // POWERLIB GENERATED SUBSYSTEMS END - DO NOT DELETE
 
-  private RobotState wantedState = RobotState.IDLE;
+  private RobotState wantedState = Constants.StateMachine.DEFAULT_STATE;
 
   public RobotState getWantedState() {
     return wantedState;

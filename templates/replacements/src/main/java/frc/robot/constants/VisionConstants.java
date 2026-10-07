@@ -8,4 +8,7 @@ public class VisionConstants {
   // Example: {"limelight-b", "limelight-l", "limelight-r"}
   public static final String[] LIMELIGHT_NAMES = {LIMELIGHT_NAME};
   public static final LimelightVisionConfig CONFIG = LimelightVisionConfig.DEFAULT;
+
+  // POWERLIB CUSTOM CONSTANTS START - DO NOT DELETE
+  // POWERLIB CUSTOM CONSTANTS END - DO NOT DELETE
 }

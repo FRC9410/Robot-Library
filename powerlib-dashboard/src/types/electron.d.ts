@@ -1,9 +1,12 @@
+import type { ConstantRow, ConstantsFile } from "../features/constants/types";
 export {};
 
 declare global {
   interface Window {
     powerlib?: {
       platform: NodeJS.Platform;
+      readConstants: () => Promise<ConstantsFile[]>;
+      saveConstants: (id: string, source: string, constants: ConstantRow[]) => Promise<ConstantsFile>;
       readSubsystems: () => Promise<{
         exists: boolean;
         path: string;

@@ -245,6 +245,9 @@ public abstract class PowerSubsystem extends SubsystemBase {
   }
 
   protected void applyMotorTunableValues() {
+    if (!frc.powerlib.PowerRobotContainer.isTuningEnabled()) {
+      return;
+    }
     for (int canId : reversedByCanId.keySet()) {
       boolean currentBrakeMode = brakeModeByCanId.getOrDefault(canId, true);
       boolean nextBrakeMode =

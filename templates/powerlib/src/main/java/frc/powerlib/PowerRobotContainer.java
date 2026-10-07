@@ -7,6 +7,7 @@ package frc.powerlib;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Contract for the shared data and live-tuning containers used by PowerLib. Implemented by
@@ -24,6 +25,8 @@ public interface PowerRobotContainer {
   Map<String, Map<String, Object>> SUBSYSTEM_VARIABLES = new HashMap<>();
   Map<String, Map<String, Object>> COMMAND_VARIABLES = new HashMap<>();
   AtomicBoolean TUNING_ENABLED = new AtomicBoolean(false);
+  AtomicLong SUBSYSTEM_VARIABLES_REVISION = new AtomicLong();
+  AtomicLong COMMAND_VARIABLES_REVISION = new AtomicLong();
 
   /**
    * Stores a legacy subsystem data value. Keys in the form {@code Subsystem/Metric} are routed to
@@ -74,17 +77,20 @@ public interface PowerRobotContainer {
   }
 
   static void setSubsystemVariableDefault(String subsystemName, String key, Object defaultValue) {
-    getMap(SUBSYSTEM_VARIABLES, subsystemName).putIfAbsent(key, defaultValue);
+    setVariableDefault(
+        SUBSYSTEM_VARIABLES, SUBSYSTEM_VARIABLES_REVISION, subsystemName, key, defaultValue);
   }
 
   static void updateSubsystemVariable(String subsystemName, String key, Object value) {
-    getMap(SUBSYSTEM_VARIABLES, subsystemName).put(key, value);
+    updateVariable(SUBSYSTEM_VARIABLES, SUBSYSTEM_VARIABLES_REVISION, subsystemName, key, value);
   }
 
+  /** Returns the last synchronized value, which remains cached while tuning is disabled. */
   static Object getSubsystemVariable(String subsystemName, String key, Object defaultValue) {
-    Map<String, Object> variables = getMap(SUBSYSTEM_VARIABLES, subsystemName);
-    variables.putIfAbsent(key, defaultValue);
-    return isTuningEnabled() ? variables.get(key) : defaultValue;
+    Map<String, Object> variables = setVariableDefault(
+        SUBSYSTEM_VARIABLES, SUBSYSTEM_VARIABLES_REVISION, subsystemName, key, defaultValue);
+    Object value = variables.get(key);
+    return value != null ? value : defaultValue;
   }
 
   static double getSubsystemVariable(String subsystemName, String key, double defaultValue) {
@@ -99,18 +105,25 @@ public interface PowerRobotContainer {
     return SUBSYSTEM_VARIABLES;
   }
 
+  /** Changes only when a new subsystem tunable is registered, including through a getter. */
+  static long getSubsystemVariablesRevision() {
+    return SUBSYSTEM_VARIABLES_REVISION.get();
+  }
+
   static void setCommandVariableDefault(String commandName, String key, Object defaultValue) {
-    getMap(COMMAND_VARIABLES, commandName).putIfAbsent(key, defaultValue);
+    setVariableDefault(COMMAND_VARIABLES, COMMAND_VARIABLES_REVISION, commandName, key, defaultValue);
   }
 
   static void updateCommandVariable(String commandName, String key, Object value) {
-    getMap(COMMAND_VARIABLES, commandName).put(key, value);
+    updateVariable(COMMAND_VARIABLES, COMMAND_VARIABLES_REVISION, commandName, key, value);
   }
 
+  /** Returns the last synchronized value, which remains cached while tuning is disabled. */
   static Object getCommandVariable(String commandName, String key, Object defaultValue) {
-    Map<String, Object> variables = getMap(COMMAND_VARIABLES, commandName);
-    variables.putIfAbsent(key, defaultValue);
-    return isTuningEnabled() ? variables.get(key) : defaultValue;
+    Map<String, Object> variables = setVariableDefault(
+        COMMAND_VARIABLES, COMMAND_VARIABLES_REVISION, commandName, key, defaultValue);
+    Object value = variables.get(key);
+    return value != null ? value : defaultValue;
   }
 
   static double getCommandVariable(String commandName, String key, double defaultValue) {
@@ -123,6 +136,11 @@ public interface PowerRobotContainer {
 
   static Map<String, Map<String, Object>> getAllCommandVariables() {
     return COMMAND_VARIABLES;
+  }
+
+  /** Changes only when a new command tunable is registered, including through a getter. */
+  static long getCommandVariablesRevision() {
+    return COMMAND_VARIABLES_REVISION.get();
   }
 
   /**
@@ -141,6 +159,29 @@ public interface PowerRobotContainer {
 
   private static Map<String, Object> getMap(Map<String, Map<String, Object>> root, String name) {
     return root.computeIfAbsent(normalizeName(name), ignored -> new HashMap<>());
+  }
+
+  private static Map<String, Object> setVariableDefault(
+      Map<String, Map<String, Object>> root, AtomicLong revision,
+      String owner, String key, Object defaultValue) {
+    Map<String, Object> variables = getMap(root, owner);
+    boolean registered = variables.containsKey(key);
+    variables.putIfAbsent(key, defaultValue);
+    if (!registered) {
+      revision.incrementAndGet();
+    }
+    return variables;
+  }
+
+  private static void updateVariable(
+      Map<String, Map<String, Object>> root, AtomicLong revision,
+      String owner, String key, Object value) {
+    Map<String, Object> variables = getMap(root, owner);
+    boolean registered = variables.containsKey(key);
+    variables.put(key, value);
+    if (!registered) {
+      revision.incrementAndGet();
+    }
   }
 
   private static String normalizeName(String name) {
