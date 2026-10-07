@@ -17,6 +17,16 @@ class VendorDependency {
 
 def templateFiles = [
     new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/configs/LimelightVisionConfig.java',
+        destination: 'src/main/java/frc/powerlib/configs/LimelightVisionConfig.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/vision/LimelightVision.java',
+        destination: 'src/main/java/frc/powerlib/vision/LimelightVision.java',
+        replacement: false
+    ),
+    new TemplateFile(
         source: 'powerlib/src/main/java/frc/powerlib/configs/RelativePositionSubsystemConfig.java',
         destination: 'src/main/java/frc/powerlib/configs/RelativePositionSubsystemConfig.java',
         replacement: false

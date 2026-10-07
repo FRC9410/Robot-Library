@@ -16,8 +16,8 @@ public class StateMachine extends SubsystemBase {
     IDLE
   }
 
-  public final Vision vision = new Vision();
   public final Swerve drivetrain = Constants.Tuner.createDrivetrain();
+  public final Vision vision = new Vision(drivetrain);
 
   // POWERLIB GENERATED SUBSYSTEMS START - DO NOT DELETE
   // POWERLIB GENERATED SUBSYSTEMS END - DO NOT DELETE

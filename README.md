@@ -47,6 +47,7 @@ src/main/java/frc/powerlib/configs/*.java
 src/main/java/frc/powerlib/math/*.java
 src/main/java/frc/powerlib/subsystems/*.java
 src/main/java/frc/powerlib/utils/*.java
+src/main/java/frc/powerlib/vision/*.java
 ```
 
 ## Added / Replaced Robot Files
@@ -71,6 +72,52 @@ src/main/java/frc/robot/utils/FieldUtils.java
 ```
 
 The installer creates temporary backups before replacing files. Successful installs delete those backups by default.
+
+## Multiple Limelights
+
+Declare your camera NetworkTables names in `VisionConstants.java`, in priority order:
+
+```java
+public static final String[] LIMELIGHT_NAMES = {
+    "limelight-b", "limelight-l", "limelight-r"
+};
+```
+
+The starter `Vision` subsystem handles orientation publishing, MegaTag2 reads, disabled-mode
+throttling, and Swerve pose corrections. An empty array disables camera handling. Configure each
+camera's mounting pose, calibration, team number, and AprilTag pipeline in its own Limelight web UI;
+names alone cannot describe mounting geometry. All measurements use blue-origin field coordinates.
+
+The reusable `frc.powerlib.vision.LimelightVision` class selects the first acceptable camera,
+with position uncertainty `0.07 * distance^2 / tagCount` and
+average tag distance below 6.25 meters. It additionally rejects malformed, non-finite, repeated,
+future-dated, and stale measurements (over 0.5 seconds old, including latency). Every update consumes
+all current camera frames so skipped lower-priority frames are not replayed next loop. Vision
+corrects X/Y while preserving gyro heading. No LimelightHelpers file or extra vendordep is required.
+
+For another drivetrain, call the reader once per robot loop and feed its optional result to your
+own pose estimator:
+
+```java
+var cameras = new LimelightVision(LIMELIGHT_NAMES);
+// In the robot loop, including while pose corrections are disabled:
+cameras.update(yawDegrees, pitchDegrees, rollDegrees).ifPresent(measurement -> {
+  poseEstimator.addVisionMeasurement(
+      measurement.pose(), measurement.timestampSeconds(), measurement.standardDeviations());
+});
+// Close the reader when shutting down to release NetworkTables handles.
+```
+
+`LimelightVisionConfig` exposes the base position uncertainty, maximum tag distance, and maximum
+measurement age. `setMeasurementStdDevScale()` accepts robot-specific uncertainty adjustments,
+such as trusting vision more during wheel slip; wheel-slip detection is left to the robot.
+The starter enables corrections during both autonomous and teleop. Call
+`stateMachine.vision.setShouldUpdatePose(false)` to disable corrections, and `true` to restore them.
+It always suppresses corrections while the robot is disabled.
+
+On existing installations, the installer writes updated robot files beside the originals as
+`.template` files. Adopt the updated `Vision`, `VisionConstants`, and `StateMachine` files together;
+the Vision constructor now takes the drivetrain.
 
 ## Vendor Dependencies
 
