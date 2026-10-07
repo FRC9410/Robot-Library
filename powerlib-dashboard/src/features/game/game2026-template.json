@@ -1,0 +1,380 @@
+{
+  "version": 1,
+  "team": 9410,
+  "source": {
+    "repository": "FRC9410/2026-Robot",
+    "commit": "a5f9d31c35f06de953dcdb5e9d7d4ce57001a65c",
+    "cutoff": "2026-05-01T00:00:00-05:00"
+  },
+  "field": {
+    "length": 17.5,
+    "width": 8,
+    "blueHub": [
+      4.62,
+      4
+    ],
+    "redHub": [
+      11.5,
+      4
+    ],
+    "constants": {
+      "X_MIN": 0,
+      "Y_MIN": 0,
+      "X_MAX": 17.5,
+      "Y_MAX": 8,
+      "TOL": 2,
+      "BLUE_START_X": 0,
+      "BLUE_END_X": 4,
+      "CENTER_START_X": 5.2,
+      "CENTER_END_X": 11.35,
+      "RED_START_X": 12.55,
+      "RED_END_X": 16.5,
+      "AUTO_LENGTH_IN_TIME": 15,
+      "TIME_BETWEEN_SHIFTS": 25,
+      "MAX_DISTANCE_TO_HOPPER": 5.406
+    },
+    "points": {
+      "BLUE_TOP_CORNER": [
+        0.5,
+        7.5,
+        0
+      ],
+      "BLUE_BOTTOM_CORNER": [
+        0.5,
+        0.5,
+        0
+      ],
+      "RED_TOP_CORNER": [
+        16,
+        7.5,
+        0
+      ],
+      "RED_BOTTOM_CORNER": [
+        16,
+        0.5,
+        0
+      ],
+      "NEU_TOP_LEFT": [
+        5.872,
+        7.443
+      ],
+      "NEU_TOP_RIGHT": [
+        10.692,
+        7.443
+      ],
+      "NEU_BOTTOM_LEFT": [
+        5.872,
+        0.595
+      ],
+      "NEU_BOTTOM_RIGHT": [
+        10.692,
+        0.595
+      ],
+      "HOPPER_RED": [
+        11.5,
+        4
+      ],
+      "HOPPER_BLUE": [
+        4.62,
+        4
+      ]
+    }
+  },
+  "shots": [
+    [
+      1.68,
+      62,
+      0.02,
+      58
+    ],
+    [
+      1.97,
+      64,
+      0.03,
+      59
+    ],
+    [
+      2.38,
+      67,
+      0.04,
+      61
+    ],
+    [
+      2.75,
+      71,
+      0.05,
+      63
+    ],
+    [
+      3.29,
+      74,
+      0.06,
+      65
+    ],
+    [
+      3.75,
+      77,
+      0.07,
+      65
+    ],
+    [
+      4.05,
+      79,
+      0.08,
+      66
+    ],
+    [
+      4.6,
+      82,
+      0.09,
+      67
+    ],
+    [
+      4.85,
+      84,
+      0.105,
+      68
+    ],
+    [
+      5.5,
+      89,
+      0.135,
+      72
+    ]
+  ],
+  "intake": {
+    "deployed": -0.445,
+    "idle": -0.4,
+    "feed": -0.25,
+    "stowed": -0.09,
+    "collectRps": 145,
+    "ejectRps": -100
+  },
+  "tolerances": {
+    "shooterRps": 2,
+    "headingDegrees": 5,
+    "autoTranslationMeters": 0.05,
+    "autoRotationDegrees": 1
+  },
+  "cameras": [
+    {
+      "name": "limelight-left",
+      "streamUrl": "http://limelight-left.local:5800/stream.mjpg"
+    },
+    {
+      "name": "limelight-right",
+      "streamUrl": "http://limelight-right.local:5800/stream.mjpg"
+    },
+    {
+      "name": "limelight-turret",
+      "streamUrl": "http://limelight-turret.local:5800/stream.mjpg"
+    }
+  ],
+  "autos": {
+    "Red Left": [
+      [
+        13.5,
+        2.4,
+        -90
+      ],
+      [
+        10,
+        2.4,
+        -90
+      ],
+      [
+        9.55,
+        0.73,
+        -90
+      ],
+      [
+        8.4,
+        1,
+        -90
+      ],
+      [
+        8.4,
+        3.5,
+        -90
+      ],
+      [
+        8.4,
+        2.4,
+        -90
+      ],
+      [
+        14.3,
+        2.4,
+        135
+      ]
+    ],
+    "Red Right": [
+      [
+        13.5,
+        5.7,
+        90
+      ],
+      [
+        10,
+        5.7,
+        90
+      ],
+      [
+        9.55,
+        7.27,
+        90
+      ],
+      [
+        8.4,
+        7,
+        90
+      ],
+      [
+        8.4,
+        4.5,
+        90
+      ],
+      [
+        8.4,
+        5.7,
+        90
+      ],
+      [
+        14.3,
+        5.7,
+        -135
+      ]
+    ],
+    "Blue Left": [
+      [
+        3.1,
+        5.7,
+        -90
+      ],
+      [
+        6.5,
+        5.7,
+        -90
+      ],
+      [
+        6.95,
+        7.27,
+        -90
+      ],
+      [
+        8.1,
+        7,
+        -90
+      ],
+      [
+        8.1,
+        4.5,
+        -90
+      ],
+      [
+        8.1,
+        5.7,
+        -90
+      ],
+      [
+        2.1,
+        5.7,
+        135
+      ]
+    ],
+    "Blue Right": [
+      [
+        3.1,
+        2.4,
+        90
+      ],
+      [
+        6.5,
+        2.4,
+        90
+      ],
+      [
+        6.95,
+        0.73,
+        90
+      ],
+      [
+        8.1,
+        1,
+        90
+      ],
+      [
+        8.1,
+        3.5,
+        90
+      ],
+      [
+        8.1,
+        2.4,
+        90
+      ],
+      [
+        2.1,
+        2.4,
+        -135
+      ]
+    ]
+  },
+  "hardware": {
+    "canBus": "canivore",
+    "led": {
+      "canBus": "canivore",
+      "CANDLE_CAN_ID": 0,
+      "STRIP_LENGTH": 60,
+      "STRIP_START_INDEX": 8
+    }
+  },
+  "location": {
+    "PLEASE_DONT_HIT_THE_WALL_OFFSET": 0.5,
+    "BLUE_ALLIANCE_WALL_X": 1.2850000000000001,
+    "BLUE_HUB_WALL_X": 2.65,
+    "BLUE_CENTER_WALL_X": 6.5,
+    "RED_ALLIANCE_WALL_X": 15.23,
+    "RED_HUB_WALL_X": 13.86,
+    "RED_CENTER_WALL_X": 10,
+    "NEAR_WALL_Y": 1.3199999999999998,
+    "FAR_WALL_Y": 6.75,
+    "X_MIN_": 0,
+    "X_MAX": 0,
+    "Y_MIN": 0,
+    "Y_MAX": 0,
+    "BLUE_ZONE_X_MID": 2,
+    "RED_ZONE_X_MID": 14.54,
+    "NEUTRAL_X_MID": 8.27
+  },
+  "sweep": {
+    "margin": 0.5,
+    "driveSpeed": 0.6,
+    "center": [
+      8.282,
+      4.019
+    ],
+    "targets": {
+      "top": [
+        8.282,
+        6.943,
+        90
+      ],
+      "bottom": [
+        8.282,
+        1.095,
+        -90
+      ],
+      "left": [
+        6.372,
+        4.019,
+        180
+      ],
+      "right": [
+        10.192,
+        4.019,
+        0
+      ]
+    }
+  }
+}

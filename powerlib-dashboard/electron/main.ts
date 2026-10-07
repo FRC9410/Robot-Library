@@ -166,6 +166,12 @@ function getPowerToolRootCandidates() {
   );
 }
 
+ipcMain.handle("powerlib:read-game-configuration", async () => {
+  const file = await generatedJsonPath(getDetectedRobotRoot(), "powerlib-game-2026.json");
+  try { return JSON.parse(await fs.readFile(file, "utf8")); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
+});
+
 ipcMain.handle("powerlib:read-subsystems", async () => {
   for (const candidate of await getSubsystemJsonCandidates()) {
     try {
