@@ -2,9 +2,12 @@ import {
   NetworkTables,
   NetworkTablesPrefixTopic,
   NetworkTablesTopic,
-  NetworkTablesTypeInfos
+  NetworkTablesTypeInfos,
+  msgPackValueSchema,
+  typeStringSchema
 } from "ntcore-ts-client";
-import type { NetworkTablesTypes, TypeString } from "ntcore-ts-client";
+import type { NetworkTablesTypes } from "ntcore-ts-client";
+import { z } from "zod";
 
 export type NtPrimitive = string | number | boolean;
 export type NtValue = NetworkTablesTypes | null;
@@ -12,7 +15,7 @@ export type NtTopicType = "boolean" | "double" | "int" | "string";
 
 export type NtTopicSnapshot = {
   name: string;
-  type: TypeString | NtTopicType;
+  type: string;
   value: NtValue;
   lastChangedTime?: number;
 };
@@ -25,6 +28,22 @@ const typeInfoByType = {
 } as const;
 
 const publishGraceMs = 250;
+
+function ensureNt4ProtocolCompatibility() {
+  // ntcore-ts-client 3.1.3 validates whole announcement batches against a closed
+  // list of type names. NT4 also permits custom names (structs and schemas use raw
+  // bytes). Extend its exported schema in place so one custom topic cannot hide
+  // every scalar tunable in the same batch. Keep the original names in snapshots.
+  if (!typeStringSchema.safeParse("struct:Pose2d").success) {
+    typeStringSchema.options.push(z.string().min(1) as unknown as (typeof typeStringSchema.options)[number]);
+  }
+  // MessagePack decodes raw values as Uint8Array, but this client only accepts
+  // ArrayBuffer. Normalize the bytes so raw values cannot abort a binary batch.
+  if (!msgPackValueSchema.safeParse(new Uint8Array()).success) {
+    const binaryValue = z.instanceof(Uint8Array).transform((bytes) => new Uint8Array(bytes).buffer);
+    msgPackValueSchema.options.push(binaryValue as unknown as (typeof msgPackValueSchema.options)[number]);
+  }
+}
 
 function isAnnounceTimeoutError(error: unknown) {
   return error instanceof Error && error.message.includes("was not announced within 3 seconds");
@@ -48,11 +67,30 @@ export class PowerLibNt4Client {
   private topics = new Map<string, NetworkTablesTopic<NtPrimitive>>();
   private prefixTopics = new Map<string, NetworkTablesPrefixTopic>();
   private unsubscribers: Array<() => void> = [];
+  private connectionRevision = 0;
+  private publicationRevisions = new WeakMap<NetworkTablesTopic<NtPrimitive>, number>();
 
   connect(uri: string, port: number, onConnectionChange: (connected: boolean) => void) {
     this.disconnect();
+    ensureNt4ProtocolCompatibility();
     this.nt = NetworkTables.getInstanceByURI(uri, port);
-    this.unsubscribers.push(this.nt.addRobotConnectionListener(onConnectionChange, true));
+    const socket = this.nt.client.messenger.socket;
+    let wasConnected = false;
+    this.unsubscribers.push(this.nt.addRobotConnectionListener((connected) => {
+      if (connected && !wasConnected) {
+        wasConnected = true;
+        this.connectionRevision += 1;
+        // This client skips timestamp synchronization on NT4.1. Without it,
+        // writes use the dashboard's clock and can lose to existing robot values.
+        // Restart the client's RTT measurement for each connection because a
+        // simulator restart can change the server's clock base.
+        const clock = socket as unknown as { bestRtt: number; heartbeat: () => void };
+        clock.bestRtt = -1;
+        clock.heartbeat();
+      }
+      wasConnected = connected;
+      onConnectionChange(connected);
+    }, true));
   }
 
   disconnect() {
@@ -103,6 +141,11 @@ export class PowerLibNt4Client {
     const topic =
       this.topics.get(name) ?? this.nt.createTopic<NtPrimitive>(name, typeInfoByType[type], value);
     this.topics.set(name, topic);
+    // Publisher IDs belong to one server connection. A publication that used
+    // the acknowledgement fallback below may not be republished by the client.
+    if (topic.publisher && this.publicationRevisions.get(topic) !== this.connectionRevision) {
+      topic.unpublish();
+    }
     if (!topic.publisher) {
       let publishError: unknown = null;
       const publishPromise = topic.publish().catch((error: unknown) => {
@@ -128,6 +171,7 @@ export class PowerLibNt4Client {
     }
 
     topic.setValue(value);
+    this.publicationRevisions.set(topic, this.connectionRevision);
   }
 
   watchPrefix(prefix: string, onValue: (snapshot: NtTopicSnapshot) => void) {
