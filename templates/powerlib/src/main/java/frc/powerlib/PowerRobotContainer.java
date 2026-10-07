@@ -22,6 +22,7 @@ public interface PowerRobotContainer {
   /** Legacy flat shared storage. Kept so older robot code can still call setData/getData. */
   Map<String, Object> SUBSYSTEM_DATA = new HashMap<>();
   Map<String, Map<String, Object>> GROUPED_SUBSYSTEM_DATA = new HashMap<>();
+  Map<String, Map<String, String>> SUBSYSTEM_DATA_UNITS = new HashMap<>();
   Map<String, Map<String, Object>> SUBSYSTEM_VARIABLES = new HashMap<>();
   Map<String, Map<String, Object>> COMMAND_VARIABLES = new HashMap<>();
   AtomicBoolean TUNING_ENABLED = new AtomicBoolean(false);
@@ -36,18 +37,35 @@ public interface PowerRobotContainer {
    * @param value value to store (may be null)
    */
   static void setData(String key, Object value) {
+    setData(key, value, "");
+  }
+
+  /** Stores shared telemetry with units for numeric signal log entries. */
+  static void setData(String key, Object value, String units) {
     SUBSYSTEM_DATA.put(key, value);
 
     String[] scopedKey = splitScopedKey(key);
     if (scopedKey.length == 2) {
-      setSubsystemData(scopedKey[0], scopedKey[1], value);
+      setSubsystemData(scopedKey[0], scopedKey[1], value, units);
     } else {
-      setSubsystemData("Robot", key, value);
+      setSubsystemData("Robot", key, value, units);
     }
   }
 
   static void setSubsystemData(String subsystemName, String key, Object value) {
     getMap(GROUPED_SUBSYSTEM_DATA, subsystemName).put(key, value);
+  }
+
+  /** Stores telemetry and its numeric units; both destinations use the same value. */
+  static void setSubsystemData(String subsystemName, String key, Object value, String units) {
+    setSubsystemData(subsystemName, key, value);
+    SUBSYSTEM_DATA_UNITS.computeIfAbsent(normalizeName(subsystemName), ignored -> new HashMap<>())
+        .put(key, units == null ? "" : units);
+  }
+
+  static String getSubsystemDataUnits(String subsystemName, String key) {
+    Map<String, String> units = SUBSYSTEM_DATA_UNITS.get(normalizeName(subsystemName));
+    return units == null ? "" : units.getOrDefault(key, "");
   }
 
   /**

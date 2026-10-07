@@ -7,7 +7,6 @@ package frc.powerlib.subsystems;
 import static edu.wpi.first.units.Units.Rotations;
 
 import com.ctre.phoenix6.BaseStatusSignal;
-import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.configs.CANcoderConfiguration;
 import com.ctre.phoenix6.configs.FeedbackConfigs;
 import com.ctre.phoenix6.configs.MotionMagicConfigs;
@@ -97,10 +96,9 @@ public class AbsolutePositionSubsystem extends PowerSubsystem {
     io.updateInputs(inputs);
     applyMotorTunableValues();
     applyTunableValues();
-    SignalLogger.writeDouble(subsystemName + " Position", inputs.positionRotations, units);
-    setSubsystemData("Position", inputs.positionRotations);
-    setSubsystemData("SetpointRotations", inputs.setpointRotations);
-    setSubsystemData("AppliedVolts", inputs.appliedVolts);
+    setSubsystemData("Position", inputs.positionRotations, units);
+    setSubsystemData("SetpointRotations", inputs.setpointRotations, units);
+    setSubsystemData("AppliedVolts", inputs.appliedVolts, "volts");
     setSubsystemData("Connected", inputs.connected);
   }
 

@@ -48,6 +48,7 @@ import { NetworkTablesProvider, useNetworkTables } from "./features/networktable
 import { ConnectionSettingsDialog } from "./features/networktables/ConnectionSettingsDialog";
 import { tuningModeRequestTopicName, tuningModeTopicName } from "./features/networktables/tuningUtils";
 import { RobotPanel } from "./features/robot/RobotPanel";
+import { DrivePanel } from "./features/drive/DrivePanel";
 import { TuningPanel } from "./features/tuning/TuningPanel";
 import { LimelightsPanel } from "./features/limelights/LimelightsPanel";
 import { detectLimelights } from "./features/limelights/limelightUtils";
@@ -60,6 +61,15 @@ type ToastState = {
 };
 
 const networkTableWatchPrefixes = ["/"];
+const autoConnectPausedKey = "powerlib.autoConnectPaused";
+
+function readAutoConnectPaused() {
+  try {
+    return window.localStorage.getItem(autoConnectPausedKey) === "true";
+  } catch {
+    return false;
+  }
+}
 
 export function App() {
   return (
@@ -80,7 +90,7 @@ function AppContent() {
     setTopics,
     upsertTopic
   } = useNetworkTables();
-  const [activeView, setActiveView] = useState<AppView>("robot");
+  const [activeView, setActiveView] = useState<AppView>("drive");
   const [subsystemDocument, setSubsystemDocument] = useState<SubsystemDocumentState>({
     loading: false,
     exists: false,
@@ -105,6 +115,11 @@ function AppContent() {
   const updateSubsystemCodeRef = useRef<() => Promise<void>>(async () => {});
   const updateInstallSectionRef = useRef<(section: string) => Promise<void>>(async () => {});
   const updatePowerToolRef = useRef<() => Promise<void>>(async () => {});
+  const autoConnectPausedRef = useRef<boolean | null>(null);
+  if (autoConnectPausedRef.current === null) autoConnectPausedRef.current = readAutoConnectPaused();
+  const connectionStatusRef = useRef(status);
+  const automaticConnectRef = useRef<() => void>(() => {});
+  connectionStatusRef.current = status;
   const tuningModeTopic = topics.find((topic) => topic.name === tuningModeTopicName);
   const tuningModeRequestTopic = topics.find((topic) => topic.name === tuningModeRequestTopicName);
   const networkTuningMode =
@@ -369,28 +384,65 @@ function AppContent() {
     }
   }
 
-  function connectNetworkTables() {
+  function setAutoConnectPaused(paused: boolean) {
+    autoConnectPausedRef.current = paused;
+    try {
+      window.localStorage.setItem(autoConnectPausedKey, String(paused));
+    } catch {
+      // Keep the current session's preference when browser storage is unavailable.
+    }
+  }
+
+  function attemptNetworkTablesConnection(reportErrors: boolean) {
+    connectionStatusRef.current = "connecting";
     setStatus("connecting");
     setTopics([]);
 
     try {
       clientRef.current.connect(connectionSettings.host, connectionSettings.port, (connected) => {
-        setStatus(connected ? "connected" : "disconnected");
+        const nextStatus = connected ? "connected" : "disconnected";
+        connectionStatusRef.current = nextStatus;
+        setStatus(nextStatus);
       });
       networkTableWatchPrefixes.forEach((prefix) => {
         clientRef.current.watchPrefix(prefix, upsertTopic);
       });
     } catch (caught) {
+      clientRef.current.disconnect();
+      connectionStatusRef.current = "disconnected";
       setStatus("disconnected");
-      showToast(caught instanceof Error ? caught.message : "Could not connect to NetworkTables.", "error");
+      if (reportErrors) {
+        showToast(caught instanceof Error ? caught.message : "Could not connect to NetworkTables.", "error");
+      }
     }
   }
 
+  function connectNetworkTables() {
+    setAutoConnectPaused(false);
+    attemptNetworkTablesConnection(true);
+  }
+
   function disconnectNetworkTables() {
+    setAutoConnectPaused(true);
     clientRef.current.disconnect();
+    connectionStatusRef.current = "idle";
     setStatus("idle");
     setTopics([]);
   }
+
+  automaticConnectRef.current = () => {
+    if (!autoConnectPausedRef.current && connectionStatusRef.current !== "connected") {
+      attemptNetworkTablesConnection(false);
+    }
+  };
+
+  useEffect(() => {
+    automaticConnectRef.current();
+    return () => {
+      clientRef.current.disconnect();
+      connectionStatusRef.current = "idle";
+    };
+  }, [clientRef, connectionSettings.host, connectionSettings.port]);
 
   async function setTuningModeEnabled(enabled: boolean) {
     const previousTuningMode = networkTuningMode;
@@ -521,7 +573,7 @@ function AppContent() {
                 }
                 label="Tuning"
               />
-              {status === "connected" ? (
+              {status === "connected" || !autoConnectPausedRef.current ? (
                 <Button variant="outlined" size="small" onClick={disconnectNetworkTables}>
                   Disconnect
                 </Button>
@@ -544,6 +596,7 @@ function AppContent() {
             </Stack>
           </Toolbar>
           <Tabs value={activeView} onChange={(_, value) => setActiveView(value)} sx={{ minHeight: 44 }}>
+            <Tab icon={<DashboardIcon />} iconPosition="start" label="Drive" value="drive" sx={{ minHeight: 44 }} />
             <Tab
               icon={<SmartToyIcon />}
               iconPosition="start"
@@ -643,8 +696,9 @@ function AppContent() {
         </Alert>
       </Snackbar>
 
-      <Container maxWidth={false} sx={{ py: 2 }}>
+      <Container maxWidth={false} sx={activeView === "drive" ? { p: "0 !important" } : { py: 2 }}>
         <Stack spacing={2}>
+          {activeView === "drive" && <DrivePanel />}
           <Box sx={{ display: activeView === "constants" ? "block" : "none" }}>
             <ConstantsPanel active={activeView === "constants"} />
           </Box>

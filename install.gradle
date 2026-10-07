@@ -17,6 +17,31 @@ class VendorDependency {
 
 def templateFiles = [
     new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/dashboard/SubsystemTelemetry.java',
+        destination: 'src/main/java/frc/powerlib/dashboard/SubsystemTelemetry.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/dashboard/DriveTelemetry.java',
+        destination: 'src/main/java/frc/powerlib/dashboard/DriveTelemetry.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/auto/NTChooser.java',
+        destination: 'src/main/java/frc/powerlib/auto/NTChooser.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/auto/AutoBuilder.java',
+        destination: 'src/main/java/frc/powerlib/auto/AutoBuilder.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/auto/CommandBuilder.java',
+        destination: 'src/main/java/frc/powerlib/auto/CommandBuilder.java',
+        replacement: false
+    ),
+    new TemplateFile(
         source: 'powerlib/src/main/java/frc/powerlib/tuning/TunableConstant.java',
         destination: 'src/main/java/frc/powerlib/tuning/TunableConstant.java',
         replacement: false

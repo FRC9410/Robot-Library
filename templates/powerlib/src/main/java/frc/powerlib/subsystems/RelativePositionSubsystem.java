@@ -1,6 +1,5 @@
 package frc.powerlib.subsystems;
 
-import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.configs.FeedbackConfigs;
 import com.ctre.phoenix6.configs.MotionMagicConfigs;
 import com.ctre.phoenix6.configs.Slot0Configs;
@@ -164,13 +163,9 @@ public class RelativePositionSubsystem extends PowerSubsystem {
     boolean connected = inputs.connected;
     boolean atTarget = atTargetPosition();
 
-    SignalLogger.writeDouble(config.subsystemName() + " Position", position, config.units());
-    SignalLogger.writeDouble(config.subsystemName() + " Setpoint", setpoint, config.units());
-    SignalLogger.writeBoolean(config.subsystemName() + " At Target", atTarget);
-
-    setSubsystemData("Position", position);
-    setSubsystemData("Setpoint", setpoint);
-    setSubsystemData("AppliedVolts", voltage);
+    setSubsystemData("Position", position, config.units());
+    setSubsystemData("Setpoint", setpoint, config.units());
+    setSubsystemData("AppliedVolts", voltage, "volts");
     setSubsystemData("AtTarget", atTarget);
     setSubsystemData("Connected", connected);
   }

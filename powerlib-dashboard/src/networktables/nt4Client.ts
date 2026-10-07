@@ -18,6 +18,7 @@ export type NtTopicSnapshot = {
   type: string;
   value: NtValue;
   lastChangedTime?: number;
+  receivedAt?: number;
 };
 
 const typeInfoByType = {
@@ -62,6 +63,16 @@ async function waitForPublisher(topic: NetworkTablesTopic<NtPrimitive>, timeoutM
   return topic.publisher;
 }
 
+function unpublishTopic(topic: NetworkTablesTopic<NtPrimitive>) {
+  if (!topic.publisher) return;
+  if (topic.pubuid !== undefined) {
+    topic.unpublish();
+  } else {
+    // A late announcement after a restart can leave a publisher flag without an ID.
+    (topic as unknown as { _publisher: boolean })._publisher = false;
+  }
+}
+
 export class PowerLibNt4Client {
   private nt: NetworkTables | null = null;
   private topics = new Map<string, NetworkTablesTopic<NtPrimitive>>();
@@ -69,12 +80,40 @@ export class PowerLibNt4Client {
   private unsubscribers: Array<() => void> = [];
   private connectionRevision = 0;
   private publicationRevisions = new WeakMap<NetworkTablesTopic<NtPrimitive>, number>();
+  private ownedPublications = new Set<NetworkTablesTopic<NtPrimitive>>();
+  private stoppedSocketGuard: (() => void) | null = null;
 
   connect(uri: string, port: number, onConnectionChange: (connected: boolean) => void) {
     this.disconnect();
+    this.stoppedSocketGuard?.();
+    this.stoppedSocketGuard = null;
     ensureNt4ProtocolCompatibility();
     this.nt = NetworkTables.getInstanceByURI(uri, port);
-    const socket = this.nt.client.messenger.socket;
+    const nt = this.nt;
+    const socket = nt.client.messenger.socket;
+    let awaitingSocketClose = socket.isClosing();
+    const restart = () => {
+      if (this.nt !== nt) return;
+      awaitingSocketClose = false;
+      // Closing can finish after a late publication acknowledgement. Clear stale
+      // flags before the cached client's reinstantiate() tries to republish them.
+      this.ownedPublications.forEach((topic) => {
+        if (topic.pubuid === undefined) unpublishTopic(topic);
+      });
+      socket.startAutoConnect();
+      nt.changeURI(uri, port);
+    };
+    if (awaitingSocketClose) {
+      // Finish closing the previous session before reusing the cached client.
+      // Otherwise its late close event can start a second reconnect loop.
+      const closingSocket = socket.websocket;
+      closingSocket.addEventListener("close", restart, { once: true });
+      this.unsubscribers.push(() => closingSocket.removeEventListener("close", restart));
+    } else if (socket.isClosed()) {
+      restart();
+    } else {
+      socket.startAutoConnect();
+    }
     let wasConnected = false;
     this.unsubscribers.push(this.nt.addRobotConnectionListener((connected) => {
       if (connected && !wasConnected) {
@@ -89,17 +128,32 @@ export class PowerLibNt4Client {
         clock.heartbeat();
       }
       wasConnected = connected;
-      onConnectionChange(connected);
+      // An initial notification while the handshake is pending is not a failure.
+      if (connected || (!awaitingSocketClose && !socket.isConnecting())) onConnectionChange(connected);
     }, true));
   }
 
   disconnect() {
     this.unsubscribers.forEach((unsubscribe) => unsubscribe());
     this.unsubscribers = [];
-    this.topics.forEach((topic) => topic.unsubscribeAll());
+    this.topics.forEach((topic) => {
+      topic.unsubscribeAll();
+      unpublishTopic(topic);
+    });
     this.topics.clear();
     this.prefixTopics.forEach((topic) => topic.unsubscribeAll());
     this.prefixTopics.clear();
+    if (this.nt) {
+      const socket = this.nt.client.messenger.socket;
+      socket.stopAutoConnect();
+      this.stoppedSocketGuard?.();
+      // The dependency cannot cancel a retry already queued before Disconnect.
+      // Close that socket immediately if it finishes opening while paused.
+      this.stoppedSocketGuard = socket.addConnectionListener((connected) => {
+        if (connected) socket.close();
+      });
+      socket.close();
+    }
     this.nt = null;
   }
 
@@ -141,10 +195,11 @@ export class PowerLibNt4Client {
     const topic =
       this.topics.get(name) ?? this.nt.createTopic<NtPrimitive>(name, typeInfoByType[type], value);
     this.topics.set(name, topic);
+    this.ownedPublications.add(topic);
     // Publisher IDs belong to one server connection. A publication that used
     // the acknowledgement fallback below may not be republished by the client.
     if (topic.publisher && this.publicationRevisions.get(topic) !== this.connectionRevision) {
-      topic.unpublish();
+      unpublishTopic(topic);
     }
     if (!topic.publisher) {
       let publishError: unknown = null;
@@ -195,7 +250,7 @@ export class PowerLibNt4Client {
           lastChangedTime: topic.lastChangedTime
         });
       },
-      { all: true }
+      { all: true, periodic: 0.02 }
     );
   }
 }

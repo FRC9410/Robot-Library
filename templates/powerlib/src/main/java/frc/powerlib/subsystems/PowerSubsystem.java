@@ -228,6 +228,10 @@ public abstract class PowerSubsystem extends SubsystemBase {
     frc.powerlib.PowerRobotContainer.setSubsystemData(subsystemName, key, value);
   }
 
+  protected void setSubsystemData(String key, Object value, String units) {
+    frc.powerlib.PowerRobotContainer.setSubsystemData(subsystemName, key, value, units);
+  }
+
   protected void registerSubsystemVariable(String key, double defaultValue) {
     frc.powerlib.PowerRobotContainer.setSubsystemVariableDefault(subsystemName, key, defaultValue);
   }

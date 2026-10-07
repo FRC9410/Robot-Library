@@ -19,6 +19,7 @@ public class PowerDashboard extends SubsystemBase {
   private static final double TUNING_MODE_SYNC_INTERVAL_SECONDS = 1.0;
 
   private final StateMachine stateMachine;
+  private final frc.powerlib.dashboard.DriveTelemetry driveTelemetry;
   private final NetworkTable subsystemsTable =
       NetworkTableInstance.getDefault().getTable("PowerLib").getSubTable("Subsystems");
   private final NetworkTable commandsTable =
@@ -36,6 +37,20 @@ public class PowerDashboard extends SubsystemBase {
 
   public PowerDashboard(StateMachine stateMachine) {
     this.stateMachine = stateMachine;
+    driveTelemetry = new frc.powerlib.dashboard.DriveTelemetry()
+        .withDriverControllerPort(frc.robot.Constants.OI.DRIVER_CONTROLLER_PORT)
+        .withPose(() -> stateMachine.drivetrain.getState().Pose)
+        .withSpeeds(() -> stateMachine.drivetrain.getState().Speeds)
+        .withState(() -> stateMachine.getWantedState().name())
+        .withGyroConnected(() -> stateMachine.drivetrain.getPigeon2().isConnected());
+    // Matches TunerConstants.createDrivetrain's FL, FR, BL, BR module order.
+    String[] moduleNames = {"FL", "FR", "BL", "BR"};
+    for (int index = 0; index < stateMachine.drivetrain.getModules().length; index++) {
+      var module = stateMachine.drivetrain.getModule(index);
+      String name = index < moduleNames.length ? moduleNames[index] : "Module " + index;
+      driveTelemetry.withModuleConnected(name, () -> module.getDriveMotor().isConnected()
+          && module.getSteerMotor().isConnected() && module.getEncoder().isConnected());
+    }
     frc.robot.constants.GeneratedTunableConstants.register();
     initCharacterizationRoutines();
   }
@@ -47,6 +62,7 @@ public class PowerDashboard extends SubsystemBase {
 
   @Override
   public void periodic() {
+    driveTelemetry.publish();
     syncTuningMode();
     publishSubsystemData();
     syncSubsystemVariables();
@@ -69,12 +85,7 @@ public class PowerDashboard extends SubsystemBase {
   }
 
   private void publishSubsystemData() {
-    new java.util.HashMap<>(PowerRobotContainer.getAllSubsystemData())
-        .forEach(
-            (subsystemName, values) -> {
-              NetworkTable dataTable = subsystemsTable.getSubTable(subsystemName).getSubTable("Data");
-              new java.util.HashMap<>(values).forEach((key, value) -> publishValue(dataTable, key, value));
-            });
+    frc.powerlib.dashboard.SubsystemTelemetry.publish();
   }
 
   private void syncSubsystemVariables() {
@@ -153,21 +164,6 @@ public class PowerDashboard extends SubsystemBase {
       return fallback;
     }
     return entry.getString(fallback);
-  }
-
-  private void publishValue(NetworkTable table, String key, Object value) {
-    NetworkTableEntry entry = table.getEntry(key);
-    if (value instanceof Boolean) {
-      entry.setBoolean((Boolean) value);
-      return;
-    }
-
-    if (value instanceof Number) {
-      entry.setDouble(((Number) value).doubleValue());
-      return;
-    }
-
-    entry.setString(value == null ? "" : value.toString());
   }
 
   private interface VariableUpdater {

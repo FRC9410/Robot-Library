@@ -59,7 +59,7 @@ export function NetworkTablesProvider({ children }: { children: ReactNode }) {
   function upsertTopic(snapshot: NtTopicSnapshot) {
     setTopics((current) => {
       const existing = current.filter((topic) => topic.name !== snapshot.name);
-      return [...existing, snapshot];
+      return [...existing, { ...snapshot, receivedAt: performance.now() }];
     });
   }
 

@@ -513,23 +513,16 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
     double yMeters = pose.getY();
     double rotationDegrees = rotation.getDegrees();
 
-    PowerRobotContainer.setData("Swerve/Pose/XMeters", xMeters);
-    PowerRobotContainer.setData("Swerve/Pose/YMeters", yMeters);
-    PowerRobotContainer.setData("Swerve/Pose/RotationDegrees", rotationDegrees);
-    PowerRobotContainer.setData("Swerve/Speeds/VXMetersPerSecond", speeds.vxMetersPerSecond);
-    PowerRobotContainer.setData("Swerve/Speeds/VYMetersPerSecond", speeds.vyMetersPerSecond);
-    PowerRobotContainer.setData("Swerve/Speeds/OmegaRadiansPerSecond", speeds.omegaRadiansPerSecond);
+    PowerRobotContainer.setData("Swerve/Pose/XMeters", xMeters, "meters");
+    PowerRobotContainer.setData("Swerve/Pose/YMeters", yMeters, "meters");
+    PowerRobotContainer.setData("Swerve/Pose/RotationDegrees", rotationDegrees, "degrees");
+    PowerRobotContainer.setData("Swerve/Speeds/VXMetersPerSecond", speeds.vxMetersPerSecond, "meters per second");
+    PowerRobotContainer.setData("Swerve/Speeds/VYMetersPerSecond", speeds.vyMetersPerSecond, "meters per second");
+    PowerRobotContainer.setData("Swerve/Speeds/OmegaRadiansPerSecond", speeds.omegaRadiansPerSecond, "radians per second");
 
     posePublisher.set(pose);
     moduleStatePublisher.set(state.ModuleStates);
 
-    SignalLogger.writeDouble("Swerve Pose X", xMeters, "meters");
-    SignalLogger.writeDouble("Swerve Pose Y", yMeters, "meters");
-    SignalLogger.writeDouble("Swerve Pose Rotation", rotationDegrees, "degrees");
-    SignalLogger.writeDouble("Swerve Speed VX", speeds.vxMetersPerSecond, "meters per second");
-    SignalLogger.writeDouble("Swerve Speed VY", speeds.vyMetersPerSecond, "meters per second");
-    SignalLogger.writeDouble(
-        "Swerve Speed Omega", speeds.omegaRadiansPerSecond, "radians per second");
   }
 
   private void startSimThread() {

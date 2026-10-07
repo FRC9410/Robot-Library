@@ -1480,12 +1480,7 @@ public class PowerDashboard extends SubsystemBase {
   }
 
   private void publishSubsystemData() {
-    new java.util.HashMap<>(PowerRobotContainer.getAllSubsystemData())
-        .forEach(
-            (subsystemName, values) -> {
-              NetworkTable dataTable = subsystemsTable.getSubTable(subsystemName).getSubTable("Data");
-              new java.util.HashMap<>(values).forEach((key, value) -> publishValue(dataTable, key, value));
-            });
+    frc.powerlib.dashboard.SubsystemTelemetry.publish();
   }
 
   private void syncSubsystemVariables() {
@@ -1977,6 +1972,35 @@ function Ensure-SwerveCachedTuningSupport {
     [System.IO.File]::WriteAllText($SwervePath, $content, [System.Text.UTF8Encoding]::new($false))
 }
 
+function Ensure-SubsystemTelemetrySupport {
+    param([Parameter(Mandatory = $true)][string]$PowerDashboardPath)
+
+    $content = Get-Content -Path $PowerDashboardPath -Raw
+    $content = [regex]::Replace($content,
+        '(?ms)^  private void publishSubsystemData\(\) \{.*?^  \}',
+        "  private void publishSubsystemData() {`n    frc.powerlib.dashboard.SubsystemTelemetry.publish();`n  }")
+    $content = [regex]::Replace($content,
+        '(?ms)^  private void publishValue\(NetworkTable table, String key, Object value\) \{.*?^  \}\r?\n\r?\n', '')
+
+    if (-not $content.Contains('private final frc.powerlib.dashboard.DriveTelemetry driveTelemetry;')) {
+        $content = $content.Replace('  private final StateMachine stateMachine;',
+            "  private final StateMachine stateMachine;`n  private final frc.powerlib.dashboard.DriveTelemetry driveTelemetry;")
+        $driveInitialization = @'
+    this.stateMachine = stateMachine;
+    driveTelemetry = new frc.powerlib.dashboard.DriveTelemetry()
+        .withPose(() -> stateMachine.drivetrain.getState().Pose)
+        .withSpeeds(() -> stateMachine.drivetrain.getState().Speeds)
+        .withState(() -> stateMachine.getWantedState().name());
+'@
+        $content = $content.Replace('    this.stateMachine = stateMachine;', $driveInitialization)
+    }
+    if (-not $content.Contains('driveTelemetry.publish();')) {
+        $content = $content.Replace('  public void periodic() {',
+            "  public void periodic() {`n    driveTelemetry.publish();")
+    }
+    Set-Content -Path $PowerDashboardPath -Value $content -Encoding ascii
+}
+
 function Ensure-TunableConstantsSupport {
     param([Parameter(Mandatory = $true)][string]$PowerDashboardPath)
 
@@ -2063,6 +2087,7 @@ function Update-SubsystemsFromJson {
     Rewrite-ConstantsBlock $constantsBarrel $subsystems
     Rewrite-StateMachineBlock $stateMachineFile $subsystems
     Ensure-PowerDashboardRawNetworkTablesSupport $powerDashboardFile
+    Ensure-SubsystemTelemetrySupport $powerDashboardFile
     Write-ConfiguredConstants $constantsConfiguration $subsystems
     Write-TunableConstantsRegistry $subsystems
     Ensure-TunableConstantsSupport $powerDashboardFile

@@ -41,6 +41,7 @@ PowerLib files are added under `frc.powerlib`:
 
 ```text
 src/main/java/frc/powerlib/PowerRobotContainer.java
+src/main/java/frc/powerlib/auto/*.java
 src/main/java/frc/powerlib/configs/*.java
 src/main/java/frc/powerlib/math/*.java
 src/main/java/frc/powerlib/subsystems/*.java
@@ -70,6 +71,87 @@ src/main/java/frc/robot/utils/FieldUtils.java
 ```
 
 The installer creates temporary backups before replacing files. Successful installs delete those backups by default.
+
+## Autonomous Chooser
+
+The starter `RobotContainer` publishes a standard autonomous dropdown at
+`/SmartDashboard/Auto Chooser`. SmartDashboard and Elastic can use a String Chooser widget
+for that table. The initial default is `None`.
+Selection takes effect when `Robot.autonomousInit()` calls `getAutonomousCommand()`.
+The library's `NTChooser` publishes options and reads selections directly through NetworkTables.
+`AutoBuilder` updates the robot acknowledgement from its subsystem `periodic()` method.
+
+Register routines in `RobotContainer.configureAutos()` before `autoBuilder.publish()`:
+
+```java
+autoBuilder.addAuto("My Auto", this::buildMyAuto);
+// Optional: register a different default instead of None.
+autoBuilder.setDefaultAuto("Default Auto", this::buildDefaultAuto);
+autoBuilder.publish();
+```
+
+Optionally tag a routine with WPILib's `DriverStation.Alliance`:
+
+```java
+autoBuilder.addAuto("Red Auto", DriverStation.Alliance.Red, this::buildRedAuto);
+autoBuilder.addAuto("Blue Auto", DriverStation.Alliance.Blue, this::buildBlueAuto);
+// Without an alliance argument, a routine is available for either alliance.
+autoBuilder.addAuto("Shared Auto", this::buildSharedAuto);
+```
+
+Import `edu.wpi.first.wpilibj.DriverStation` for this example. The chooser updates its
+options when the reported alliance changes. While the alliance is unknown, only untagged
+routines appear. `setDefaultAuto` also accepts an alliance argument; when that default is
+unavailable, the chooser falls back to `None`. A selected routine that becomes unavailable
+resolves to the available default. These tags filter routines; they do not mirror paths or
+coordinates. Existing running commands continue unchanged.
+
+Factories must return fresh commands, including the children of command groups. The reusable
+`frc.powerlib.auto.CommandBuilder` can assemble sequences from factories:
+
+```java
+private Command buildMyAuto() {
+  return new frc.powerlib.auto.CommandBuilder()
+      .runOnce(() -> stateMachine.setWantedState(StateMachine.RobotState.IDLE), stateMachine)
+      .waitSeconds(0.5)
+      .command(() -> new com.pathplanner.lib.commands.PathPlannerAuto("My Path"))
+      .build();
+}
+```
+
+Use your own actions or driving commands in each step. PathPlanner routines require their
+matching deployed auto/path files. The chooser handles missing or stale selections by using
+the configured default. Dashboard widgets write `selected` and read the robot's `active`
+acknowledgement. Changing the selection does not change an already running routine.
+
+Existing installations receive `RobotContainer.java.template`; adopt its `autoBuilder`
+field, `configureAutos()` call/method, and `getAutonomousCommand()` implementation in your
+robot container. Updating PowerLib alone preserves your existing robot container.
+
+## Telemetry Logging
+
+Subsystem telemetry stored through `PowerRobotContainer.setData()` or `setSubsystemData()`
+is published and logged once per robot loop by `PowerDashboard`. The shared
+`SubsystemTelemetry` writer sends the same snapshot to NetworkTables and CTRE SignalLogger.
+Boolean, numeric, and string values retain their published types; other objects use their
+string representation. Numeric values can include units through an optional final argument.
+
+```java
+PowerRobotContainer.setSubsystemData("Intake", "Connected", true);
+PowerRobotContainer.setSubsystemData("Intake", "Velocity", velocity, "rotations per second");
+```
+
+NetworkTables entries use `/PowerLib/Subsystems/<name>/Data/<key>`. Custom signal log names
+use `PowerLib/Subsystems/<name>/Data/<key>`. These replace the earlier individual telemetry
+log names. Log recording still follows Phoenix's logger start/stop behavior; SysId logging
+hooks remain separate.
+
+`DriveTelemetry` collects battery voltage, brownout status, robot state/mode, Driver Station
+status, pose, speeds, and heartbeat into the `Drive` subsystem data map. Power Tool reads
+`/PowerLib/Subsystems/Drive/Data` and also accepts older `/PowerLib/Drive` topics.
+Existing robot projects should update PowerLib, then run Update Code to migrate
+`PowerDashboard` to the shared writer. Apply the updated Swerve template's telemetry changes
+to an existing customized Swerve class to remove its earlier duplicate logging calls.
 
 ## Multiple Limelights
 
@@ -212,6 +294,8 @@ powershell -ExecutionPolicy Bypass -File .\power-tool\scripts\power-tool.ps1
 ```
 
 Power Tool includes NetworkTables tools and generated subsystem editing. Install builds the app once, then the launchers run the built Electron app with `npm start`. Its `node_modules` folder is created during install and should not be committed.
+
+Power Tool opens on a generic **Drive** dashboard with discovered camera streams, a field view, an autonomous dropdown, and optional drivetrain and robot telemetry. Fresh installations publish its robot feedback through `DriveTelemetry` at the normal 20 ms loop rate. See [Drive dashboard setup](powerlib-dashboard/DRIVE-DASHBOARD.md) for existing-project integration, camera discovery, and topic mappings.
 
 Use `Update Power Tool` inside the app to download the latest Power Tool source, refresh the scripts and project-local skills, reinstall npm dependencies, and restart the app.
 

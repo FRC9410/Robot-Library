@@ -4,7 +4,6 @@
 
 package frc.powerlib.subsystems;
 
-import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.configs.FeedbackConfigs;
 import com.ctre.phoenix6.configs.MotionMagicConfigs;
 import com.ctre.phoenix6.configs.Slot0Configs;
@@ -75,10 +74,9 @@ public class VelocitySubsystem extends PowerSubsystem {
     io.updateInputs(inputs);
     applyMotorTunableValues();
     applyTunableValues();
-    SignalLogger.writeDouble(subsystemName + " Velocity", inputs.velocityRotationsPerSecond, "rotations per second");
-    setSubsystemData("Velocity", inputs.velocityRotationsPerSecond);
-    setSubsystemData("VelocitySetpoint", inputs.velocitySetpoint);
-    setSubsystemData("AppliedVolts", inputs.appliedVolts);
+    setSubsystemData("Velocity", inputs.velocityRotationsPerSecond, "rotations per second");
+    setSubsystemData("VelocitySetpoint", inputs.velocitySetpoint, "rotations per second");
+    setSubsystemData("AppliedVolts", inputs.appliedVolts, "volts");
     setSubsystemData("Connected", inputs.connected);
   }
 
