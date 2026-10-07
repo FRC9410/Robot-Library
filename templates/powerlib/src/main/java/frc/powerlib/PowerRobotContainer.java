@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * {@link frc.robot.RobotContainer}.
  * <p>
  * Subsystem telemetry is published under {@code /PowerLib/Subsystems/<name>/Data}. Subsystem
- * tunables are published under {@code /PowerLib/Subsystems/<name>/Variables}. Generated command
+ * tunables are published under {@code /PowerLib/Subsystems/<name>/Variables}. Command
  * tunables are published under {@code /PowerLib/Commands/<name>/Variables}.
  */
 public interface PowerRobotContainer {

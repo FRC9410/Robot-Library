@@ -879,7 +879,7 @@ export function TuningPanel() {
                   </Button>
                   <Button
                     disabled={
-                      tunableTopics.length === 0 || !window.powerlib?.readSubsystems || !window.powerlib?.readBindings
+                      tunableTopics.length === 0 || !window.powerlib?.readSubsystems
                     }
                     onClick={() => setSaveValuesOpen(true)}
                     size="small"
@@ -892,7 +892,7 @@ export function TuningPanel() {
 
               <Alert severity={tuningModeEnabled ? "warning" : "info"} variant="outlined">
                 {tuningModeEnabled
-                  ? "Tuning mode is on: applied values can change subsystem gains and generated command targets live."
+                  ? "Tuning mode is on: applied values can change subsystem gains and command targets live."
                   : "Tuning mode is off: applied values are staged in NetworkTables, but robot code uses generated constants/defaults."}
                 {tuningModeRequestTopic && tuningModeRequested !== tuningModeEnabled
                   ? ` Requested mode is ${tuningModeRequested ? "on" : "off"}; waiting for robot acknowledgement.`
@@ -947,7 +947,7 @@ export function TuningPanel() {
               ) : (
                 <Alert severity="info" variant="outlined">
                   Check variables in the sidebar to build your tuning list. Generated subsystem control values and
-                  generated command values will appear there while robot code is running.
+                  command values will appear there while robot code is running.
                 </Alert>
               )}
             </Stack>

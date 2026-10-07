@@ -5,8 +5,6 @@ contextBridge.exposeInMainWorld("powerlib", {
   readSubsystems: () => ipcRenderer.invoke("powerlib:read-subsystems"),
   saveSubsystems: (subsystems: unknown[], swerve?: unknown) =>
     ipcRenderer.invoke("powerlib:save-subsystems", subsystems, swerve),
-  readBindings: () => ipcRenderer.invoke("powerlib:read-bindings"),
-  saveBindings: (bindings: unknown[]) => ipcRenderer.invoke("powerlib:save-bindings", bindings),
   readTuningSelection: () => ipcRenderer.invoke("powerlib:read-tuning-selection"),
   saveTuningSelection: (selectedTopics: string[]) =>
     ipcRenderer.invoke("powerlib:save-tuning-selection", selectedTopics),
@@ -14,7 +12,6 @@ contextBridge.exposeInMainWorld("powerlib", {
     ipcRenderer.invoke("powerlib:save-tuning-monitor-drawer-open", open),
   saveTuningSidebarExpandedSection: (section: "subsystem" | "command") =>
     ipcRenderer.invoke("powerlib:save-tuning-sidebar-expanded-section", section),
-  readBindingConstants: () => ipcRenderer.invoke("powerlib:read-binding-constants"),
   updateSubsystemCode: () => ipcRenderer.invoke("powerlib:update-subsystem-code"),
   updateInstallSection: (section: string) => ipcRenderer.invoke("powerlib:update-install-section", section),
   updatePowerTool: () => ipcRenderer.invoke("powerlib:update-power-tool"),

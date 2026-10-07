@@ -15,10 +15,8 @@ import {
 } from "@mui/material";
 import type { NtTopicSnapshot } from "../../networktables/nt4Client";
 import type { GeneratedSubsystem, GeneratedSwerveConstants } from "../subsystems/types";
-import { methodNeedsValue, toConstantName } from "../bindings/bindingUtils";
-import type { BindingCommand, GeneratedBinding } from "../bindings/types";
 
-type SaveTarget = "subsystem" | "command" | "swerve";
+type SaveTarget = "subsystem" | "swerve";
 type JsonPathSegment = string | number;
 type JsonContainer = Record<string | number, unknown>;
 type SaveValue = number | boolean | string;
@@ -34,8 +32,6 @@ type SaveValueChange = {
   subsystemIndex?: number;
   subsystemPath?: JsonPathSegment[];
   swervePath?: JsonPathSegment[];
-  bindingIndex?: number;
-  commandVariableKey?: string;
 };
 
 type SaveTunedValuesDialogProps = {
@@ -47,11 +43,9 @@ type SaveTunedValuesDialogProps = {
 type LoadedDocuments = {
   subsystems: GeneratedSubsystem[];
   swerve: GeneratedSwerveConstants;
-  bindings: GeneratedBinding[];
 };
 
 const subsystemVariablesPrefix = "/PowerLib/Subsystems/";
-const commandVariablesPrefix = "/PowerLib/Commands/";
 const swerveTopicName = "Swerve";
 
 const subsystemVariableMappings: Record<
@@ -204,24 +198,8 @@ function toPascalName(value: string | undefined) {
     .join("");
 }
 
-function toJavaIdentifier(value: string | undefined, fallback = "binding") {
-  const parts = (value && value.trim().length > 0 ? value : fallback)
-    .trim()
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .split(/[^a-zA-Z0-9]+/)
-    .filter(Boolean);
-  const pascalName = parts
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}`)
-    .join("");
-  return pascalName ? `${pascalName.charAt(0).toLowerCase()}${pascalName.slice(1)}` : fallback;
-}
-
 function getSubsystemTopicName(subsystem: GeneratedSubsystem) {
   return toPascalName(subsystem.name || subsystem.id);
-}
-
-function getBindingTopicName(binding: GeneratedBinding) {
-  return toJavaIdentifier(binding.id || binding.name, "binding");
 }
 
 function parseVariableTopic(name: string, prefix: string) {
@@ -423,22 +401,6 @@ function formatValue(value: unknown) {
   return String(value);
 }
 
-function formatVariableSegment(segment: string) {
-  if (/^k[A-Z]$/.test(segment)) {
-    return segment;
-  }
-
-  if (/^[A-Z0-9_]+$/.test(segment)) {
-    return segment.replace(/_/g, " ");
-  }
-
-  return segment.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
-}
-
-function formatVariableKey(variableKey: string) {
-  return variableKey.split("/").map(formatVariableSegment).join(" ");
-}
-
 function valuesDiffer(oldValue: unknown, newValue: SaveValue) {
   if (typeof newValue === "number") {
     const oldNumber = toNumberOrNull(oldValue);
@@ -455,75 +417,6 @@ function valuesDiffer(oldValue: unknown, newValue: SaveValue) {
   }
 
   return String(oldValue ?? "") !== newValue;
-}
-
-function getCommandKind(command: BindingCommand) {
-  return command.kind === "sequence" ||
-    command.kind === "parallel" ||
-    command.kind === "parallelRace" ||
-    command.kind === "wait"
-    ? command.kind
-    : "function";
-}
-
-function getCommandVariableKey(command: BindingCommand, subsystems: GeneratedSubsystem[]) {
-  const kind = getCommandKind(command);
-  if (kind === "wait") {
-    return command.constantName ? `Wait/${toConstantName(command.constantName)}` : null;
-  }
-
-  if (kind !== "function" || !command.constantName || !methodNeedsValue(subsystems, command)) {
-    return null;
-  }
-
-  const subsystem = subsystems.find((candidate) => candidate.id === command.subsystemId);
-  if (!subsystem || !command.method) {
-    return null;
-  }
-
-  return `${getSubsystemTopicName(subsystem)}/${command.method}/${toConstantName(command.constantName)}`;
-}
-
-function findCommandByVariableKey(
-  commands: BindingCommand[] | undefined,
-  subsystems: GeneratedSubsystem[],
-  variableKey: string
-): BindingCommand | null {
-  for (const command of commands ?? []) {
-    const kind = getCommandKind(command);
-    if (kind === "sequence" || kind === "parallel" || kind === "parallelRace") {
-      const childMatch = findCommandByVariableKey(command.children, subsystems, variableKey);
-      if (childMatch) {
-        return childMatch;
-      }
-      continue;
-    }
-
-    if (getCommandVariableKey(command, subsystems) === variableKey) {
-      return command;
-    }
-  }
-
-  return null;
-}
-
-function applyCommandValue(
-  commands: BindingCommand[] | undefined,
-  subsystems: GeneratedSubsystem[],
-  variableKey: string,
-  value: number
-) {
-  for (const command of commands ?? []) {
-    const kind = getCommandKind(command);
-    if (kind === "sequence" || kind === "parallel" || kind === "parallelRace") {
-      applyCommandValue(command.children, subsystems, variableKey, value);
-      continue;
-    }
-
-    if (getCommandVariableKey(command, subsystems) === variableKey) {
-      command.value = value;
-    }
-  }
 }
 
 function buildSubsystemChanges(
@@ -599,62 +492,15 @@ function buildSubsystemChanges(
   return changes;
 }
 
-function buildCommandChanges(
-  topics: NtTopicSnapshot[],
-  bindings: GeneratedBinding[],
-  subsystems: GeneratedSubsystem[]
-) {
-  const changes: SaveValueChange[] = [];
-
-  topics.forEach((topic) => {
-    const parsed = parseVariableTopic(topic.name, commandVariablesPrefix);
-    const newValue = getTopicNumber(topic);
-    if (!parsed || newValue === null) {
-      return;
-    }
-
-    const bindingIndex = bindings.findIndex((binding) => getBindingTopicName(binding) === parsed.ownerName);
-    if (bindingIndex < 0) {
-      return;
-    }
-
-    const binding = bindings[bindingIndex];
-    const command = findCommandByVariableKey(binding.commands, subsystems, parsed.variableKey);
-    if (!command) {
-      return;
-    }
-
-    if (!valuesDiffer(command.value, newValue)) {
-      return;
-    }
-
-    changes.push({
-      id: topic.name,
-      selected: true,
-      target: "command",
-      label: `${binding.name || parsed.ownerName}: ${formatVariableKey(parsed.variableKey)}`,
-      oldValueText: formatValue(command.value),
-      newValue,
-      bindingIndex,
-      commandVariableKey: parsed.variableKey
-    });
-  });
-
-  return changes;
-}
-
 function buildChanges(topics: NtTopicSnapshot[], documents: LoadedDocuments) {
-  return [
-    ...buildSubsystemChanges(topics, documents.subsystems, documents.swerve),
-    ...buildCommandChanges(topics, documents.bindings, documents.subsystems)
-  ].sort((left, right) => left.label.localeCompare(right.label));
+  return buildSubsystemChanges(topics, documents.subsystems, documents.swerve)
+    .sort((left, right) => left.label.localeCompare(right.label));
 }
 
 export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValuesDialogProps) {
   const [documents, setDocuments] = useState<LoadedDocuments>({
     subsystems: [],
-    swerve: {},
-    bindings: []
+    swerve: {}
   });
   const [changes, setChanges] = useState<SaveValueChange[]>([]);
   const [loading, setLoading] = useState(false);
@@ -681,25 +527,18 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
     setMessage(null);
 
     try {
-      if (!window.powerlib?.readSubsystems || !window.powerlib?.readBindings) {
+      if (!window.powerlib?.readSubsystems) {
         throw new Error("PowerLib file bridge is not available.");
       }
 
-      const [subsystemsResult, bindingsResult] = await Promise.all([
-        window.powerlib.readSubsystems(),
-        window.powerlib.readBindings()
-      ]);
+      const subsystemsResult = await window.powerlib.readSubsystems();
       if (subsystemsResult.error) {
         throw new Error(subsystemsResult.error);
-      }
-      if (bindingsResult.error) {
-        throw new Error(bindingsResult.error);
       }
 
       const loaded = {
         subsystems: subsystemsResult.subsystems as GeneratedSubsystem[],
-        swerve: (subsystemsResult.swerve ?? {}) as GeneratedSwerveConstants,
-        bindings: bindingsResult.bindings as GeneratedBinding[]
+        swerve: (subsystemsResult.swerve ?? {}) as GeneratedSwerveConstants
       };
       setDocuments(loaded);
       setChanges(buildChanges(topics, loaded));
@@ -732,17 +571,15 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
     setMessage(null);
 
     try {
-      if (!window.powerlib?.saveSubsystems || !window.powerlib?.saveBindings) {
+      if (!window.powerlib?.saveSubsystems) {
         throw new Error("PowerLib file bridge is not available.");
       }
 
       const nextSubsystems = cloneJson(documents.subsystems);
       const nextSwerve = cloneJson(documents.swerve);
-      const nextBindings = cloneJson(documents.bindings);
       const unselectedIds = new Set(changes.filter((change) => !change.selected).map((change) => change.id));
       let subsystemChanged = false;
       let swerveChanged = false;
-      let commandChanged = false;
 
       selectedChanges.forEach((change) => {
         if (change.target === "subsystem" && change.subsystemIndex !== undefined && change.subsystemPath) {
@@ -754,37 +591,17 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
           setNestedValue(nextSwerve, change.swervePath, change.newValue);
           swerveChanged = true;
         }
-
-        if (
-          change.target === "command" &&
-          change.bindingIndex !== undefined &&
-          change.commandVariableKey &&
-          typeof change.newValue === "number"
-        ) {
-          applyCommandValue(
-            nextBindings[change.bindingIndex].commands,
-            nextSubsystems,
-            change.commandVariableKey,
-            change.newValue
-          );
-          commandChanged = true;
-        }
       });
 
       const savedDocuments = {
         subsystems: nextSubsystems,
-        swerve: nextSwerve,
-        bindings: nextBindings
+        swerve: nextSwerve
       };
 
       if (subsystemChanged || swerveChanged) {
         const result = await window.powerlib.saveSubsystems(nextSubsystems, nextSwerve);
         savedDocuments.subsystems = result.subsystems as GeneratedSubsystem[];
         savedDocuments.swerve = (result.swerve ?? nextSwerve) as GeneratedSwerveConstants;
-      }
-      if (commandChanged) {
-        const result = await window.powerlib.saveBindings(nextBindings);
-        savedDocuments.bindings = result.bindings as GeneratedBinding[];
       }
 
       setDocuments(savedDocuments);
@@ -869,9 +686,7 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
                         label={
                           change.target === "subsystem"
                             ? "Subsystem JSON"
-                            : change.target === "swerve"
-                              ? "Swerve JSON"
-                              : "Bindings JSON"
+                            : "Swerve JSON"
                         }
                         size="small"
                         variant="outlined"

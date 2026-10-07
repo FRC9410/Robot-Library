@@ -97,19 +97,6 @@ function getSubsystemJsonCandidates() {
   );
 }
 
-function getBindingsJsonCandidates() {
-  const robotRoot = getDetectedRobotRoot();
-  return Array.from(
-    new Set([
-      path.resolve(robotRoot, "powerlib-bindings.json"),
-      path.resolve(process.cwd(), "powerlib-bindings.json"),
-      path.resolve(process.cwd(), "..", "powerlib-bindings.json"),
-      path.resolve(app.getAppPath(), "powerlib-bindings.json"),
-      path.resolve(app.getAppPath(), "..", "powerlib-bindings.json")
-    ])
-  );
-}
-
 function getTuningSelectionJsonCandidates() {
   const robotRoot = getDetectedRobotRoot();
   return Array.from(
@@ -274,61 +261,6 @@ ipcMain.handle("powerlib:save-subsystems", async (_event, subsystems: unknown[],
   };
 });
 
-ipcMain.handle("powerlib:read-bindings", async () => {
-  for (const candidate of getBindingsJsonCandidates()) {
-    try {
-      const raw = await fs.readFile(candidate, "utf-8");
-      const parsed = JSON.parse(raw);
-      return {
-        exists: true,
-        path: candidate,
-        bindings: Array.isArray(parsed.bindings) ? parsed.bindings : []
-      };
-    } catch (error) {
-      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
-      if (code !== "ENOENT") {
-        return {
-          exists: false,
-          path: candidate,
-          bindings: [],
-          error: error instanceof Error ? error.message : "Could not read powerlib-bindings.json."
-        };
-      }
-    }
-  }
-
-  return {
-    exists: false,
-    path: getBindingsJsonCandidates()[0],
-    bindings: []
-  };
-});
-
-ipcMain.handle("powerlib:save-bindings", async (_event, bindings: unknown[]) => {
-  let targetPath = getBindingsJsonCandidates()[0];
-
-  for (const candidate of getBindingsJsonCandidates()) {
-    try {
-      await fs.access(candidate);
-      targetPath = candidate;
-      break;
-    } catch {
-      // Keep looking. If none exist, write to the installed robot root candidate.
-    }
-  }
-
-  const document = {
-    bindings: Array.isArray(bindings) ? bindings : []
-  };
-
-  await fs.writeFile(targetPath, `${JSON.stringify(document, null, 2)}\n`, "utf-8");
-  return {
-    exists: true,
-    path: targetPath,
-    bindings: document.bindings
-  };
-});
-
 ipcMain.handle("powerlib:read-tuning-selection", async () => {
   for (const candidate of getTuningSelectionJsonCandidates()) {
     try {
@@ -483,94 +415,15 @@ ipcMain.handle("powerlib:save-tuning-sidebar-expanded-section", async (_event, s
   };
 });
 
-ipcMain.handle("powerlib:read-binding-constants", async () => {
-  const constants: Array<{
-    subsystemId: string;
-    subsystemName: string;
-    name: string;
-    value: string;
-    type: string;
-  }> = [];
-
-  try {
-    let subsystemsPath = getSubsystemJsonCandidates()[0];
-    for (const candidate of getSubsystemJsonCandidates()) {
-      try {
-        await fs.access(candidate);
-        subsystemsPath = candidate;
-        break;
-      } catch {
-        // Keep looking.
-      }
-    }
-
-    const robotRoot = path.dirname(subsystemsPath);
-    const raw = await fs.readFile(subsystemsPath, "utf-8");
-    const parsed = JSON.parse(raw);
-    const subsystems = Array.isArray(parsed.subsystems) ? parsed.subsystems : [];
-
-    for (const subsystem of subsystems) {
-      const name = typeof subsystem?.name === "string" ? subsystem.name : "";
-      const subsystemId = typeof subsystem?.id === "string" ? subsystem.id : name;
-      const pascalName = name
-        .split(/[^a-zA-Z0-9]+/)
-        .filter(Boolean)
-        .map((part: string) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-        .join("");
-      if (!pascalName) {
-        continue;
-      }
-
-      const constantsFile = path.join(robotRoot, "src", "main", "java", "frc", "robot", "constants", `${pascalName}Constants.java`);
-      let content = "";
-      try {
-        content = await fs.readFile(constantsFile, "utf-8");
-      } catch {
-        continue;
-      }
-
-      const regex = /public\s+static\s+final\s+(double|int)\s+([A-Z][A-Z0-9_]*)\s*=\s*([^;]+);/g;
-      for (const match of content.matchAll(regex)) {
-        constants.push({
-          subsystemId,
-          subsystemName: name,
-          type: match[1],
-          name: match[2],
-          value: match[3].trim()
-        });
-      }
-    }
-
-    return { constants };
-  } catch (error) {
-    return {
-      constants,
-      error: error instanceof Error ? error.message : "Could not read subsystem constants."
-    };
-  }
-});
-
 ipcMain.handle("powerlib:update-subsystem-code", async () => {
   const robotRoot = getDetectedRobotRoot();
   const subsystemsPath = path.join(robotRoot, "powerlib-subsystems.json");
-  const bindingsPath = path.join(robotRoot, "powerlib-bindings.json");
   let targetPath = subsystemsPath;
-  let targetBindingsPath = bindingsPath;
 
   for (const candidate of getSubsystemJsonCandidates()) {
     try {
       await fs.access(candidate);
       targetPath = candidate;
-      break;
-    } catch {
-      // Keep looking.
-    }
-  }
-
-  for (const candidate of getBindingsJsonCandidates()) {
-    try {
-      await fs.access(candidate);
-      targetBindingsPath = candidate;
       break;
     } catch {
       // Keep looking.
@@ -608,11 +461,8 @@ ipcMain.handle("powerlib:update-subsystem-code", async () => {
       "-File",
       scriptPath,
       "-UpdateSubsystems",
-      "-UpdateBindings",
       "-SubsystemsJson",
-      targetPath,
-      "-BindingsJson",
-      targetBindingsPath
+      targetPath
     ],
     {
       cwd: robotRoot,

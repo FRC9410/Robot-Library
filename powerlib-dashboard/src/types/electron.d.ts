@@ -17,17 +17,6 @@ declare global {
         subsystems: unknown[];
         swerve?: unknown;
       }>;
-      readBindings: () => Promise<{
-        exists: boolean;
-        path: string;
-        bindings: unknown[];
-        error?: string;
-      }>;
-      saveBindings: (bindings: unknown[]) => Promise<{
-        exists: boolean;
-        path: string;
-        bindings: unknown[];
-      }>;
       readTuningSelection: () => Promise<{
         exists: boolean;
         path: string;
@@ -56,10 +45,6 @@ declare global {
         selectedTopics: string[];
         monitorDrawerOpen: boolean;
         sidebarExpandedSection: "subsystem" | "command";
-      }>;
-      readBindingConstants: () => Promise<{
-        constants: unknown[];
-        error?: string;
       }>;
       updateSubsystemCode: () => Promise<{
         stdout: string;

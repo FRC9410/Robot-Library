@@ -864,7 +864,7 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
               {applying ? "Applying" : "Apply"}
             </Button>
             <Button
-              disabled={topics.length === 0 || !window.powerlib?.readSubsystems || !window.powerlib?.readBindings}
+              disabled={topics.length === 0 || !window.powerlib?.readSubsystems}
               fullWidth
               onClick={() => setSaveValuesOpen(true)}
               variant="outlined"

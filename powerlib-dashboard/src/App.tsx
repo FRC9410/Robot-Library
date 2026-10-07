@@ -19,7 +19,6 @@ import CableIcon from "@mui/icons-material/Cable";
 import ConstructionIcon from "@mui/icons-material/Construction";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import ElectricBoltIcon from "@mui/icons-material/ElectricBolt";
-import GamepadIcon from "@mui/icons-material/Gamepad";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import TuneIcon from "@mui/icons-material/Tune";
 import VideocamIcon from "@mui/icons-material/Videocam";
@@ -47,7 +46,6 @@ import { NetworkTablesProvider, useNetworkTables } from "./features/networktable
 import { ConnectionSettingsDialog } from "./features/networktables/ConnectionSettingsDialog";
 import { tuningModeRequestTopicName, tuningModeTopicName } from "./features/networktables/tuningUtils";
 import { RobotPanel } from "./features/robot/RobotPanel";
-import { BindingsPanel } from "./features/bindings/BindingsPanel";
 import { TuningPanel } from "./features/tuning/TuningPanel";
 import { LimelightsPanel } from "./features/limelights/LimelightsPanel";
 import { detectLimelights } from "./features/limelights/limelightUtils";
@@ -447,7 +445,7 @@ function AppContent() {
 
   useEffect(() => {
     if (
-      (activeView === "robot" || activeView === "subsystems" || activeView === "bindings") &&
+      (activeView === "robot" || activeView === "subsystems") &&
       !subsystemDocument.loading &&
       !subsystemDocument.path
     ) {
@@ -566,13 +564,6 @@ function AppContent() {
               iconPosition="start"
               label="Subsystems"
               value="subsystems"
-              sx={{ minHeight: 44 }}
-            />
-            <Tab
-              icon={<GamepadIcon />}
-              iconPosition="start"
-              label="Bindings"
-              value="bindings"
               sx={{ minHeight: 44 }}
             />
             {limelights.length > 0 && (
@@ -694,10 +685,6 @@ function AppContent() {
                   watchCharacterizationPrefix();
                 }}
               />
-          )}
-
-          {activeView === "bindings" && (
-            <BindingsPanel subsystems={subsystemDocument.subsystems} onToast={showToast} />
           )}
         </Stack>
       </Container>

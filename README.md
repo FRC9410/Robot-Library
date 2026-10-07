@@ -133,6 +133,10 @@ vendordeps/Phoenix5-replay-<latest>.json
 
 ## Power Tool
 
+Define controller button commands directly in `RobotContainer.configureBindings()`.
+Power Tool's Update Code action generates subsystem and Swerve code from
+`powerlib-subsystems.json`.
+
 Power Tool is installed into the robot project as source:
 
 ```text

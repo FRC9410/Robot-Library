@@ -47,7 +47,7 @@ belong under `/PowerLib/...`:
 
 - Subsystem telemetry: `/PowerLib/Subsystems/<SubsystemName>/Data/<Metric>`
 - Subsystem tunables: `/PowerLib/Subsystems/<SubsystemName>/Variables/<Variable>`
-- Generated command tunables: `/PowerLib/Commands/<CommandName>/Variables/<Variable>`
+- Command tunables: `/PowerLib/Commands/<CommandName>/Variables/<Variable>`
 - Tuning enable switch: `/PowerLib/Tuning/Enabled` (default false; robot code should only consume
   tunable variable values while this is true; dashboard code should poll this flag at about 1 Hz,
   not every robot loop)
@@ -640,8 +640,8 @@ If active `RobotContainer.java` is the bare WPILib skeleton or does not expose t
 update it before changing `Robot.java`:
 - Implement `PowerRobotContainer` if the project uses PowerLib dashboard data.
 - Create a single `private final StateMachine stateMachine = new StateMachine();`.
-- Create driver/operator `CommandXboxController` fields from `Constants.OI`.
-- Call `PowerButtonBindings.configure(driverController, operatorController, stateMachine);`.
+- Create a single driver `CommandXboxController` field from `Constants.OI`.
+- Configure driver controller button commands directly in `RobotContainer.configureBindings()`.
 - Set the default swerve command:
   `stateMachine.drivetrain.setDefaultCommand(new SwerveDriveCommand(stateMachine.drivetrain, driverController));`
 - Add `public StateMachine getStateMachine() { return stateMachine; }`.

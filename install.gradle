@@ -202,11 +202,6 @@ def templateFiles = [
         replacement: true
     ),
     new TemplateFile(
-        source: 'replacements/src/main/java/frc/robot/PowerButtonBindings.java',
-        destination: 'src/main/java/frc/robot/PowerButtonBindings.java',
-        replacement: true
-    ),
-    new TemplateFile(
         source: 'replacements/src/main/java/frc/robot/subsystems/LED.java',
         destination: 'src/main/java/frc/robot/subsystems/LED.java',
         replacement: true
@@ -490,8 +485,7 @@ def shouldReplaceExistingDestination = { TemplateFile template, File destination
 def hasPriorPowerLibInstall = { Project project ->
     return project.file(installStateFileName).exists() ||
         project.file('src/main/java/frc/robot/subsystems/StateMachine.java').exists() ||
-        project.file('src/main/java/frc/robot/subsystems/PowerDashboard.java').exists() ||
-        project.file('src/main/java/frc/robot/PowerButtonBindings.java').exists()
+        project.file('src/main/java/frc/robot/subsystems/PowerDashboard.java').exists()
 }
 
 def markPowerLibInstallComplete = { Project project ->

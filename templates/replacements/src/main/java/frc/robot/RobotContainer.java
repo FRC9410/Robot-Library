@@ -18,8 +18,6 @@ public class RobotContainer implements PowerRobotContainer {
   private final PowerDashboard powerDashboard = new PowerDashboard(stateMachine);
   private final CommandXboxController driverController =
       new CommandXboxController(Constants.OI.DRIVER_CONTROLLER_PORT);
-  private final CommandXboxController operatorController =
-      new CommandXboxController(Constants.OI.OPERATOR_CONTROLLER_PORT);
 
   public RobotContainer() {
     configureBindings();
@@ -28,7 +26,7 @@ public class RobotContainer implements PowerRobotContainer {
   }
 
   private void configureBindings() {
-    PowerButtonBindings.configure(driverController, operatorController, stateMachine);
+    // Configure driver controller button commands here.
   }
 
   public Command getAutonomousCommand() {
