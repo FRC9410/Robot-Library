@@ -5,7 +5,6 @@ declare global {
   interface Window {
     powerlib?: {
       platform: NodeJS.Platform;
-      readGameConfiguration: () => Promise<unknown>;
       readConstants: () => Promise<ConstantsFile[]>;
       saveConstants: (id: string, source: string, constants: ConstantRow[]) => Promise<ConstantsFile>;
       readSubsystems: () => Promise<{

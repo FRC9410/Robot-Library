@@ -2,7 +2,6 @@ import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("powerlib", {
   platform: process.platform,
-  readGameConfiguration: () => ipcRenderer.invoke("powerlib:read-game-configuration"),
   readConstants: () => ipcRenderer.invoke("powerlib:read-constants"),
   saveConstants: (id: string, source: string, constants: unknown[]) =>
     ipcRenderer.invoke("powerlib:save-constants", id, source, constants),

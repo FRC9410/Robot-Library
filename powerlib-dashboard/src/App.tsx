@@ -49,7 +49,6 @@ import { ConnectionSettingsDialog } from "./features/networktables/ConnectionSet
 import { tuningModeRequestTopicName, tuningModeTopicName } from "./features/networktables/tuningUtils";
 import { RobotPanel } from "./features/robot/RobotPanel";
 import { DrivePanel } from "./features/drive/DrivePanel";
-import { Game2026Panel } from "./features/game/Game2026Panel";
 import { TuningPanel } from "./features/tuning/TuningPanel";
 import { LimelightsPanel } from "./features/limelights/LimelightsPanel";
 import { detectLimelights } from "./features/limelights/limelightUtils";
@@ -91,7 +90,7 @@ function AppContent() {
     setTopics,
     upsertTopic
   } = useNetworkTables();
-  const [activeView, setActiveView] = useState<AppView>("game2026");
+  const [activeView, setActiveView] = useState<AppView>("drive");
   const [subsystemDocument, setSubsystemDocument] = useState<SubsystemDocumentState>({
     loading: false,
     exists: false,
@@ -395,7 +394,6 @@ function AppContent() {
   }
 
   function attemptNetworkTablesConnection(reportErrors: boolean) {
-    if (import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "2026") return;
     connectionStatusRef.current = "connecting";
     setStatus("connecting");
     setTopics([]);
@@ -573,7 +571,7 @@ function AppContent() {
                     onChange={(event) => void setTuningModeEnabled(event.target.checked)}
                   />
                 }
-                label={tuningModeEnabled ? "Tuning enabled" : "Tuning locked"}
+                label="Tuning"
               />
               {status === "connected" || !autoConnectPausedRef.current ? (
                 <Button variant="outlined" size="small" onClick={disconnectNetworkTables}>
@@ -592,13 +590,12 @@ function AppContent() {
               )}
               <Chip
                 color={status === "connected" ? "success" : status === "connecting" ? "warning" : "error"}
-                label={import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "2026" ? "PREVIEW · No robot connection" : `${connectionSettings.host}:${connectionSettings.port}`}
+                label={`${connectionSettings.host}:${connectionSettings.port}`}
                 variant="outlined"
               />
             </Stack>
           </Toolbar>
           <Tabs value={activeView} onChange={(_, value) => setActiveView(value)} sx={{ minHeight: 44 }}>
-            <Tab icon={<DashboardIcon />} iconPosition="start" label="2026 Game" value="game2026" sx={{ minHeight: 44 }} />
             <Tab icon={<DashboardIcon />} iconPosition="start" label="Drive" value="drive" sx={{ minHeight: 44 }} />
             <Tab
               icon={<SmartToyIcon />}
@@ -699,9 +696,8 @@ function AppContent() {
         </Alert>
       </Snackbar>
 
-      <Container maxWidth={false} sx={activeView === "drive" || activeView === "game2026" ? { p: "0 !important" } : { py: 2 }}>
+      <Container maxWidth={false} sx={activeView === "drive" ? { p: "0 !important" } : { py: 2 }}>
         <Stack spacing={2}>
-          {activeView === "game2026" && <Game2026Panel />}
           {activeView === "drive" && <DrivePanel />}
           <Box sx={{ display: activeView === "constants" ? "block" : "none" }}>
             <ConstantsPanel active={activeView === "constants"} />

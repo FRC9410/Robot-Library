@@ -2,8 +2,6 @@
 
 Electron React app for Team 9410 PowerLib tools and FRC NT4 NetworkTables.
 
-The default 2026 Game tab includes the field/auto preview, camera views, shot readiness and mechanism telemetry. See [GAME2026-DASHBOARD.md](GAME2026-DASHBOARD.md) for robot topics, display settings and the development preview. Existing Drive, Robot and tuning tools remain available.
-
 ## Setup
 
 ```powershell
