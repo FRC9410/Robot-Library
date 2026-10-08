@@ -131,7 +131,7 @@ robot container. Updating PowerLib alone preserves your existing robot container
 ## Telemetry Logging
 
 Subsystem telemetry stored through `PowerRobotContainer.setData()` or `setSubsystemData()`
-is published and logged once per robot loop by `PowerDashboard`. The shared
+is published and logged every 100 ms by `PowerDashboard`. The shared
 `SubsystemTelemetry` writer sends the same snapshot to NetworkTables and CTRE SignalLogger.
 Boolean, numeric, and string values retain their published types; other objects use their
 string representation. Numeric values can include units through an optional final argument.
@@ -295,7 +295,7 @@ powershell -ExecutionPolicy Bypass -File .\power-tool\scripts\power-tool.ps1
 
 Power Tool includes NetworkTables tools and generated subsystem editing. Install builds the app once, then the launchers run the built Electron app with `npm start`. Its `node_modules` folder is created during install and should not be committed.
 
-Power Tool opens on a generic **Drive** dashboard with discovered camera streams, a field view, an autonomous dropdown, and optional drivetrain and robot telemetry. Fresh installations publish its robot feedback through `DriveTelemetry` at the normal 20 ms loop rate. See [Drive dashboard setup](powerlib-dashboard/DRIVE-DASHBOARD.md) for existing-project integration, camera discovery, and topic mappings.
+Power Tool opens on a generic **Drive** dashboard with discovered camera streams, a field view, an autonomous dropdown, and optional drivetrain and robot telemetry. Fresh installations collect feedback through `DriveTelemetry` at the normal robot loop rate and publish it every 100 ms. Power Tool requests and batches telemetry at the same 100 ms cadence. See [Drive dashboard setup](powerlib-dashboard/DRIVE-DASHBOARD.md) for existing-project integration, camera discovery, and topic mappings.
 
 Use `Update Power Tool` inside the app to download the latest Power Tool source, refresh the scripts and project-local skills, reinstall npm dependencies, and restart the app.
 

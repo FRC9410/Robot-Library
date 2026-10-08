@@ -1,6 +1,8 @@
-import { createContext, ReactNode, useContext, useRef, useState } from "react";
+import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { NtTopicSnapshot, PowerLibNt4Client } from "../../networktables/nt4Client";
 import type { ConnectionState } from "../../types/app";
+import { TopicSnapshotBuffer } from "../../networktables/TopicSnapshotBuffer";
+import { telemetryUpdateIntervalMs } from "../../networktables/telemetryTiming";
 
 export type ConnectionSettings = {
   targetId: string;
@@ -49,19 +51,33 @@ export function NetworkTablesProvider({ children }: { children: ReactNode }) {
   const clientRef = useRef(new PowerLibNt4Client());
   const [status, setStatus] = useState<ConnectionState>("idle");
   const [connectionSettingsState, setConnectionSettingsState] = useState<ConnectionSettings>(readSavedConnectionSettings);
-  const [topics, setTopics] = useState<NtTopicSnapshot[]>([]);
+  const [topics, setRenderedTopics] = useState<NtTopicSnapshot[]>([]);
+  const topicBuffer = useRef(new TopicSnapshotBuffer());
 
   function setConnectionSettings(settings: ConnectionSettings) {
     setConnectionSettingsState(settings);
     window.localStorage.setItem(settingsStorageKey, JSON.stringify(settings));
   }
 
-  function upsertTopic(snapshot: NtTopicSnapshot) {
-    setTopics((current) => {
-      const existing = current.filter((topic) => topic.name !== snapshot.name);
-      return [...existing, { ...snapshot, receivedAt: performance.now() }];
-    });
-  }
+  const setTopics: React.Dispatch<React.SetStateAction<NtTopicSnapshot[]>> = useCallback((update) => {
+    const next = typeof update === "function" ? update(topicBuffer.current.values()) : update;
+    // Connection resets also discard readings waiting for the next screen refresh.
+    topicBuffer.current.replace(next);
+    setRenderedTopics(next);
+  }, []);
+
+  const upsertTopic = useCallback((snapshot: NtTopicSnapshot) => {
+    // Timestamp receipt immediately so batching cannot make old telemetry look fresh.
+    topicBuffer.current.upsert(snapshot, performance.now());
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const next = topicBuffer.current.flush();
+      if (next !== null) setRenderedTopics(next);
+    }, telemetryUpdateIntervalMs);
+    return () => window.clearInterval(timer);
+  }, []);
 
   return (
     <NetworkTablesContext.Provider

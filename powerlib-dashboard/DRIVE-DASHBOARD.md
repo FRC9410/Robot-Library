@@ -6,7 +6,7 @@ No shooter, intake, hub, passing, or other game-specific telemetry is assumed. O
 
 ## Robot integration
 
-Fresh PowerLib installations wire `DriveTelemetry` into `PowerDashboard`. It collects drive data into the subsystem data map, then `SubsystemTelemetry` publishes and logs the map once per normal scheduler loop, approximately 50 Hz. Power Tool requests NT4 feedback every 20 ms.
+Fresh PowerLib installations wire `DriveTelemetry` into `PowerDashboard`. It collects drive data into the subsystem data map, then `SubsystemTelemetry` publishes and logs the latest map every 100 ms (10 Hz). Power Tool requests the latest NT4 feedback every 100 ms and batches screen updates at that cadence. Robot control and input collection continue at the normal scheduler rate.
 
 For an existing project, update PowerLib and run Update Code to migrate `PowerDashboard` to this shared flow. For a custom integration, collect drive data before the shared publisher runs:
 

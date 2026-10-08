@@ -16,7 +16,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class PowerDashboard extends SubsystemBase {
-  private static final double TUNING_MODE_SYNC_INTERVAL_SECONDS = 1.0;
+  private static final double TUNING_MODE_SYNC_INTERVAL_SECONDS = 0.1;
 
   private final StateMachine stateMachine;
   private final frc.powerlib.dashboard.DriveTelemetry driveTelemetry;

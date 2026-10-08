@@ -8,6 +8,7 @@ import {
 } from "ntcore-ts-client";
 import type { NetworkTablesTypes } from "ntcore-ts-client";
 import { z } from "zod";
+import { telemetryUpdateIntervalMs } from "./telemetryTiming";
 
 export type NtPrimitive = string | number | boolean;
 export type NtValue = NetworkTablesTypes | null;
@@ -177,7 +178,7 @@ export class PowerLibNt4Client {
         value,
         lastChangedTime: topic.lastChangedTime
       });
-    });
+    }, { all: false, periodic: telemetryUpdateIntervalMs / 1000 });
 
     onValue({
       name,
@@ -250,7 +251,7 @@ export class PowerLibNt4Client {
           lastChangedTime: topic.lastChangedTime
         });
       },
-      { all: true, periodic: 0.02 }
+      { all: false, periodic: telemetryUpdateIntervalMs / 1000 }
     );
   }
 }

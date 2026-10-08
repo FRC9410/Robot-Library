@@ -86,3 +86,5 @@ To target another platform explicitly:
 .\build-dashboard.ps1 -Platform mac
 .\build-dashboard.ps1 -Platform linux
 ```
+
+Telemetry requests and screen updates use a 100 ms (10 Hz) cadence. Incoming values replace the latest reading for each topic; intermediate samples are not queued for display. PowerLib publishes and signal-logs the latest subsystem snapshot every 100 ms. Run `npm run check:telemetry` to check batching, arrival timestamps, and connection resets.

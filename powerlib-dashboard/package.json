@@ -6,6 +6,7 @@
   "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {
+    "check:telemetry": "node scripts/telemetry-buffer-check.mjs",
     "check:drive": "node scripts/drive-model-check.mjs",
     "build:electron": "rimraf dist-electron && tsc -p tsconfig.electron.json",
     "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
