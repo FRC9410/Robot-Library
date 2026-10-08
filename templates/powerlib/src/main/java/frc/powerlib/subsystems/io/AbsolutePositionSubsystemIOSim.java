@@ -1,36 +1,24 @@
 package frc.powerlib.subsystems.io;
 
+import frc.powerlib.configs.AbsolutePositionSubsystemConfig;
+
 public class AbsolutePositionSubsystemIOSim implements AbsolutePositionSubsystemIO {
-  private double positionRotations = 0.0;
-  private double velocityRotationsPerSecond = 0.0;
-  private double appliedVolts = 0.0;
-  private double setpointRotations = 0.0;
-
-  @Override
-  public void updateInputs(Inputs inputs) {
-    inputs.connected = true;
-    inputs.positionRotations = positionRotations;
-    inputs.velocityRotationsPerSecond = velocityRotationsPerSecond;
-    inputs.appliedVolts = appliedVolts;
-    inputs.setpointRotations = setpointRotations;
+  private final MechanismSimulation model;
+  private double setpoint;
+  public AbsolutePositionSubsystemIOSim() { model = new MechanismSimulation(1, 2, 10); }
+  public AbsolutePositionSubsystemIOSim(AbsolutePositionSubsystemConfig config) {
+    model = new MechanismSimulation(config.leadConfig().sensorToMechanismRatio() * config.leadConfig().rotorToSensorRatio(),
+        config.motionMagicConfig().cruiseVelocity(), config.motionMagicConfig().acceleration());
+    setpoint = config.defaultPosition().orElse(0.0);
+    model.reset(setpoint); model.position(setpoint);
   }
-
-  @Override
-  public void setPositionRotations(double rotations) {
-    setpointRotations = rotations;
-    positionRotations = rotations;
-    velocityRotationsPerSecond = 0.0;
+  @Override public void updateInputs(Inputs inputs) {
+    model.update();
+    inputs.positionRotations = model.position;
+    inputs.velocityRotationsPerSecond = model.velocity;
+    inputs.setpointRotations = setpoint;
   }
-
-  @Override
-  public void setVoltage(double volts) {
-    appliedVolts = volts;
-    velocityRotationsPerSecond = volts;
-  }
-
-  @Override
-  public void stop() {
-    appliedVolts = 0.0;
-    velocityRotationsPerSecond = 0.0;
-  }
+  @Override public void setPositionRotations(double rotations) { setpoint = rotations; model.position(rotations); }
+  @Override public void setVoltage(double volts) { model.voltage(volts); }
+  @Override public void stop() { model.voltage(0); }
 }

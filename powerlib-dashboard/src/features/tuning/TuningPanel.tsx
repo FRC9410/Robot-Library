@@ -16,7 +16,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import SearchIcon from "@mui/icons-material/Search";
 import type { NtPrimitive, NtTopicSnapshot, NtTopicType } from "../../networktables/nt4Client";
 import { SaveTunedValuesDialog } from "../networktables/SaveTunedValuesDialog";
-import { useNetworkTables } from "../networktables/NetworkTablesContext";
+import { useNetworkTables, useTopics } from "../networktables/NetworkTablesContext";
 import {
   getWritableTopicType,
   isTunableTopic,
@@ -479,7 +479,8 @@ function TuningSidebar({
 }
 
 export function TuningPanel() {
-  const { clientRef, status, topics, upsertTopic } = useNetworkTables();
+  const { clientRef, status, upsertTopic } = useNetworkTables();
+  const topics = useTopics("tuning");
   const [saveValuesOpen, setSaveValuesOpen] = useState(false);
   const [panelError, setPanelError] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);

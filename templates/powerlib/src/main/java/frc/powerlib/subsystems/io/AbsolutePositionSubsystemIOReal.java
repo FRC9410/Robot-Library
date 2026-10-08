@@ -6,6 +6,7 @@ import frc.powerlib.subsystems.AbsolutePositionSubsystem;
 
 public class AbsolutePositionSubsystemIOReal implements AbsolutePositionSubsystemIO {
   private final AbsolutePositionSubsystem subsystem;
+  private final MotionMagicVoltage positionRequest = new MotionMagicVoltage(0);
 
   public AbsolutePositionSubsystemIOReal(AbsolutePositionSubsystem subsystem) {
     this.subsystem = subsystem;
@@ -14,14 +15,12 @@ public class AbsolutePositionSubsystemIOReal implements AbsolutePositionSubsyste
   @Override
   public void updateInputs(Inputs inputs) {
     TalonFX motor = subsystem.getPositionMotor();
-    inputs.connected = motor != null;
     if (motor == null) {
       return;
     }
 
     inputs.positionRotations = motor.getPosition().getValueAsDouble();
     inputs.velocityRotationsPerSecond = motor.getVelocity().getValueAsDouble();
-    inputs.appliedVolts = motor.getMotorVoltage().getValueAsDouble();
     inputs.setpointRotations = subsystem.getSetpointRotations();
   }
 
@@ -30,7 +29,7 @@ public class AbsolutePositionSubsystemIOReal implements AbsolutePositionSubsyste
     TalonFX motor = subsystem.getPositionMotor();
     if (motor != null) {
       motor.setControl(
-          new MotionMagicVoltage(0)
+          positionRequest
               .withPosition(rotations)
               .withSlot(0)
               .withEnableFOC(subsystem.isFocEnabled()));

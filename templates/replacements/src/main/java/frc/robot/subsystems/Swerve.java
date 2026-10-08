@@ -17,12 +17,8 @@ import edu.wpi.first.math.Matrix;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
-import edu.wpi.first.math.kinematics.SwerveModuleState;
 import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
-import edu.wpi.first.networktables.NetworkTableInstance;
-import edu.wpi.first.networktables.StructArrayPublisher;
-import edu.wpi.first.networktables.StructPublisher;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj.Notifier;
@@ -42,6 +38,7 @@ import frc.robot.constants.TunerConstants.TunerSwerveDrivetrain;
 public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
   private static final double kSimLoopPeriod = 0.005; // 5 ms
   private static final String kTuningSubsystemName = "Swerve";
+  private final frc.powerlib.tuning.TuningCadence powerlibTuningCadence = new frc.powerlib.tuning.TuningCadence();
   private static final double kDefaultMaxSpeedMetersPerSecond =
       TunerConstants.kSpeedAt12Volts.in(MetersPerSecond);
   private static final double kDefaultRequestMaxAngularRateRadiansPerSecond =
@@ -73,12 +70,6 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
 
   private Notifier m_simNotifier = null;
   private double m_lastSimTime;
-  private final StructPublisher<Pose2d> posePublisher =
-      NetworkTableInstance.getDefault().getStructTopic("Robot/Pose", Pose2d.struct).publish();
-  private final StructArrayPublisher<SwerveModuleState> moduleStatePublisher =
-      NetworkTableInstance.getDefault()
-          .getStructArrayTopic("Robot/SwerveStates", SwerveModuleState.struct)
-          .publish();
 
   /* Blue alliance sees forward as 0 degrees (toward red alliance wall) */
   private static final Rotation2d kBlueAlliancePerspectiveRotation = Rotation2d.kZero;
@@ -319,7 +310,7 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
   }
 
   private void applyTunableValues() {
-    if (!PowerRobotContainer.isTuningEnabled()) {
+    if (!PowerRobotContainer.isTuningEnabled() || !powerlibTuningCadence.isDue()) {
       return;
     }
     frc.powerlib.utils.DriveUtil.syncTunableValues();
@@ -421,8 +412,22 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
     return driverSkewCompensation;
   }
 
+  private Double headingSetpointDegrees;
+
+  /** No target is reported while disabled or while SysId owns outputs in Test mode. */
+  public Double getHeadingSetpointDegrees() {
+    return DriverStation.isEnabled() && !DriverStation.isTest() ? headingSetpointDegrees : null;
+  }
+
   public void applyRequest(SwerveRequest request) {
+    applyRequest(request, null);
+  }
+
+  /** Track the heading target attached to this request; null clears it for manual rotation. */
+  public void applyRequest(SwerveRequest request, Double headingDegrees) {
     setControl(request);
+    headingSetpointDegrees = headingDegrees != null && Double.isFinite(headingDegrees)
+        ? headingDegrees : null;
   }
 
   public void drive(double x, double y, double rotation, DriveMode mode) {
@@ -443,7 +448,7 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
             DRIVE_AT_ANGLE
                 .withVelocityX(x)
                 .withVelocityY(y)
-                .withTargetDirection(Rotation2d.fromDegrees(rotation)));
+                .withTargetDirection(Rotation2d.fromDegrees(rotation)), rotation);
         break;
       case DRIVE_TO_POINT:
         applyRequest(
@@ -451,7 +456,7 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
                 .withVelocityX(x)
                 .withVelocityY(y)
                 .withTargetDirection(Rotation2d.fromDegrees(rotation))
-                .withMaxAbsRotationalRate(MAX_DRIVE_TO_POINT_ANGULAR_RATE));
+                .withMaxAbsRotationalRate(MAX_DRIVE_TO_POINT_ANGULAR_RATE), rotation);
         break;
     }
   }
@@ -501,29 +506,8 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
               });
     }
 
-    publishRobotPose();
   }
 
-  private void publishRobotPose() {
-    var state = getState();
-    Pose2d pose = state.Pose;
-    ChassisSpeeds speeds = state.Speeds;
-    Rotation2d rotation = pose.getRotation();
-    double xMeters = pose.getX();
-    double yMeters = pose.getY();
-    double rotationDegrees = rotation.getDegrees();
-
-    PowerRobotContainer.setData("Swerve/Pose/XMeters", xMeters, "meters");
-    PowerRobotContainer.setData("Swerve/Pose/YMeters", yMeters, "meters");
-    PowerRobotContainer.setData("Swerve/Pose/RotationDegrees", rotationDegrees, "degrees");
-    PowerRobotContainer.setData("Swerve/Speeds/VXMetersPerSecond", speeds.vxMetersPerSecond, "meters per second");
-    PowerRobotContainer.setData("Swerve/Speeds/VYMetersPerSecond", speeds.vyMetersPerSecond, "meters per second");
-    PowerRobotContainer.setData("Swerve/Speeds/OmegaRadiansPerSecond", speeds.omegaRadiansPerSecond, "radians per second");
-
-    posePublisher.set(pose);
-    moduleStatePublisher.set(state.ModuleStates);
-
-  }
 
   private void startSimThread() {
     m_lastSimTime = Utils.getCurrentTimeSeconds();

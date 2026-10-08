@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 const result = await build({ entryPoints: [fileURLToPath(new URL("../src/features/drive/driveModel.ts", import.meta.url))], bundle: true, write: false, format: "esm", platform: "node" });
-const { discoverCameras, getPowerLibAutoChooser, driveModel, streamUrl, formatTime } = await import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].contents).toString("base64")}`);
+const { discoverCameras, discoverMechanisms, getPowerLibAutoChooser, driveModel, streamUrl, formatTime } = await import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].contents).toString("base64")}`);
 const t = (name, value, type = typeof value) => ({ name, value, type, receivedAt: 5000 });
 const drive = (key, value) => t(`/PowerLib/Drive/${key}`, value);
 assert.equal(streamUrl("mjpg:http://10.94.10.11:1181/?action=stream"), "http://10.94.10.11:1181/?action=stream");
@@ -30,29 +30,55 @@ for (const model of [driveModel(telemetry, true, 6500), driveModel(telemetry, fa
 }
 assert.equal(driveModel([...telemetry, drive("PoseValid", false)], true, 5200).pose, undefined);
 assert.equal(driveModel([...telemetry, drive("Pose/XMeters", NaN)], true, 5200).pose, undefined);
-const hardware = [drive("GyroConnected", true), ...["BR", "FR", "FL", "BL"].map(name => drive(`Modules/${name}/Connected`, true))];
-const healthy = driveModel([...telemetry, ...hardware], true, 5200);
-assert.equal(healthy.health, "healthy");
-assert.deepEqual(healthy.modules.map(module => module.name), ["FL", "FR", "BL", "BR"]);
-const sharedTelemetry = [...telemetry, ...hardware].map(topic => ({ ...topic,
-  name: topic.name.replace("/PowerLib/Drive/", "/PowerLib/Subsystems/Drive/Data/") }));
+const robotStatus = driveModel([...telemetry, drive("RequestedState", "SHOOTING"), drive("ActualState", "PREPARING_SHOT"), drive("BatteryVolts", 11.8), drive("Alliance", "Red"), drive("MatchTimeSeconds", 92), drive("RioCanUtilization", .35)], true, 5200);
+assert.equal(robotStatus.text("requestedState"), "SHOOTING");
+assert.equal(robotStatus.text("actualState"), "PREPARING_SHOT");
+assert.equal(robotStatus.number("battery"), 11.8);
+assert.equal(robotStatus.text("alliance"), "Red");
+assert.equal(robotStatus.number("time"), 92);
+assert.equal(robotStatus.number("can"), .35);
+assert.equal(driveModel([...telemetry, drive("State", "SHOOTING")], true, 5200).text("actualState"), undefined, "Legacy requested state must not masquerade as actual state");
+const sharedTelemetry = telemetry.map(topic => ({ ...topic, name: topic.name.replace("/PowerLib/Drive/", "/PowerLib/Subsystems/Drive/Data/") }));
 const sharedModel = driveModel(sharedTelemetry, true, 5200);
 assert.equal(sharedModel.canSelectAuto, true);
-assert.deepEqual(sharedModel.pose, healthy.pose);
-assert.deepEqual(sharedModel.modules, healthy.modules);
-assert.equal(sharedModel.health, "healthy");
+assert.deepEqual(sharedModel.pose, driveModel(telemetry, true, 5200).pose);
+assert.equal(driveModel([...telemetry, drive("PoseValid", false)], true, 5200).health, "fault");
 assert.equal(driveModel([drive("BatteryVolts", 9), t("/PowerLib/Subsystems/Drive/Data/BatteryVolts", 12.4)], true, 5200).number("battery"), 12.4);
-assert.equal(driveModel(telemetry, true, 5200).health, "unknown"); // Pose alone cannot prove hardware health.
-const failedModule = hardware.map(topic => topic.name.endsWith("/FR/Connected") ? { ...topic, value: false } : topic);
-assert.equal(driveModel([...telemetry, ...failedModule], true, 5200).health, "fault");
-const staleHardware = driveModel([...telemetry, ...hardware], true, 6500);
-assert.equal(staleHardware.health, "unknown");
-assert.ok(staleHardware.modules.every(module => module.connected === undefined));
-assert.equal(driveModel([...telemetry, ...hardware, drive("PoseValid", false)], true, 5200).health, "fault");
-assert.equal(driveModel([...telemetry, drive("GyroConnected", "true")], true, 5200).health, "unknown");
+const targeting = telemetry.map(topic => topic.name.endsWith("/Enabled") ? { ...topic, value: true } : topic);
+assert.equal(driveModel([...targeting, drive("HeadingSetpointDegrees", -30)], true, 5200).headingSetpoint, -30);
+for (const value of [NaN, Infinity, "90"]) assert.equal(driveModel([...targeting, drive("HeadingSetpointDegrees", value)], true, 5200).headingSetpoint, undefined);
+for (const extras of [[drive("Enabled", false)], [drive("Mode", "TEST")], [drive("PoseValid", false)]]) {
+  const topics = [...targeting.filter(topic => !extras.some(extra => extra.name === topic.name)), ...extras, drive("HeadingSetpointDegrees", 90)];
+  assert.equal(driveModel(topics, true, 5200).headingSetpoint, undefined);
+}
+assert.equal(driveModel([...targeting, drive("HeadingSetpointDegrees", 90)], true, 6500).headingSetpoint, undefined);
+assert.equal(driveModel([...targeting, drive("HeadingSetpointDegrees", 90)], false, 5200).headingSetpoint, undefined);
+assert.equal(driveModel(targeting, true, 5200).headingSetpoint, undefined);
 assert.equal(driveModel([...telemetry, drive("Pose/HeadingDegrees", -30)], true, 5200).pose.heading, -30);
 const raw = new ArrayBuffer(24); const view = new DataView(raw); view.setFloat64(0, 4, true); view.setFloat64(8, 5, true); view.setFloat64(16, Math.PI, true);
 assert.equal(driveModel([t("/Robot/Pose", raw, "struct:Pose2d")], true, 5200).pose.heading, 180);
+const sharedStruct = driveModel([t("/PowerLib/Subsystems/Drive/Data/Pose", raw, "struct:Pose2d")], true, 5200);
+assert.deepEqual(sharedStruct.pose, { x: 4, y: 5, heading: 180 });
+assert.equal(sharedStruct.poseSupported, true);
+assert.equal(sharedStruct.canSelectAuto, false, "Pose alone must not unlock autonomous selection");
 assert.equal(driveModel([t("/Robot/Pose", new ArrayBuffer(8), "struct:Pose2d")], true, 5200).pose, undefined);
 assert.equal(formatTime(-1), "—:—"); assert.equal(formatTime(61.1), "1:02");
-console.log("Drive model checks passed: discovery, URLs, chooser, locking, stale data, invalid pose, struct pose, clock.");
+const mechanism = (owner, key, value) => t(`/PowerLib/Subsystems/${owner}/Data/${key}`, value);
+const mechanisms = [mechanism("Flywheel", "Velocity", 42.5), mechanism("Flywheel", "Position", 100), mechanism("Flywheel", "VelocitySetpoint", 60),
+  mechanism("Hood", "Position", .061), mechanism("Hood", "SetpointRotations", .08), mechanism("Wrist", "Position", -.4), mechanism("Wrist", "Setpoint", 0),
+  mechanism("Feeder", "Velocity", 0), mechanism("Drive", "Position", 12)];
+const cards = discoverMechanisms(mechanisms, [{ name: "Wrist", relativePosition: { units: "degrees" } }], true, 5200);
+assert.equal(cards.length, 4);
+assert.equal(cards.find(card => card.id === "Flywheel").value, 42.5, "Velocity takes priority over its encoder position");
+assert.equal(cards.find(card => card.id === "Flywheel").setpoint, 60);
+assert.equal(cards.find(card => card.id === "Hood").setpoint, .08);
+assert.equal(cards.find(card => card.id === "Wrist").setpoint, 0);
+assert.equal(cards.find(card => card.id === "Wrist").units, "degrees");
+assert.equal(cards.find(card => card.id === "Feeder").setpoint, undefined);
+for (const value of [null, NaN, Infinity, "60"]) {
+  assert.equal(discoverMechanisms([mechanism("Flywheel", "Velocity", 42.5), mechanism("Flywheel", "VelocitySetpoint", value)], [], true, 5200)[0].setpoint, undefined);
+}
+for (const [connected, now] of [[false, 5200], [true, 6500]]) {
+  assert.ok(discoverMechanisms(mechanisms, [], connected, now).every(card => card.value === undefined && card.setpoint === undefined));
+}
+console.log("Drive model checks passed: discovery, URLs, chooser, locking, stale data, pose, mechanism actuals/setpoints, units, clock.");

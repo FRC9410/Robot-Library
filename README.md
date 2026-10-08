@@ -130,28 +130,44 @@ robot container. Updating PowerLib alone preserves your existing robot container
 
 ## Telemetry Logging
 
-Subsystem telemetry stored through `PowerRobotContainer.setData()` or `setSubsystemData()`
-is published and logged every 100 ms by `PowerDashboard`. The shared
-`SubsystemTelemetry` writer sends the same snapshot to NetworkTables and CTRE SignalLogger.
-Boolean, numeric, and string values retain their published types; other objects use their
-string representation. Numeric values can include units through an optional final argument.
+Subsystems continuously store their latest values through `PowerRobotContainer.setData()`
+or `setSubsystemData()`. `PowerDashboard` calls `SubsystemTelemetry` every 20 ms robot loop.
+Logging reads the latest map at 50 Hz. Every 100 ms, the network publisher captures the complete grouped data map and publishes one JSON value at `/PowerLib/Data`.
+The frame contains `schemaVersion: 1`, an increasing `sequence`, `timestampSeconds`, and
+`subsystems` (the full subsystem-to-metric map). Removed metrics and subsystems disappear
+from the next frame. Nonfinite numbers become JSON null, so invalid feedback and inactive
+heading targets cannot retain a previous value on the dashboard.
 
-```java
-PowerRobotContainer.setSubsystemData("Intake", "Connected", true);
-PowerRobotContainer.setSubsystemData("Intake", "Velocity", velocity, "rotations per second");
-```
+Power Tool replaces its telemetry from each valid complete frame, preserving the actual
+arrival timestamp. It retains only the latest frame between 100 ms screen refreshes. The
+dashboard derives its existing per-field views locally; those scalar topics are no longer
+individually published by the robot. Other NetworkTables topics, including tuning,
+characterization and the autonomous chooser, keep their own protocols. Older robot
+per-field telemetry remains readable until a complete-object publisher appears.
 
-NetworkTables entries use `/PowerLib/Subsystems/<name>/Data/<key>`. Custom signal log names
-use `PowerLib/Subsystems/<name>/Data/<key>`. These replace the earlier individual telemetry
-log names. Log recording still follows Phoenix's logger start/stop behavior; SysId logging
-hooks remain separate.
+`DriveTelemetry` includes requested/actual state, battery, enabled/mode, alliance, match
+time, CAN utilization, X/Y/heading, an optional heading target, pose validity and heartbeat.
+Its `Pose` is a `Pose2d` in the data map and is encoded in JSON as `xMeters`, `yMeters`
+and `headingRadians`. For AdvantageScope simulation and field/heatmap analysis, the same
+captured pose is also published as a typed struct at
+`/PowerLib/Subsystems/Drive/Data/Pose`. This compatibility topic uses the same publishing
+cycle and does not collect pose separately. Missing/invalid pose is null in the frame;
+the struct receives no fabricated pose samples.
 
-`DriveTelemetry` collects battery voltage, brownout status, robot state/mode, Driver Station
-status, pose, speeds, and heartbeat into the `Drive` subsystem data map. Power Tool reads
-`/PowerLib/Subsystems/Drive/Data` and also accepts older `/PowerLib/Drive` topics.
-Existing robot projects should update PowerLib, then run Update Code to migrate
-`PowerDashboard` to the shared writer. Apply the updated Swerve template's telemetry changes
-to an existing customized Swerve class to remove its earlier duplicate logging calls.
+The latest map is logged every 20 ms (50 Hz) through CTRE SignalLogger under
+`PowerLib/Subsystems/<name>/Data/<key>`; Pose keeps its typed struct/schema. Numeric values
+can include units through the optional final argument to `setSubsystemData`. Boolean,
+numeric and string values retain their types; unsupported objects use their string value.
+Log recording follows Phoenix's logger start/stop behavior. SysId hooks remain separate.
+
+`RobotLogTelemetry` writes autonomous status/reason, DS/FMS/controller connection and
+brownout directly to SignalLogger every 20 ms (50 Hz) under `PowerLib/RobotStatus/<key>`. Those
+fields bypass shared data and NetworkTables. Alliance, time and CAN utilization stay in
+the dashboard map and its ordinary log path, without duplicate logging.
+
+Built-in mechanism telemetry omits applied voltage and connection status. Robot control
+and feedback checks continue at the normal loop rate. Update existing customized
+`PowerDashboard` integrations to use the shared writer and the separate status logger.
 
 ## Multiple Limelights
 
@@ -337,3 +353,5 @@ The skill will take it from there.
 ## Internal Docs
 
 Maintainer notes and development workflow details live in [INTERNAL.md](INTERNAL.md).
+
+Library review coverage and local validation commands live in [tests/README.md](tests/README.md).

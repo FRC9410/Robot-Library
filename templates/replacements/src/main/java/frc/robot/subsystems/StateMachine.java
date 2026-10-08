@@ -23,6 +23,7 @@ public class StateMachine extends SubsystemBase {
   // POWERLIB GENERATED SUBSYSTEMS END - DO NOT DELETE
 
   private RobotState wantedState = Constants.StateMachine.DEFAULT_STATE;
+  private RobotState actualState = Constants.StateMachine.DEFAULT_STATE;
 
   public RobotState getWantedState() {
     return wantedState;
@@ -30,6 +31,13 @@ public class StateMachine extends SubsystemBase {
 
   public void setWantedState(RobotState wantedState) {
     this.wantedState = wantedState;
+  }
+
+  /** Update this when the state controller actually transitions, independently of its demand. */
+  public RobotState getActualState() { return actualState; }
+
+  public void setActualState(RobotState actualState) {
+    this.actualState = java.util.Objects.requireNonNull(actualState);
   }
 
   @Override

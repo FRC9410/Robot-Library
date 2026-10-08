@@ -17,6 +17,31 @@ class VendorDependency {
 
 def templateFiles = [
     new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/subsystems/io/MechanismSimulation.java',
+        destination: 'src/main/java/frc/powerlib/subsystems/io/MechanismSimulation.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/PowerDataStore.java',
+        destination: 'src/main/java/frc/powerlib/PowerDataStore.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/subsystems/ConfigurationQueue.java',
+        destination: 'src/main/java/frc/powerlib/subsystems/ConfigurationQueue.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/dashboard/RobotLogTelemetry.java',
+        destination: 'src/main/java/frc/powerlib/dashboard/RobotLogTelemetry.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/subsystems/MotorConfiguration.java',
+        destination: 'src/main/java/frc/powerlib/subsystems/MotorConfiguration.java',
+        replacement: false
+    ),
+    new TemplateFile(
         source: 'powerlib/src/main/java/frc/powerlib/dashboard/SubsystemTelemetry.java',
         destination: 'src/main/java/frc/powerlib/dashboard/SubsystemTelemetry.java',
         replacement: false
@@ -42,6 +67,11 @@ def templateFiles = [
         replacement: false
     ),
     new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/tuning/TuningCadence.java',
+        destination: 'src/main/java/frc/powerlib/tuning/TuningCadence.java',
+        replacement: false
+    ),
+    new TemplateFile(
         source: 'powerlib/src/main/java/frc/powerlib/tuning/TunableConstant.java',
         destination: 'src/main/java/frc/powerlib/tuning/TunableConstant.java',
         replacement: false
@@ -55,6 +85,11 @@ def templateFiles = [
         source: 'replacements/src/main/java/frc/robot/constants/GeneratedTunableConstants.java',
         destination: 'src/main/java/frc/robot/constants/GeneratedTunableConstants.java',
         replacement: true
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/configs/ConfigValidation.java',
+        destination: 'src/main/java/frc/powerlib/configs/ConfigValidation.java',
+        replacement: false
     ),
     new TemplateFile(
         source: 'powerlib/src/main/java/frc/powerlib/configs/LimelightVisionConfig.java',
@@ -766,6 +801,11 @@ gradle.projectsLoaded {
                 }
 
                 if (installLib) {
+                    copyTemplateFile(project, new TemplateFile(
+                        source: 'replacements/src/main/java/frc/robot/subsystems/PowerDashboard.java',
+                        destination: 'power-tool/scripts/templates/PowerDashboard.java',
+                        replacement: false
+                    ))
                     deleteDeprecatedPowerLibFiles(project)
                     templateFiles.findAll { template -> template.source.startsWith('powerlib/') }.each { template ->
                         File backup = copyTemplateFile(project, template)

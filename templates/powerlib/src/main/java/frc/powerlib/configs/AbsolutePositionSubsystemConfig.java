@@ -18,5 +18,15 @@ public record AbsolutePositionSubsystemConfig(
     MotionMagicConfig motionMagicConfig,
     String subsystemName,
     String units,
-    Optional<Double> defaultPosition) {}
+    Optional<Double> defaultPosition) {
+  public AbsolutePositionSubsystemConfig {
+    motorConfigs = ConfigValidation.motors(motorConfigs);
+    java.util.Objects.requireNonNull(leadConfig, "leadConfig");
+    java.util.Objects.requireNonNull(cancoderConfig, "cancoderConfig");
+    java.util.Objects.requireNonNull(motionMagicConfig, "motionMagicConfig");
+    ConfigValidation.subsystemName(subsystemName);
+    ConfigValidation.text(units, "units");
+    ConfigValidation.optional(defaultPosition, "defaultPosition");
+  }
+}
 

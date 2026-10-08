@@ -37,7 +37,6 @@ type RobotSubsystemTile = {
   id: string;
   name: string;
   type: string;
-  connected?: boolean;
   metrics: RobotMetric[];
 };
 
@@ -192,7 +191,7 @@ function getSubsystemTopicKey(subsystem: GeneratedSubsystem, index: number) {
 }
 
 function metricSortValue(metric: RobotMetric) {
-  const order = ["Connected", "Velocity", "Position", "Setpoint", "Applied volts"];
+  const order = ["Velocity", "Position", "Setpoint"];
   const index = order.findIndex((label) => metric.label.toLowerCase().startsWith(label.toLowerCase()));
   return index === -1 ? order.length : index;
 }
@@ -268,19 +267,13 @@ function createTiles(subsystems: GeneratedSubsystem[], topics: NtTopicSnapshot[]
       .filter((metric): metric is RobotMetric => metric !== null)
       .sort((left, right) => metricSortValue(left) - metricSortValue(right) || left.label.localeCompare(right.label));
 
-    const connectedMetric = metrics.find((metric) => metric.label.toLowerCase() === "connected");
-    const visibleMetrics = metrics.filter((metric) => metric.label.toLowerCase() !== "connected");
+    const visibleMetrics = metrics.filter((metric) =>
+      !["connected", "applied volts"].includes(metric.label.toLowerCase()));
 
     return {
       id: tile.id,
       name: tile.name,
       type: tile.type,
-      connected:
-        connectedMetric?.value.toLowerCase() === "true"
-          ? true
-          : connectedMetric?.value.toLowerCase() === "false"
-            ? false
-            : undefined,
       metrics: visibleMetrics
     };
   });
@@ -637,14 +630,6 @@ export function RobotPanel({ subsystems, topics }: RobotPanelProps) {
                           </Typography>
                           <Stack direction="row" spacing={1} sx={{ mt: 0.75 }}>
                             <Chip label={tile.type} size="small" />
-                            {tile.connected !== undefined && (
-                              <Chip
-                                label={tile.connected ? "connected" : "disconnected"}
-                                color={tile.connected ? "success" : "error"}
-                                size="small"
-                                variant={tile.connected ? "filled" : "outlined"}
-                              />
-                            )}
                           </Stack>
                         </Box>
                       </Stack>

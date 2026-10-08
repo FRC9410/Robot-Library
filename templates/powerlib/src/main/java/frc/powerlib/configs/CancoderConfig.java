@@ -8,5 +8,11 @@ package frc.powerlib.configs;
 public record CancoderConfig(
     int encoderId,
     double magnetOffsetRotations,
-    double discontinuityPointRotations) {}
+    double discontinuityPointRotations) {
+  public CancoderConfig {
+    ConfigValidation.range(encoderId, 0, 62, "encoder CAN ID");
+    ConfigValidation.range(magnetOffsetRotations, -1, 1, "magnetOffsetRotations");
+    ConfigValidation.range(discontinuityPointRotations, 0, 1, "discontinuityPointRotations");
+  }
+}
 

@@ -209,6 +209,8 @@ try {
     New-Item -ItemType Directory -Force -Path $scriptsRoot | Out-Null
     Copy-Item -LiteralPath (Join-Path $sourceRoot 'install.ps1') -Destination (Join-Path $scriptsRoot 'install.ps1') -Force
     Copy-DirectoryContents -Source (Join-Path $source 'scripts') -Destination $scriptsRoot
+    . (Join-Path $scriptsRoot 'project-layout.ps1')
+    Copy-PowerToolGeneratorTemplate -SourceRoot $sourceRoot -ScriptsRoot $scriptsRoot
 
     $latestUpdater = Join-Path $sourceRoot "update-power-tool.ps1"
     if (Test-Path $latestUpdater) {

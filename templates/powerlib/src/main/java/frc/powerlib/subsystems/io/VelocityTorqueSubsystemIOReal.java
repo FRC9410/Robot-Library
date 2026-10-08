@@ -9,6 +9,8 @@ import frc.powerlib.subsystems.VelocitySubsystem;
 public class VelocityTorqueSubsystemIOReal implements VelocitySubsystemIO {
   private final VelocitySubsystem subsystem;
   private static final NeutralOut brake = new NeutralOut();
+  private final VelocityTorqueCurrentFOC torqueRequest = new VelocityTorqueCurrentFOC(0);
+  private final MotionMagicVelocityVoltage voltageRequest = new MotionMagicVelocityVoltage(0);
 
   public VelocityTorqueSubsystemIOReal(VelocitySubsystem subsystem) {
     this.subsystem = subsystem;
@@ -17,7 +19,6 @@ public class VelocityTorqueSubsystemIOReal implements VelocitySubsystemIO {
   @Override
   public void updateInputs(Inputs inputs) {
     TalonFX motor = subsystem.getVelocityMotor();
-    inputs.connected = motor != null;
     if (motor == null) {
       return;
     }
@@ -25,7 +26,6 @@ public class VelocityTorqueSubsystemIOReal implements VelocitySubsystemIO {
     inputs.positionRotations = motor.getPosition().getValueAsDouble();
     inputs.velocityRotationsPerSecond = motor.getVelocity().getValueAsDouble();
     inputs.velocitySetpoint = subsystem.getVelocitySetpoint();
-    inputs.appliedVolts = motor.getMotorVoltage().getValueAsDouble();
   }
 
   @Override
@@ -38,7 +38,7 @@ public class VelocityTorqueSubsystemIOReal implements VelocitySubsystemIO {
       }
 
       motor.setControl(
-          new VelocityTorqueCurrentFOC(velocityRotationsPerSecond)
+          torqueRequest.withVelocity(velocityRotationsPerSecond)
               .withFeedForward(subsystem.getTorqueFeedForward()));
     }
   }
@@ -48,8 +48,9 @@ public class VelocityTorqueSubsystemIOReal implements VelocitySubsystemIO {
     TalonFX motor = subsystem.getVelocityMotor();
     if (motor != null) {
       motor.setControl(
-          new MotionMagicVelocityVoltage(0)
+          voltageRequest
               .withVelocity(velocityRotationsPerSecond)
+              .withEnableFOC(false)
               .withSlot(0));
     }
   }

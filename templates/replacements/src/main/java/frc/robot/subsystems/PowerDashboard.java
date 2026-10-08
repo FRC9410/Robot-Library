@@ -16,10 +16,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class PowerDashboard extends SubsystemBase {
-  private static final double TUNING_MODE_SYNC_INTERVAL_SECONDS = 0.1;
+  private static final double TUNING_MODE_SYNC_INTERVAL_SECONDS = frc.powerlib.tuning.TuningCadence.INTERVAL_SECONDS;
 
   private final StateMachine stateMachine;
   private final frc.powerlib.dashboard.DriveTelemetry driveTelemetry;
+  private final frc.powerlib.dashboard.RobotLogTelemetry robotLogTelemetry;
   private final NetworkTable subsystemsTable =
       NetworkTableInstance.getDefault().getTable("PowerLib").getSubTable("Subsystems");
   private final NetworkTable commandsTable =
@@ -32,25 +33,19 @@ public class PowerDashboard extends SubsystemBase {
       NetworkTableInstance.getDefault().getTable("PowerLib").getSubTable("Characterization");
   private final Map<String, CharacterizationCommandBinding> characterizationCommands = new HashMap<>();
   private double nextTuningModeSyncTime = 0.0;
+  private double nextTuningValuesSyncTime = 0.0;
   private long syncedSubsystemVariablesRevision = -1;
   private long syncedCommandVariablesRevision = -1;
 
   public PowerDashboard(StateMachine stateMachine) {
     this.stateMachine = stateMachine;
     driveTelemetry = new frc.powerlib.dashboard.DriveTelemetry()
-        .withDriverControllerPort(frc.robot.Constants.OI.DRIVER_CONTROLLER_PORT)
         .withPose(() -> stateMachine.drivetrain.getState().Pose)
-        .withSpeeds(() -> stateMachine.drivetrain.getState().Speeds)
-        .withState(() -> stateMachine.getWantedState().name())
-        .withGyroConnected(() -> stateMachine.drivetrain.getPigeon2().isConnected());
-    // Matches TunerConstants.createDrivetrain's FL, FR, BL, BR module order.
-    String[] moduleNames = {"FL", "FR", "BL", "BR"};
-    for (int index = 0; index < stateMachine.drivetrain.getModules().length; index++) {
-      var module = stateMachine.drivetrain.getModule(index);
-      String name = index < moduleNames.length ? moduleNames[index] : "Module " + index;
-      driveTelemetry.withModuleConnected(name, () -> module.getDriveMotor().isConnected()
-          && module.getSteerMotor().isConnected() && module.getEncoder().isConnected());
-    }
+        .withRequestedState(() -> stateMachine.getWantedState().name())
+        .withActualState(() -> stateMachine.getActualState().name())
+        .withHeadingSetpoint(() -> stateMachine.drivetrain.getHeadingSetpointDegrees());
+    robotLogTelemetry = new frc.powerlib.dashboard.RobotLogTelemetry()
+        .withDriverControllerPort(frc.robot.Constants.OI.DRIVER_CONTROLLER_PORT);
     frc.robot.constants.GeneratedTunableConstants.register();
     initCharacterizationRoutines();
   }
@@ -65,9 +60,8 @@ public class PowerDashboard extends SubsystemBase {
     driveTelemetry.publish();
     syncTuningMode();
     publishSubsystemData();
-    syncSubsystemVariables();
-    frc.powerlib.tuning.TunableConstants.sync();
-    syncCommandVariables();
+    robotLogTelemetry.log();
+    syncTuningValues();
     pollCharacterizationCommands();
   }
 
@@ -86,6 +80,15 @@ public class PowerDashboard extends SubsystemBase {
 
   private void publishSubsystemData() {
     frc.powerlib.dashboard.SubsystemTelemetry.publish();
+  }
+
+  private void syncTuningValues() {
+    double now = Timer.getFPGATimestamp();
+    if (now < nextTuningValuesSyncTime) return;
+    nextTuningValuesSyncTime = now + TUNING_MODE_SYNC_INTERVAL_SECONDS;
+    syncSubsystemVariables();
+    frc.powerlib.tuning.TunableConstants.sync();
+    syncCommandVariables();
   }
 
   private void syncSubsystemVariables() {
@@ -116,11 +119,11 @@ public class PowerDashboard extends SubsystemBase {
       Map<String, Map<String, Object>> variablesByOwner,
       NetworkTable ownerTable,
       VariableUpdater updater) {
-    new java.util.HashMap<>(variablesByOwner)
+    variablesByOwner
         .forEach(
             (ownerName, variables) -> {
               NetworkTable variablesTable = ownerTable.getSubTable(ownerName).getSubTable("Variables");
-              new java.util.HashMap<>(variables)
+              variables
                   .forEach(
                       (key, defaultValue) -> {
                         Object value =

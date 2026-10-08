@@ -16,6 +16,14 @@ public record VelocitySubsystemConfig(
     MotionMagicConfig motionMagicConfig,
     String subsystemName,
     double torqueFeedForward) {
+  public VelocitySubsystemConfig {
+    motorConfigs = ConfigValidation.motors(motorConfigs);
+    java.util.Objects.requireNonNull(leadConfig, "leadConfig");
+    java.util.Objects.requireNonNull(motionMagicConfig, "motionMagicConfig");
+    ConfigValidation.subsystemName(subsystemName);
+    ConfigValidation.finite(torqueFeedForward, "torqueFeedForward");
+  }
+
   public VelocitySubsystemConfig(
       List<MotorConfig> motorConfigs,
       LeadMotorConfig leadConfig,

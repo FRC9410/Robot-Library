@@ -44,7 +44,7 @@ import { DeleteSubsystemDialog } from "./features/subsystems/components/DeleteSu
 import { SubsystemsPanel } from "./features/subsystems/components/SubsystemsPanel";
 import { UpdateCodeDialog } from "./features/subsystems/components/UpdateCodeDialog";
 import { NetworkTablesPanel } from "./features/networktables/NetworkTablesPanel";
-import { NetworkTablesProvider, useNetworkTables } from "./features/networktables/NetworkTablesContext";
+import { NetworkTablesProvider, useNetworkTables, useTopics } from "./features/networktables/NetworkTablesContext";
 import { ConnectionSettingsDialog } from "./features/networktables/ConnectionSettingsDialog";
 import { tuningModeRequestTopicName, tuningModeTopicName } from "./features/networktables/tuningUtils";
 import { RobotPanel } from "./features/robot/RobotPanel";
@@ -53,6 +53,8 @@ import { TuningPanel } from "./features/tuning/TuningPanel";
 import { LimelightsPanel } from "./features/limelights/LimelightsPanel";
 import { detectLimelights } from "./features/limelights/limelightUtils";
 import type { AppView } from "./types/app";
+import { TuningModeSync } from "./networktables/TuningModeSync";
+import { tuningUpdateIntervalMs } from "./networktables/telemetryTiming";
 
 type ToastState = {
   open: boolean;
@@ -60,7 +62,9 @@ type ToastState = {
   severity: "success" | "error" | "info" | "warning";
 };
 
-const networkTableWatchPrefixes = ["/"];
+const networkTableWatchPrefixes = ["/PowerLib/Data", "/PowerLib/Subsystems/Drive/Data/",
+  "/PowerLib/Subsystems/Swerve/Data/", "/PowerLib/Drive/", "/PowerLib/Characterization/",
+  "/SmartDashboard/", "/Robot/", "/CameraPublisher/", "/limelight"];
 const autoConnectPausedKey = "powerlib.autoConnectPaused";
 
 function readAutoConnectPaused() {
@@ -86,10 +90,12 @@ function AppContent() {
     setStatus,
     connectionSettings,
     setConnectionSettings,
-    topics,
+    telemetryError,
     setTopics,
-    upsertTopic
+    upsertTopic,
+    pruneTopics
   } = useNetworkTables();
+  const topics = useTopics("app");
   const [activeView, setActiveView] = useState<AppView>("drive");
   const [subsystemDocument, setSubsystemDocument] = useState<SubsystemDocumentState>({
     loading: false,
@@ -111,7 +117,16 @@ function AppContent() {
   const [deleteSubsystemIndex, setDeleteSubsystemIndex] = useState<number | null>(null);
   const [characterizationOpen, setCharacterizationOpen] = useState(false);
   const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(false);
-  const [optimisticTuningMode, setOptimisticTuningMode] = useState<boolean | null>(null);
+  const [desiredTuningMode, setDesiredTuningMode] = useState<boolean | null>(null);
+  const tuningSyncRef = useRef<TuningModeSync | null>(null);
+  if (tuningSyncRef.current === null) {
+    tuningSyncRef.current = new TuningModeSync(
+      enabled => clientRef.current.publish(tuningModeRequestTopicName, "boolean", enabled),
+      message => showToast(`Could not synchronize tuning: ${message}`, "error")
+    );
+  }
+  const latestTopicsRef = useRef(topics);
+  latestTopicsRef.current = topics;
   const updateSubsystemCodeRef = useRef<() => Promise<void>>(async () => {});
   const updateInstallSectionRef = useRef<(section: string) => Promise<void>>(async () => {});
   const updatePowerToolRef = useRef<() => Promise<void>>(async () => {});
@@ -124,7 +139,8 @@ function AppContent() {
   const tuningModeRequestTopic = topics.find((topic) => topic.name === tuningModeRequestTopicName);
   const networkTuningMode =
     tuningModeRequestTopic?.value === true || (!tuningModeRequestTopic && tuningModeTopic?.value === true);
-  const tuningModeEnabled = optimisticTuningMode ?? networkTuningMode;
+  const tuningModeEnabled = desiredTuningMode ?? networkTuningMode;
+  const tuningModePending = status === "connected" && tuningModeTopic?.value !== tuningModeEnabled;
   const limelights = useMemo(() => detectLimelights(topics), [topics]);
 
   const characterizationCommands = useMemo<CharacterizationCommand[]>(() => {
@@ -394,12 +410,14 @@ function AppContent() {
   }
 
   function attemptNetworkTablesConnection(reportErrors: boolean) {
+    tuningSyncRef.current!.connectionChanged(false);
     connectionStatusRef.current = "connecting";
     setStatus("connecting");
     setTopics([]);
 
     try {
       clientRef.current.connect(connectionSettings.host, connectionSettings.port, (connected) => {
+        tuningSyncRef.current!.connectionChanged(connected);
         const nextStatus = connected ? "connected" : "disconnected";
         connectionStatusRef.current = nextStatus;
         setStatus(nextStatus);
@@ -407,7 +425,10 @@ function AppContent() {
       networkTableWatchPrefixes.forEach((prefix) => {
         clientRef.current.watchPrefix(prefix, upsertTopic);
       });
+      clientRef.current.watchPrefix("/PowerLib/", upsertTopic, tuningUpdateIntervalMs);
+      clientRef.current.watchCameraAnnouncements(upsertTopic);
     } catch (caught) {
+      tuningSyncRef.current!.connectionChanged(false);
       clientRef.current.disconnect();
       connectionStatusRef.current = "disconnected";
       setStatus("disconnected");
@@ -422,9 +443,19 @@ function AppContent() {
     attemptNetworkTablesConnection(true);
   }
 
+  useEffect(() => {
+    if (status !== "connected" || activeView !== "networktables") return;
+    const stop = clientRef.current.watchPrefix("/", upsertTopic);
+    return () => {
+      stop();
+      pruneTopics(snapshot => clientRef.current.isWatchedValue(snapshot.name));
+    };
+  }, [status, activeView, clientRef, upsertTopic, pruneTopics]);
+
   function disconnectNetworkTables() {
     setAutoConnectPaused(true);
     clientRef.current.disconnect();
+    tuningSyncRef.current!.connectionChanged(false);
     connectionStatusRef.current = "idle";
     setStatus("idle");
     setTopics([]);
@@ -437,35 +468,19 @@ function AppContent() {
   };
 
   useEffect(() => {
+    tuningSyncRef.current!.reset();
+    setDesiredTuningMode(null);
     automaticConnectRef.current();
     return () => {
       clientRef.current.disconnect();
+      tuningSyncRef.current!.connectionChanged(false);
       connectionStatusRef.current = "idle";
     };
   }, [clientRef, connectionSettings.host, connectionSettings.port]);
 
-  async function setTuningModeEnabled(enabled: boolean) {
-    const previousTuningMode = networkTuningMode;
-    setOptimisticTuningMode(enabled);
-    upsertTopic({
-      name: tuningModeRequestTopicName,
-      type: "boolean",
-      value: enabled,
-      lastChangedTime: Date.now()
-    });
-
-    try {
-      await clientRef.current.publish(tuningModeRequestTopicName, "boolean", enabled);
-    } catch (caught) {
-      setOptimisticTuningMode(null);
-      upsertTopic({
-        name: tuningModeRequestTopicName,
-        type: "boolean",
-        value: previousTuningMode,
-        lastChangedTime: Date.now()
-      });
-      showToast(caught instanceof Error ? caught.message : "Could not update tuning mode.", "error");
-    }
+  function setTuningModeEnabled(enabled: boolean) {
+    tuningSyncRef.current!.request(enabled);
+    setDesiredTuningMode(enabled);
   }
 
   updateSubsystemCodeRef.current = updateSubsystemCode;
@@ -511,14 +526,16 @@ function AppContent() {
   }, [activeView, limelights.length]);
 
   useEffect(() => {
-    if (optimisticTuningMode === null) {
-      return;
-    }
-
-    if (tuningModeRequestTopic?.value === optimisticTuningMode || tuningModeTopic?.value === optimisticTuningMode) {
-      setOptimisticTuningMode(null);
-    }
-  }, [optimisticTuningMode, tuningModeRequestTopic?.value, tuningModeTopic?.value]);
+    const timer = window.setInterval(() => {
+      const values = latestTopicsRef.current;
+      const requested = values.find(topic => topic.name === tuningModeRequestTopicName)?.value;
+      const enabled = values.find(topic => topic.name === tuningModeTopicName)?.value;
+      const sync = tuningSyncRef.current!;
+      void sync.sync(performance.now(), requested, enabled);
+      setDesiredTuningMode(sync.desired);
+    }, tuningUpdateIntervalMs);
+    return () => window.clearInterval(timer);
+  }, []);
 
   function watchCharacterizationPrefix() {
     if (!subsystemForm?.name) {
@@ -571,7 +588,7 @@ function AppContent() {
                     onChange={(event) => void setTuningModeEnabled(event.target.checked)}
                   />
                 }
-                label="Tuning"
+                label={tuningModePending ? "Tuning (syncing)" : "Tuning"}
               />
               {status === "connected" || !autoConnectPausedRef.current ? (
                 <Button variant="outlined" size="small" onClick={disconnectNetworkTables}>
@@ -697,15 +714,15 @@ function AppContent() {
       </Snackbar>
 
       <Container maxWidth={false} sx={activeView === "drive" ? { p: "0 !important" } : { py: 2 }}>
+        {telemetryError && <Alert severity="warning" sx={{ m: 1 }}>{telemetryError}</Alert>}
         <Stack spacing={2}>
-          {activeView === "drive" && <DrivePanel />}
+          {activeView === "drive" && <DrivePanel subsystems={subsystemDocument.subsystems} />}
           <Box sx={{ display: activeView === "constants" ? "block" : "none" }}>
             <ConstantsPanel active={activeView === "constants"} />
           </Box>
           {activeView === "robot" && (
-            <RobotPanel
+            <RobotPanelWithTelemetry
               subsystems={subsystemDocument.subsystems}
-              topics={topics}
             />
           )}
 
@@ -747,4 +764,8 @@ function AppContent() {
       </Container>
     </Box>
   );
+}
+
+function RobotPanelWithTelemetry({ subsystems }: { subsystems: GeneratedSubsystem[] }) {
+  return <RobotPanel subsystems={subsystems} topics={useTopics("robot")} />;
 }

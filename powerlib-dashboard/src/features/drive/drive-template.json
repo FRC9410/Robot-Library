@@ -1,27 +1,23 @@
 {
-  "field": { "lengthMeters": 16.54, "widthMeters": 8.07 },
-  "modulePrefixes": ["/PowerLib/Subsystems/Drive/Data/Modules/", "/PowerLib/Drive/Modules/"],
+  "field": {
+    "lengthMeters": 16.54,
+    "widthMeters": 8.07
+  },
   "topics": {
     "heartbeat": ["/PowerLib/Subsystems/Drive/Data/Heartbeat", "/PowerLib/Drive/Heartbeat"],
     "enabled": ["/PowerLib/Subsystems/Drive/Data/Enabled", "/PowerLib/Drive/Enabled"],
     "mode": ["/PowerLib/Subsystems/Drive/Data/Mode", "/PowerLib/Drive/Mode"],
     "state": ["/PowerLib/Subsystems/Drive/Data/State", "/PowerLib/Drive/State"],
+    "requestedState": ["/PowerLib/Subsystems/Drive/Data/RequestedState", "/PowerLib/Drive/RequestedState"],
+    "actualState": ["/PowerLib/Subsystems/Drive/Data/ActualState", "/PowerLib/Drive/ActualState"],
     "battery": ["/PowerLib/Subsystems/Drive/Data/BatteryVolts", "/PowerLib/Drive/BatteryVolts"],
-    "brownout": ["/PowerLib/Subsystems/Drive/Data/BrownedOut", "/PowerLib/Drive/BrownedOut"],
     "time": ["/PowerLib/Subsystems/Drive/Data/MatchTimeSeconds", "/PowerLib/Drive/MatchTimeSeconds"],
-    "ds": ["/PowerLib/Subsystems/Drive/Data/DsAttached", "/PowerLib/Drive/DsAttached"],
-    "fms": ["/PowerLib/Subsystems/Drive/Data/FmsAttached", "/PowerLib/Drive/FmsAttached"],
-    "controller": ["/PowerLib/Subsystems/Drive/Data/DriverControllerConnected", "/PowerLib/Drive/DriverControllerConnected"],
     "can": ["/PowerLib/Subsystems/Drive/Data/RioCanUtilization", "/PowerLib/Drive/RioCanUtilization"],
     "alliance": ["/PowerLib/Subsystems/Drive/Data/Alliance", "/PowerLib/Drive/Alliance"],
     "poseValid": ["/PowerLib/Subsystems/Drive/Data/PoseValid", "/PowerLib/Drive/PoseValid"],
-    "speedsValid": ["/PowerLib/Subsystems/Drive/Data/SpeedsValid", "/PowerLib/Drive/SpeedsValid"],
     "x": ["/PowerLib/Subsystems/Drive/Data/Pose/XMeters", "/PowerLib/Drive/Pose/XMeters", "/PowerLib/Subsystems/Swerve/Data/Pose/XMeters"],
     "y": ["/PowerLib/Subsystems/Drive/Data/Pose/YMeters", "/PowerLib/Drive/Pose/YMeters", "/PowerLib/Subsystems/Swerve/Data/Pose/YMeters"],
     "heading": ["/PowerLib/Subsystems/Drive/Data/Pose/HeadingDegrees", "/PowerLib/Drive/Pose/HeadingDegrees", "/PowerLib/Subsystems/Swerve/Data/Pose/RotationDegrees"],
-    "vx": ["/PowerLib/Subsystems/Drive/Data/Speeds/VXMetersPerSecond", "/PowerLib/Drive/Speeds/VXMetersPerSecond", "/PowerLib/Subsystems/Swerve/Data/Speeds/VXMetersPerSecond"],
-    "vy": ["/PowerLib/Subsystems/Drive/Data/Speeds/VYMetersPerSecond", "/PowerLib/Drive/Speeds/VYMetersPerSecond", "/PowerLib/Subsystems/Swerve/Data/Speeds/VYMetersPerSecond"],
-    "omega": ["/PowerLib/Subsystems/Drive/Data/Speeds/OmegaRadiansPerSecond", "/PowerLib/Drive/Speeds/OmegaRadiansPerSecond", "/PowerLib/Subsystems/Swerve/Data/Speeds/OmegaRadiansPerSecond"],
-    "gyro": ["/PowerLib/Subsystems/Drive/Data/GyroConnected", "/PowerLib/Drive/GyroConnected"]
+    "headingSetpoint": ["/PowerLib/Subsystems/Drive/Data/HeadingSetpointDegrees", "/PowerLib/Drive/HeadingSetpointDegrees"]
   }
 }

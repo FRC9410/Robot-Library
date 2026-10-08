@@ -21,6 +21,18 @@ public record LeadMotorConfig(
     double sensorToMechanismRatio,
     double rotorToSensorRatio,
     boolean focEnabled) {
+  public LeadMotorConfig {
+    ConfigValidation.finite(kP, "kP");
+    ConfigValidation.finite(kI, "kI");
+    ConfigValidation.finite(kD, "kD");
+    ConfigValidation.finite(kG, "kG");
+    ConfigValidation.optional(kS, "kS");
+    ConfigValidation.optional(kV, "kV");
+    ConfigValidation.optional(kA, "kA");
+    ConfigValidation.positive(sensorToMechanismRatio, "sensorToMechanismRatio");
+    ConfigValidation.positive(rotorToSensorRatio, "rotorToSensorRatio");
+  }
+
   public LeadMotorConfig(
       double kP,
       double kI,

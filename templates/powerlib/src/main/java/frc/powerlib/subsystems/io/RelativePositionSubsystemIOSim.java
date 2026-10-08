@@ -1,37 +1,32 @@
 package frc.powerlib.subsystems.io;
 
+import frc.powerlib.configs.RelativePositionSubsystemConfig;
+
 public class RelativePositionSubsystemIOSim implements RelativePositionSubsystemIO {
-  private double position = 0.0;
-  private double setpoint = 0.0;
-  private double appliedVolts = 0.0;
-
-  @Override
-  public void updateInputs(Inputs inputs) {
-    position = setpoint;
-    inputs.connected = true;
-    inputs.position = position;
-    inputs.setpoint = setpoint;
-    inputs.appliedVolts = appliedVolts;
+  private final MechanismSimulation model;
+  private final RelativePositionSubsystemConfig config;
+  private double setpoint;
+  public RelativePositionSubsystemIOSim() { config = null; model = new MechanismSimulation(1, 2, 10); }
+  public RelativePositionSubsystemIOSim(RelativePositionSubsystemConfig config) {
+    this.config = config;
+    model = new MechanismSimulation(config.leadConfig().sensorToMechanismRatio() * config.leadConfig().rotorToSensorRatio(),
+        config.motionMagicConfig().cruiseVelocity(), config.motionMagicConfig().acceleration());
+    zeroEncoder(config.homePosition());
   }
-
-  @Override
-  public void setPosition(double position) {
-    setpoint = position;
+  @Override public void updateInputs(Inputs inputs) {
+    model.update();
+    if (config != null) model.limits(config.reverseSoftLimit(), config.forwardSoftLimit());
+    inputs.position = model.position; inputs.setpoint = setpoint;
   }
-
-  @Override
-  public void setVoltage(double volts) {
-    appliedVolts = volts;
+  @Override public void setPosition(double position) {
+    if (config != null) {
+      var profile = position <= model.position ? config.slowMotionMagicConfig() : config.motionMagicConfig();
+      model.profile(profile.cruiseVelocity(), profile.acceleration());
+      position = Math.max(config.reverseSoftLimit(), Math.min(config.forwardSoftLimit(), position));
+    }
+    setpoint = position; model.position(position);
   }
-
-  @Override
-  public void zeroEncoder(double position) {
-    this.position = position;
-    this.setpoint = position;
-  }
-
-  @Override
-  public void stop(double stopVoltage) {
-    appliedVolts = stopVoltage;
-  }
+  @Override public void setVoltage(double volts) { model.voltage(volts); }
+  @Override public void zeroEncoder(double position) { setpoint = position; model.reset(position); }
+  @Override public void stop(double stopVoltage) { model.voltage(stopVoltage); }
 }

@@ -15,6 +15,8 @@ public class MotorConfig {
   private final boolean isReversed;
 
   public MotorConfig(int canId, NeutralModeValue neutralMode, boolean isFollower, boolean isReversed) {
+    ConfigValidation.range(canId, 0, 62, "motor CAN ID");
+    java.util.Objects.requireNonNull(neutralMode, "neutralMode");
     this.canId = canId;
     this.neutralMode = neutralMode;
     this.isFollower = isFollower;

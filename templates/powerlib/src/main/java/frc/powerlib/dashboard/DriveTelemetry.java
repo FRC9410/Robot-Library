@@ -1,42 +1,23 @@
 package frc.powerlib.dashboard;
 
 import edu.wpi.first.math.geometry.Pose2d;
-import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.RobotController;
 import frc.powerlib.PowerRobotContainer;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Objects;
-import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 /** Collects Drive subsystem data before SubsystemTelemetry publishes and logs it. */
 public final class DriveTelemetry {
   private Supplier<Pose2d> poseSupplier;
-  private Supplier<ChassisSpeeds> speedsSupplier;
+  private Supplier<Double> headingSetpointSupplier;
   private Supplier<String> stateSupplier;
-  private BooleanSupplier gyroConnectedSupplier;
-  private final Map<String, BooleanSupplier> moduleConnectedSuppliers = new LinkedHashMap<>();
+  private Supplier<String> requestedStateSupplier;
+  private Supplier<String> actualStateSupplier;
   private long heartbeat;
-  private int driverControllerPort;
-
-  /** Use the same Driver Station joystick port as the team's driver controller. */
-  public DriveTelemetry withDriverControllerPort(int port) {
-    if (port < 0 || port >= DriverStation.kJoystickPorts) {
-      throw new IllegalArgumentException("Driver controller port must be between 0 and 5.");
-    }
-    driverControllerPort = port;
-    return this;
-  }
 
   public DriveTelemetry withPose(Supplier<Pose2d> supplier) {
     poseSupplier = supplier;
-    return this;
-  }
-
-  public DriveTelemetry withSpeeds(Supplier<ChassisSpeeds> supplier) {
-    speedsSupplier = supplier;
     return this;
   }
 
@@ -45,18 +26,21 @@ public final class DriveTelemetry {
     return this;
   }
 
-  /** Supply actual gyro communication health; omitted sensors are not assumed healthy. */
-  public DriveTelemetry withGyroConnected(BooleanSupplier supplier) {
-    gyroConnectedSupplier = Objects.requireNonNull(supplier);
+  /** Driver or autonomous demand, independent of whether the robot can fulfill it. */
+  public DriveTelemetry withRequestedState(Supplier<String> supplier) {
+    requestedStateSupplier = Objects.requireNonNull(supplier);
     return this;
   }
 
-  /** Supply actual module communication health (for example FL, FR, BL, BR). */
-  public DriveTelemetry withModuleConnected(String name, BooleanSupplier supplier) {
-    if (name == null || name.isBlank() || name.contains("/")) {
-      throw new IllegalArgumentException("Module name must be nonblank and cannot contain '/'.");
-    }
-    moduleConnectedSuppliers.put(name, Objects.requireNonNull(supplier));
+  /** State derived by the robot controller from its current readiness and outputs. */
+  public DriveTelemetry withActualState(Supplier<String> supplier) {
+    actualStateSupplier = Objects.requireNonNull(supplier);
+    return this;
+  }
+
+  /** Blue-origin field heading in degrees, or null when no heading target is active. */
+  public DriveTelemetry withHeadingSetpoint(Supplier<Double> supplier) {
+    headingSetpointSupplier = Objects.requireNonNull(supplier);
     return this;
   }
 
@@ -64,39 +48,34 @@ public final class DriveTelemetry {
     setData("Enabled", DriverStation.isEnabled());
     setData("Mode", DriverStation.isDisabled() ? "DISABLED"
         : DriverStation.isAutonomous() ? "AUTO" : DriverStation.isTest() ? "TEST" : "TELEOP");
-    setData("DsAttached", DriverStation.isDSAttached());
-    setData("FmsAttached", DriverStation.isFMSAttached());
     setData("Alliance", DriverStation.getAlliance().map(Enum::name).orElse("Unknown"));
     setData("MatchTimeSeconds", DriverStation.getMatchTime(), "seconds");
     setData("BatteryVolts", RobotController.getBatteryVoltage(), "volts");
-    setData("BrownedOut", RobotController.isBrownedOut());
-    setData("DriverControllerConnected", DriverStation.isJoystickConnected(driverControllerPort));
     setData("RioCanUtilization", RobotController.getCANStatus().percentBusUtilization);
     if (stateSupplier != null) setData("State", stateSupplier.get());
-    if (gyroConnectedSupplier != null) setData("GyroConnected", gyroConnectedSupplier.getAsBoolean());
-    moduleConnectedSuppliers.forEach((name, supplier) ->
-        setData("Modules/" + name + "/Connected", supplier.getAsBoolean()));
+    if (requestedStateSupplier != null) setData("RequestedState", requestedStateSupplier.get());
+    if (actualStateSupplier != null) setData("ActualState", actualStateSupplier.get());
     if (poseSupplier != null) {
       Pose2d pose = poseSupplier.get();
       boolean valid = pose != null && Double.isFinite(pose.getX()) && Double.isFinite(pose.getY())
           && Double.isFinite(pose.getRotation().getDegrees());
       setData("PoseValid", valid);
+      setData("Pose", valid ? pose : null);
       if (valid) {
         setData("Pose/XMeters", pose.getX(), "meters");
         setData("Pose/YMeters", pose.getY(), "meters");
         setData("Pose/HeadingDegrees", pose.getRotation().getDegrees(), "degrees");
+      } else {
+        setData("Pose/XMeters", Double.NaN, "meters");
+        setData("Pose/YMeters", Double.NaN, "meters");
+        setData("Pose/HeadingDegrees", Double.NaN, "degrees");
       }
     }
-    if (speedsSupplier != null) {
-      ChassisSpeeds speeds = speedsSupplier.get();
-      boolean valid = speeds != null && Double.isFinite(speeds.vxMetersPerSecond)
-          && Double.isFinite(speeds.vyMetersPerSecond) && Double.isFinite(speeds.omegaRadiansPerSecond);
-      setData("SpeedsValid", valid);
-      if (valid) {
-        setData("Speeds/VXMetersPerSecond", speeds.vxMetersPerSecond, "meters per second");
-        setData("Speeds/VYMetersPerSecond", speeds.vyMetersPerSecond, "meters per second");
-        setData("Speeds/OmegaRadiansPerSecond", speeds.omegaRadiansPerSecond, "radians per second");
-      }
+    if (headingSetpointSupplier != null) {
+      Double heading = headingSetpointSupplier.get();
+      // An explicit nonfinite value clears the previous target without another status topic.
+      setData("HeadingSetpointDegrees", heading != null && Double.isFinite(heading)
+          ? heading : Double.NaN, "degrees");
     }
     // Changes even when the robot is stationary, so stale feedback cannot look healthy.
     setData("Heartbeat", (double) ++heartbeat);

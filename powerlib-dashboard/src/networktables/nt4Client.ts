@@ -8,7 +8,7 @@ import {
 } from "ntcore-ts-client";
 import type { NetworkTablesTypes } from "ntcore-ts-client";
 import { z } from "zod";
-import { telemetryUpdateIntervalMs } from "./telemetryTiming";
+import { telemetryUpdateIntervalMs, tuningUpdateIntervalMs } from "./telemetryTiming";
 
 export type NtPrimitive = string | number | boolean;
 export type NtValue = NetworkTablesTypes | null;
@@ -178,7 +178,8 @@ export class PowerLibNt4Client {
         value,
         lastChangedTime: topic.lastChangedTime
       });
-    }, { all: false, periodic: telemetryUpdateIntervalMs / 1000 });
+    }, { all: false, periodic: (name.includes("/Variables/") || name.startsWith("/PowerLib/Tuning/")
+      ? tuningUpdateIntervalMs : telemetryUpdateIntervalMs) / 1000 });
 
     onValue({
       name,
@@ -192,6 +193,8 @@ export class PowerLibNt4Client {
     if (!this.nt) {
       throw new Error("NetworkTables is not connected.");
     }
+    const nt = this.nt;
+    const connectionRevision = this.connectionRevision;
 
     const topic =
       this.topics.get(name) ?? this.nt.createTopic<NtPrimitive>(name, typeInfoByType[type], value);
@@ -226,23 +229,23 @@ export class PowerLibNt4Client {
       }
     }
 
+    if (this.nt !== nt || this.connectionRevision !== connectionRevision) {
+      throw new Error("NetworkTables connection changed before the value could be published.");
+    }
     topic.setValue(value);
     this.publicationRevisions.set(topic, this.connectionRevision);
   }
 
-  watchPrefix(prefix: string, onValue: (snapshot: NtTopicSnapshot) => void) {
+  watchPrefix(prefix: string, onValue: (snapshot: NtTopicSnapshot) => void,
+    updateIntervalMs = telemetryUpdateIntervalMs) {
     if (!this.nt) {
       throw new Error("NetworkTables is not connected.");
     }
 
-    if (this.prefixTopics.has(prefix)) {
-      return;
-    }
-
-    const topic = this.nt.createPrefixTopic(prefix);
+    const topic = this.prefixTopics.get(prefix) ?? this.nt.client.getPrefixTopicFromName(prefix) ?? this.nt.createPrefixTopic(prefix);
     this.prefixTopics.set(prefix, topic);
 
-    topic.subscribe(
+    const id = topic.subscribe(
       (value, params) => {
         onValue({
           name: params.name,
@@ -251,7 +254,58 @@ export class PowerLibNt4Client {
           lastChangedTime: topic.lastChangedTime
         });
       },
-      { all: false, periodic: telemetryUpdateIntervalMs / 1000 }
+      { all: false, periodic: updateIntervalMs / 1000 }
     );
+    return () => {
+      topic.unsubscribe(id);
+      if (topic.subscribers.size === 0) this.prefixTopics.delete(prefix);
+    };
+  }
+
+  isWatchedValue(name: string) {
+    return [...this.prefixTopics.entries()].some(([prefix, topic]) => name.startsWith(prefix)
+      && [...topic.subscribers.values()].some(subscriber => !subscriber.options.topicsonly));
+  }
+
+  /** Discover custom-named cameras through announcements without subscribing to all values. */
+  watchCameraAnnouncements(onValue: (snapshot: NtTopicSnapshot) => void) {
+    if (!this.nt) throw new Error("NetworkTables is not connected.");
+    const nt = this.nt;
+    const socket = nt.client.messenger.socket;
+    const metadata = this.prefixTopics.get("/") ?? nt.client.getPrefixTopicFromName("/") ?? nt.createPrefixTopic("/");
+    this.prefixTopics.set("/", metadata);
+    metadata.subscribe(() => {}, { topicsonly: true });
+    const keys = new Map<string, Set<string>>();
+    const watched = new Set<string>();
+    let attached: WebSocket | null = null;
+    const receive = (event: MessageEvent) => {
+      if (typeof event.data !== "string") return;
+      try {
+        const messages: unknown = JSON.parse(event.data);
+        if (!Array.isArray(messages)) return;
+        for (const message of messages) {
+          if (message?.method !== "announce" || typeof message.params?.name !== "string") continue;
+          const [, table, key] = message.params.name.split("/");
+          if (!table || !key || table.startsWith("limelight")) continue;
+          const known = keys.get(table) ?? new Set<string>();
+          if (["tv", "tx", "ty", "ta", "getpipe", "pipeline", "botpose", "json"].includes(key)) known.add(key);
+          keys.set(table, known);
+          if (known.size >= 3 && !watched.has(table)) {
+            watched.add(table);
+            this.watchPrefix(`/${table}/`, onValue);
+          }
+        }
+      } catch { /* Malformed metadata cannot affect live telemetry. */ }
+    };
+    const attach = () => {
+      if (attached === socket.websocket) return;
+      attached?.removeEventListener("message", receive);
+      const current = socket.websocket;
+      current.addEventListener("message", receive);
+      attached = current;
+    };
+    attach();
+    this.unsubscribers.push(nt.addRobotConnectionListener(connected => { if (connected) attach(); }));
+    this.unsubscribers.push(() => attached?.removeEventListener("message", receive));
   }
 }

@@ -2,10 +2,8 @@ package frc.powerlib.subsystems.io;
 
 public interface RelativePositionSubsystemIO {
   public static class Inputs {
-    public boolean connected = false;
     public double position = 0.0;
     public double setpoint = 0.0;
-    public double appliedVolts = 0.0;
   }
 
   default void updateInputs(Inputs inputs) {}

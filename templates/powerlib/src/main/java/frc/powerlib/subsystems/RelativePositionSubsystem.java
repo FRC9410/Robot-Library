@@ -3,7 +3,6 @@ package frc.powerlib.subsystems;
 import com.ctre.phoenix6.configs.FeedbackConfigs;
 import com.ctre.phoenix6.configs.MotionMagicConfigs;
 import com.ctre.phoenix6.configs.Slot0Configs;
-import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.hardware.TalonFX;
 import edu.wpi.first.wpilibj.RobotBase;
 import frc.powerlib.configs.RelativePositionSubsystemConfig;
@@ -24,6 +23,13 @@ public class RelativePositionSubsystem extends PowerSubsystem {
   private final RelativePositionSubsystemIO io;
   private final RelativePositionSubsystemConfig config;
   private MotionProfile activeProfile = null;
+  private MotionProfile requestedProfile = MotionProfile.NORMAL;
+  private boolean profilePending;
+  private boolean positionPending;
+  private boolean holdingPosition;
+  private double activatedSetpoint = Double.NaN;
+  private enum ControlMode { NONE, POSITION, VOLTAGE }
+  private ControlMode controlMode = ControlMode.NONE;
   private double setpoint;
   private double voltage;
   private boolean focEnabled;
@@ -47,7 +53,8 @@ public class RelativePositionSubsystem extends PowerSubsystem {
 
   public RelativePositionSubsystem(
       RelativePositionSubsystemConfig config, RelativePositionSubsystemIO io) {
-    super(config.motorConfigs(), config.subsystemName());
+    super(config.motorConfigs(), config.subsystemName(), motor -> MotorConfiguration.relative(motor, config),
+        io == null && !RobotBase.isSimulation());
     this.config = config;
     this.setpoint = config.homePosition();
     this.voltage = config.stopVoltage();
@@ -57,32 +64,38 @@ public class RelativePositionSubsystem extends PowerSubsystem {
 
     TalonFX leader = getLeaderMotor();
     if (leader != null) {
-      configureMotor(leader, config);
       this.positionMotor = leader;
-      applyMotionProfile(MotionProfile.NORMAL);
+      activeProfile = MotionProfile.NORMAL;
     }
     this.io = io == null ? createDefaultIO() : io;
-    zeroEncoder(config.homePosition());
-    this.io.setPosition(setpoint);
+    this.io.zeroEncoder(config.homePosition());
+    inputs.position = config.homePosition();
+    setPosition(setpoint);
   }
 
   protected RelativePositionSubsystemIO createDefaultIO() {
-    return RobotBase.isSimulation() ? new RelativePositionSubsystemIOSim() : new RelativePositionSubsystemIOReal(this);
+    return RobotBase.isSimulation() ? new RelativePositionSubsystemIOSim(config) : new RelativePositionSubsystemIOReal(this);
   }
 
   @Override
   public void periodic() {
     io.updateInputs(inputs);
-    applyMotorTunableValues();
-    applyTunableValues();
-    applyProfileForSetpoint();
+    if (shouldSyncTuning()) {
+      applyMotorTunableValues();
+      applyTunableValues();
+    }
+    activatePositionIfReady();
     publishData();
   }
 
   public void setPosition(double position) {
-    if (position != setpoint) {
+    if (!isConfigured()) return;
+    if (controlMode != ControlMode.POSITION || position != setpoint) {
+      requestedProfile = position <= getCurrentPosition() ? MotionProfile.SLOW : MotionProfile.NORMAL;
       setpoint = position;
-      io.setPosition(position);
+      controlMode = ControlMode.POSITION;
+      positionPending = true;
+      activatePositionIfReady();
     }
   }
 
@@ -98,8 +111,14 @@ public class RelativePositionSubsystem extends PowerSubsystem {
     return setpoint;
   }
 
+  /** The last position sent to IO, which can be a hold while the requested target is pending. */
+  public double getActivatedSetpoint() {
+    return activatedSetpoint;
+  }
+
   public boolean atTargetPosition() {
-    return isAtPosition(setpoint);
+    return isConfigured() && controlMode == ControlMode.POSITION
+        && !positionPending && isAtPosition(setpoint);
   }
 
   public boolean isAtPosition(double position) {
@@ -107,9 +126,12 @@ public class RelativePositionSubsystem extends PowerSubsystem {
   }
 
   public void setVoltage(double voltage) {
-    if (voltage != this.voltage) {
+    if (!isConfigured()) return;
+    if (controlMode != ControlMode.VOLTAGE || voltage != this.voltage) {
       this.voltage = voltage;
       io.setVoltage(voltage);
+      controlMode = ControlMode.VOLTAGE;
+      cancelPendingPosition();
     }
   }
 
@@ -117,12 +139,39 @@ public class RelativePositionSubsystem extends PowerSubsystem {
     zeroEncoder(0.0);
   }
 
+  /** Stop open-loop output and allow a subsequent identical target to resume control. */
+  public void stop() {
+    io.stop(isConfigured() ? config.stopVoltage() : 0.0);
+    controlMode = ControlMode.NONE;
+    cancelPendingPosition();
+  }
+
+  @Override
+  public void setOutput(int canId, double output) {
+    super.setOutput(canId, output);
+    controlMode = ControlMode.NONE;
+    cancelPendingPosition();
+  }
+
+  @Override
+  public void stopAll() {
+    super.stopAll();
+    io.setVoltage(0.0);
+    controlMode = ControlMode.NONE;
+    cancelPendingPosition();
+  }
+
   public void zeroEncoder(double position) {
+    // Cancel the old demand before changing the coordinate system.
+    io.stop(isConfigured() ? config.stopVoltage() : 0.0);
     io.zeroEncoder(position);
+    inputs.position = position;
+    controlMode = ControlMode.NONE;
+    cancelPendingPosition();
   }
 
   public boolean isReady() {
-    return isAtPosition(config.homePosition()) && setpoint == config.homePosition();
+    return atTargetPosition() && setpoint == config.homePosition();
   }
 
   public TalonFX getPositionMotor() {
@@ -133,68 +182,61 @@ public class RelativePositionSubsystem extends PowerSubsystem {
     return focEnabled;
   }
 
-  private void applyProfileForSetpoint() {
-    if (positionMotor == null) {
-      return;
-    }
-
-    if (setpoint <= getCurrentPosition()) {
-      applyMotionProfile(MotionProfile.SLOW);
-      return;
-    }
-
-    applyMotionProfile(MotionProfile.NORMAL);
+  private void cancelPendingPosition() {
+    positionPending = false;
+    holdingPosition = false;
   }
 
-  private void applyMotionProfile(MotionProfile profile) {
-    if (positionMotor == null || activeProfile == profile) {
-      return;
+  private void activatePositionIfReady() {
+    if (controlMode != ControlMode.POSITION || !isConfigured()) return;
+    if (ensureMotionProfile(requestedProfile)) {
+      if (positionPending) {
+        io.setPosition(setpoint);
+        activatedSetpoint = setpoint;
+        positionPending = false;
+      }
+      holdingPosition = false;
+    } else {
+      positionPending = true;
+      if (!holdingPosition) {
+        // Keep closed-loop support while configuration is pending, without advancing to the new target.
+        activatedSetpoint = getCurrentPosition();
+        io.setPosition(activatedSetpoint);
+        holdingPosition = true;
+      }
     }
+  }
 
-    positionMotor.getConfigurator().apply(
-        profile == MotionProfile.SLOW
-            ? toMotionMagicConfigs(slowMotionMagicCruiseVelocity, slowMotionMagicAcceleration)
-            : toMotionMagicConfigs(motionMagicCruiseVelocity, motionMagicAcceleration));
-    activeProfile = profile;
+  private boolean ensureMotionProfile(MotionProfile profile) {
+    if (activeProfile == profile && !profilePending
+        && (positionMotor == null || !pendingConfiguration(positionMotor, MotionMagicConfigs.class))) {
+      return true;
+    }
+    profilePending = !configureMotionProfile(
+        profile == MotionProfile.SLOW ? slowMotionMagicCruiseVelocity : motionMagicCruiseVelocity,
+        profile == MotionProfile.SLOW ? slowMotionMagicAcceleration : motionMagicAcceleration);
+    if (!profilePending) {
+      activeProfile = profile;
+    }
+    return !profilePending;
+  }
+
+  /**
+   * Returns true only after configuration succeeds. Custom IO implementations may override;
+   * this hook is also called while constructing the subsystem.
+   */
+  protected boolean configureMotionProfile(double cruiseVelocity, double acceleration) {
+    return positionMotor == null || applyRuntimeConfiguration(positionMotor,
+        toMotionMagicConfigs(cruiseVelocity, acceleration));
   }
 
   private void publishData() {
     double position = getCurrentPosition();
-    boolean connected = inputs.connected;
     boolean atTarget = atTargetPosition();
 
     setSubsystemData("Position", position, config.units());
     setSubsystemData("Setpoint", setpoint, config.units());
-    setSubsystemData("AppliedVolts", voltage, "volts");
     setSubsystemData("AtTarget", atTarget);
-    setSubsystemData("Connected", connected);
-  }
-
-  private static void configureMotor(
-      TalonFX motor, RelativePositionSubsystemConfig subsystemConfig) {
-    TalonFXConfiguration talonConfig = new TalonFXConfiguration();
-    LeadMotorConfig leadConfig = subsystemConfig.leadConfig();
-
-    talonConfig.Slot0.kP = leadConfig.kP();
-    talonConfig.Slot0.kI = leadConfig.kI();
-    talonConfig.Slot0.kD = leadConfig.kD();
-    talonConfig.Slot0.kG = leadConfig.kG();
-    talonConfig.Feedback.SensorToMechanismRatio = leadConfig.sensorToMechanismRatio();
-    talonConfig.Feedback.RotorToSensorRatio = leadConfig.rotorToSensorRatio();
-    if (leadConfig.kS().isPresent()) {
-      talonConfig.Slot0.kS = leadConfig.kS().get();
-      talonConfig.Slot0.kV = leadConfig.kV().get();
-      talonConfig.Slot0.kA = leadConfig.kA().get();
-    }
-
-    talonConfig.SoftwareLimitSwitch.ForwardSoftLimitEnable = true;
-    talonConfig.SoftwareLimitSwitch.ForwardSoftLimitThreshold =
-        subsystemConfig.forwardSoftLimit();
-    talonConfig.SoftwareLimitSwitch.ReverseSoftLimitEnable = true;
-    talonConfig.SoftwareLimitSwitch.ReverseSoftLimitThreshold =
-        subsystemConfig.reverseSoftLimit();
-
-    motor.getConfigurator().apply(talonConfig);
   }
 
   private static MotionMagicConfigs toMotionMagicConfigs(double cruiseVelocity, double acceleration) {
@@ -256,48 +298,43 @@ public class RelativePositionSubsystem extends PowerSubsystem {
         || changed(nextKG, kG)
         || changed(nextKS, kS)
         || changed(nextKV, kV)
-        || changed(nextKA, kA)) {
-      Slot0Configs slot0 = new Slot0Configs();
-      slot0.kP = nextKP;
-      slot0.kI = nextKI;
-      slot0.kD = nextKD;
-      slot0.kG = nextKG;
-      slot0.kS = nextKS;
-      slot0.kV = nextKV;
-      slot0.kA = nextKA;
-      positionMotor.getConfigurator().apply(slot0);
-
-      kP = nextKP;
-      kI = nextKI;
-      kD = nextKD;
-      kG = nextKG;
-      kS = nextKS;
-      kV = nextKV;
-      kA = nextKA;
+        || changed(nextKA, kA) || pendingConfiguration(positionMotor, Slot0Configs.class)) {
+      Slot0Configs slot0 = MotorConfiguration.slot0(nextKP, nextKI, nextKD, nextKG, nextKS, nextKV, nextKA);
+      if (applyRuntimeConfiguration(positionMotor, slot0)) {
+        kP = nextKP;
+        kI = nextKI;
+        kD = nextKD;
+        kG = nextKG;
+        kS = nextKS;
+        kV = nextKV;
+        kA = nextKA;
+      }
     }
 
     boolean nextFocEnabled = getSubsystemVariable("Control/FOCEnabled", focEnabled);
     if (nextFocEnabled != focEnabled) {
       focEnabled = nextFocEnabled;
+      if (controlMode == ControlMode.POSITION) positionPending = true;
     }
 
     double nextSensorToMechanismRatio =
-        getSubsystemVariable("Ratios/SensorToMechanism", sensorToMechanismRatio);
-    double nextRotorToSensorRatio = getSubsystemVariable("Ratios/RotorToSensor", rotorToSensorRatio);
+        getPositiveSubsystemVariable("Ratios/SensorToMechanism", sensorToMechanismRatio);
+    double nextRotorToSensorRatio = getPositiveSubsystemVariable("Ratios/RotorToSensor", rotorToSensorRatio);
     if (changed(nextSensorToMechanismRatio, sensorToMechanismRatio)
-        || changed(nextRotorToSensorRatio, rotorToSensorRatio)) {
-      applyFeedbackRatios(positionMotor, nextSensorToMechanismRatio, nextRotorToSensorRatio);
-      sensorToMechanismRatio = nextSensorToMechanismRatio;
-      rotorToSensorRatio = nextRotorToSensorRatio;
+        || changed(nextRotorToSensorRatio, rotorToSensorRatio) || pendingConfiguration(positionMotor, FeedbackConfigs.class)) {
+      if (applyFeedbackRatios(positionMotor, nextSensorToMechanismRatio, nextRotorToSensorRatio)) {
+        sensorToMechanismRatio = nextSensorToMechanismRatio;
+        rotorToSensorRatio = nextRotorToSensorRatio;
+      }
     }
 
     double nextCruiseVelocity =
-        getSubsystemVariable("MotionMagic/CruiseVelocity", motionMagicCruiseVelocity);
-    double nextAcceleration = getSubsystemVariable("MotionMagic/Acceleration", motionMagicAcceleration);
+        getNonnegativeSubsystemVariable("MotionMagic/CruiseVelocity", motionMagicCruiseVelocity);
+    double nextAcceleration = getNonnegativeSubsystemVariable("MotionMagic/Acceleration", motionMagicAcceleration);
     double nextSlowCruiseVelocity =
-        getSubsystemVariable("SlowMotionMagic/CruiseVelocity", slowMotionMagicCruiseVelocity);
+        getNonnegativeSubsystemVariable("SlowMotionMagic/CruiseVelocity", slowMotionMagicCruiseVelocity);
     double nextSlowAcceleration =
-        getSubsystemVariable("SlowMotionMagic/Acceleration", slowMotionMagicAcceleration);
+        getNonnegativeSubsystemVariable("SlowMotionMagic/Acceleration", slowMotionMagicAcceleration);
 
     if (changed(nextCruiseVelocity, motionMagicCruiseVelocity)
         || changed(nextAcceleration, motionMagicAcceleration)
@@ -311,15 +348,11 @@ public class RelativePositionSubsystem extends PowerSubsystem {
     }
   }
 
-  private static boolean changed(double left, double right) {
-    return Math.abs(left - right) > 1.0e-9;
-  }
-
-  private static void applyFeedbackRatios(
+  private boolean applyFeedbackRatios(
       TalonFX motor, double sensorToMechanismRatio, double rotorToSensorRatio) {
     FeedbackConfigs feedbackConfigs = new FeedbackConfigs();
     feedbackConfigs.SensorToMechanismRatio = sensorToMechanismRatio;
     feedbackConfigs.RotorToSensorRatio = rotorToSensorRatio;
-    motor.getConfigurator().apply(feedbackConfigs);
+    return applyRuntimeConfiguration(motor, feedbackConfigs);
   }
 }

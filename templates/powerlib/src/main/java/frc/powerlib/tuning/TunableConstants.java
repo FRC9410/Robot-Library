@@ -11,6 +11,7 @@ public final class TunableConstants {
   private record Binding(String owner, String key, Field field, Number defaultValue) {}
 
   private static final Map<Field, Binding> bindings = new LinkedHashMap<>();
+  private static final TuningCadence cadence = new TuningCadence();
 
   private TunableConstants() {}
 
@@ -41,7 +42,7 @@ public final class TunableConstants {
 
   /** Apply live values while enabled; keep the last applied fields and skip all bindings otherwise. */
   public static void sync() {
-    if (!PowerRobotContainer.isTuningEnabled()) {
+    if (!PowerRobotContainer.isTuningEnabled() || !cadence.isDue()) {
       return;
     }
     for (Binding binding : bindings.values()) {
@@ -53,7 +54,7 @@ public final class TunableConstants {
         value = binding.defaultValue();
       }
       try {
-        binding.field().set(null, value);
+        if (!value.equals(binding.field().get(null))) binding.field().set(null, value);
       } catch (IllegalAccessException exception) {
         throw new IllegalStateException("Could not update tunable constant " + binding.field(), exception);
       }

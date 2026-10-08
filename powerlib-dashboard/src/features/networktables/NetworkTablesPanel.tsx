@@ -16,7 +16,7 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import type { NtTopicSnapshot } from "../../networktables/nt4Client";
 import { stringifyValue } from "../subsystems/subsystemUtils";
-import { useNetworkTables } from "./NetworkTablesContext";
+import { useNetworkTables, useTopics } from "./NetworkTablesContext";
 
 type TopicTreeNode = {
   name: string;
@@ -117,7 +117,8 @@ function TopicTree({ node, depth = 0, expandedPaths, onToggle }: TopicTreeProps)
 }
 
 export function NetworkTablesPanel() {
-  const { connectionSettings, topics } = useNetworkTables();
+  const { connectionSettings } = useNetworkTables();
+  const topics = useTopics("all");
   const [search, setSearch] = useState("");
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(["/"]));
 

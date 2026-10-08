@@ -10,7 +10,6 @@ import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.math.util.Units;
 import edu.wpi.first.wpilibj.DriverStation;
-import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import frc.powerlib.PowerRobotContainer;
 import frc.robot.Constants;
@@ -19,6 +18,7 @@ import frc.robot.subsystems.Swerve;
 
 public class DriveUtil {
   private static final String SWERVE_TUNING_SUBSYSTEM_NAME = "Swerve";
+  private static final frc.powerlib.tuning.TuningCadence tuningCadence = new frc.powerlib.tuning.TuningCadence();
   private static final double DEFAULT_DRIVE_TO_POINT_MAX_SPEED_COEFFICIENT =
       SwerveConstants.DRIVE_TO_POINT_MAX_SPEED_COEFFICIENT;
   private static final double DEFAULT_DRIVE_TO_POINT_SLOW_SPEED_COEFFICIENT =
@@ -91,15 +91,10 @@ public class DriveUtil {
       Swerve drivetrain,
       double maxAngularRate,
       double skewCompensation) {
-    boolean isBlueAlliance = true;
     final Pose2d currentPose = drivetrain.getState().Pose;
 
     if (DriverStation.getAlliance().isEmpty()) {
       return new ChassisSpeeds(0, 0, 0);
-    }
-
-    if (DriverStation.getAlliance().get() == Alliance.Blue) {
-      isBlueAlliance = true;
     }
 
     double joystickDeadband = drivetrain.getDriverJoystickDeadband();
@@ -113,12 +108,9 @@ public class DriveUtil {
     yMagnitude = Math.copySign(yMagnitude * yMagnitude * yMagnitude, yMagnitude);
     angularMagnitude = Math.copySign(angularMagnitude * angularMagnitude, angularMagnitude);
 
-    double xVelocity =
-        (isBlueAlliance ? -xMagnitude * drivetrain.MAX_SPEED : xMagnitude * drivetrain.MAX_SPEED)
-            * velocityScale;
-    double yVelocity =
-        (isBlueAlliance ? -yMagnitude * drivetrain.MAX_SPEED : yMagnitude * drivetrain.MAX_SPEED)
-            * velocityScale;
+    // Joystick signs are shared by both alliances; Swerve applies the operator perspective.
+    double xVelocity = -xMagnitude * drivetrain.MAX_SPEED * velocityScale;
+    double yVelocity = -yMagnitude * drivetrain.MAX_SPEED * velocityScale;
     double angularVelocity = angularMagnitude * maxAngularRate * velocityScale;
 
     Rotation2d skewCompensationFactor =
@@ -133,7 +125,7 @@ public class DriveUtil {
 
   /** Called by Swerve while tuning; driving reads the cached settings without tuning lookups. */
   public static void syncTunableValues() {
-    if (!PowerRobotContainer.isTuningEnabled()) {
+    if (!PowerRobotContainer.isTuningEnabled() || !tuningCadence.isDue()) {
       return;
     }
     driveToPointMaxSpeedCoefficient = PowerRobotContainer.getSubsystemVariable(

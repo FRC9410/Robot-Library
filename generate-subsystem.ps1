@@ -748,7 +748,7 @@ function Read-SubsystemDocument {
         }
     }
 
-    $document = Get-Content -Path $Path -Raw | ConvertFrom-Json
+    $document = Get-Content -Encoding UTF8 -Path $Path -Raw | ConvertFrom-Json
     if (-not (Test-IsJsonObject $document)) {
         $document = [pscustomobject]@{}
     }
@@ -774,7 +774,7 @@ function Save-SubsystemDocument {
     $Document.subsystems = @($Document.subsystems | Sort-Object { (Get-SubsystemMetadata $_).PascalName })
     $parent = Split-Path -Parent ([System.IO.Path]::GetFullPath($Path))
     New-Item -ItemType Directory -Force -Path $parent | Out-Null
-    $Document | ConvertTo-Json -Depth 12 | Set-Content -Path $Path -Encoding ascii
+    [IO.File]::WriteAllText($Path, ($Document | ConvertTo-Json -Depth 12) + "`n", [Text.UTF8Encoding]::new($false))
 }
 
 function Get-SwerveConfigValue {
@@ -1108,7 +1108,7 @@ $CustomConstantsEndMarker
 function Ensure-ConstantsMarkers {
     param([Parameter(Mandatory = $true)][string]$ConstantsPath)
 
-    $content = Get-Content -Path $ConstantsPath -Raw
+    $content = Get-Content -Encoding UTF8 -Path $ConstantsPath -Raw
     if ($content.Contains($ConstantsStartMarker) -and $content.Contains($ConstantsEndMarker)) {
         return
     }
@@ -1120,13 +1120,13 @@ function Ensure-ConstantsMarkers {
 
     $markers = "$ConstantsStartMarker`n$ConstantsEndMarker`n"
     $updated = $content.Substring(0, $index).TrimEnd() + "`n`n$markers}"
-    Set-Content -Path $ConstantsPath -Value $updated -Encoding ascii
+    [IO.File]::WriteAllText($ConstantsPath, $updated.TrimEnd() + "`n", [Text.UTF8Encoding]::new($false))
 }
 
 function Remove-UnmarkedGeneratedConstants {
     param([Parameter(Mandatory = $true)][string]$ConstantsPath)
 
-    $lines = @(Get-Content -Path $ConstantsPath)
+    $lines = @(Get-Content -Encoding UTF8 -Path $ConstantsPath)
     $kept = @()
     foreach ($line in $lines) {
         $match = [regex]::Match($line, "^\s*public static final class\s+([A-Za-z0-9_]+)\s+extends\s+frc\.robot\.constants\.[A-Za-z0-9_]+Constants\s+\{\}\s*$")
@@ -1136,7 +1136,7 @@ function Remove-UnmarkedGeneratedConstants {
         $kept += $line
     }
 
-    Set-Content -Path $ConstantsPath -Value ($kept -join "`n") -Encoding ascii
+    [IO.File]::WriteAllText($ConstantsPath, ($kept -join "`n") + "`n", [Text.UTF8Encoding]::new($false))
 }
 
 function Rewrite-ConstantsBlock {
@@ -1149,7 +1149,7 @@ function Rewrite-ConstantsBlock {
     Remove-UnmarkedGeneratedConstants $ConstantsPath
     Ensure-ConstantsMarkers $ConstantsPath
 
-    $content = Get-Content -Path $ConstantsPath -Raw
+    $content = Get-Content -Encoding UTF8 -Path $ConstantsPath -Raw
     $start = $content.IndexOf($ConstantsStartMarker) + $ConstantsStartMarker.Length
     $end = $content.IndexOf($ConstantsEndMarker)
     $entries = @()
@@ -1160,7 +1160,7 @@ function Rewrite-ConstantsBlock {
 
     $block = if ($entries.Count -eq 0) { "" } else { "`n" + ($entries -join "`n") + "`n" }
     $updated = $content.Substring(0, $start) + $block + $content.Substring($end)
-    Set-Content -Path $ConstantsPath -Value $updated -Encoding ascii
+    [IO.File]::WriteAllText($ConstantsPath, $updated.TrimEnd() + "`n", [Text.UTF8Encoding]::new($false))
 }
 
 function Rewrite-StateMachineBlock {
@@ -1169,7 +1169,7 @@ function Rewrite-StateMachineBlock {
         [Parameter(Mandatory = $true)]$Subsystems
     )
 
-    $content = Get-Content -Path $StateMachinePath -Raw
+    $content = Get-Content -Encoding UTF8 -Path $StateMachinePath -Raw
     if (-not $content.Contains($StateMachineStartMarker) -or -not $content.Contains($StateMachineEndMarker)) {
         throw "Could not find POWERLIB GENERATED SUBSYSTEMS markers in StateMachine.java. Re-run the installer or add the DO NOT DELETE markers manually."
     }
@@ -1184,7 +1184,7 @@ function Rewrite-StateMachineBlock {
     $end = $content.IndexOf($StateMachineEndMarker)
     $block = if ($fields.Count -eq 0) { "`n" } else { "`n" + ($fields -join "`n") + "`n" }
     $updated = $content.Substring(0, $start) + $block + $content.Substring($end)
-    Set-Content -Path $StateMachinePath -Value $updated -Encoding ascii
+    [IO.File]::WriteAllText($StateMachinePath, $updated.TrimEnd() + "`n", [Text.UTF8Encoding]::new($false))
 }
 
 function Get-PreservedCustomConstantsBlock {
@@ -1194,7 +1194,7 @@ function Get-PreservedCustomConstantsBlock {
         return $null
     }
 
-    $content = Get-Content -Path $Path -Raw -Encoding UTF8
+    $content = Get-Content -Encoding UTF8 -Path $Path -Raw
     if (-not $content.Contains($CustomConstantsStartMarker) -or -not $content.Contains($CustomConstantsEndMarker)) {
         return $null
     }
@@ -1225,7 +1225,7 @@ function Get-CustomConstantsBySubsystemId {
     }
 
     Get-ChildItem -Path $ConstantsDir -Filter "*Constants.java" -File | ForEach-Object {
-        $content = Get-Content -Path $_.FullName -Raw -Encoding UTF8
+        $content = Get-Content -Encoding UTF8 -Path $_.FullName -Raw
         if (-not $content.Contains($GeneratedFileMarkerPrefix)) {
             return
         }
@@ -1285,7 +1285,7 @@ function Write-ConstantsFile {
     }
     $content = Set-CustomConstantsBlock $content $customContent
 
-    Set-Content -Path $outputFile -Value $content -Encoding ascii
+    [IO.File]::WriteAllText($outputFile, $content + "`n", [Text.UTF8Encoding]::new($false))
     return $outputFile
 }
 
@@ -1298,7 +1298,7 @@ function Write-SwerveConstantsFile {
     $outputFile = Join-Path $constantsDir "SwerveConstants.java"
     $customContent = Get-PreservedCustomConstantsBlock $outputFile
     $content = Set-CustomConstantsBlock (New-SwerveConstantsContent $SwerveConfig) $customContent
-    Set-Content -Path $outputFile -Value $content -Encoding ascii
+    [IO.File]::WriteAllText($outputFile, $content + "`n", [Text.UTF8Encoding]::new($false))
     return $outputFile
 }
 
@@ -1400,230 +1400,66 @@ function Write-CharacterizationFile {
     New-Item -ItemType Directory -Force -Path $characterizationDir | Out-Null
 
     $outputFile = Join-Path $characterizationDir "$($Metadata.PascalName)Characterization.java"
-    Set-Content -Path $outputFile -Value (New-VelocityCharacterizationContent $Subsystem $Metadata) -Encoding ascii
+    [IO.File]::WriteAllText($outputFile, (New-VelocityCharacterizationContent $Subsystem $Metadata) + "`n", [Text.UTF8Encoding]::new($false))
     return $outputFile
+}
+
+function Get-PowerDashboardTemplate {
+    $scriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
+    foreach ($path in @(
+        (Join-Path (Get-Location) 'power-tool/scripts/templates/PowerDashboard.java'),
+        (Join-Path $scriptRoot 'templates/replacements/src/main/java/frc/robot/subsystems/PowerDashboard.java'),
+        (Join-Path (Get-Location) 'templates/replacements/src/main/java/frc/robot/subsystems/PowerDashboard.java')
+    )) {
+        if (Test-Path -LiteralPath $path) { return Get-Content -Encoding UTF8 -LiteralPath $path -Raw }
+    }
+    throw 'Missing canonical PowerDashboard template. Update the PowerLib installation before generating code.'
 }
 
 function Ensure-PowerDashboardRawNetworkTablesSupport {
     param([Parameter(Mandatory = $true)][string]$PowerDashboardPath)
-
-    $content = Get-Content -Path $PowerDashboardPath -Raw
-    if ($content.Contains("registerCharacterizationCommand(") -and $content.Contains('getSubTable("Subsystems")') -and $content.Contains('getSubTable("Tuning")') -and $content.Contains("RequestedEnabled") -and $content.Contains("TUNING_MODE_SYNC_INTERVAL_SECONDS") -and -not $content.Contains("SmartDashboard")) {
-        return
+    $template = Get-PowerDashboardTemplate
+    $content = Get-Content -Encoding UTF8 -LiteralPath $PowerDashboardPath -Raw
+    # Update only named library members; retain user fields, methods and periodic actions.
+    foreach ($field in [regex]::Matches($template, '(?ms)^  private (?:static )?(?:final )?[^\r\n;]+? (\w+)\s*(?:=[^;]*)?;\r?\n')) {
+        $name = $field.Groups[1].Value
+        $pattern = '(?ms)^  private (?:static )?(?:final )?[^\r\n;]+?\b' + [regex]::Escape($name) + '\s*(?:=[^;]*)?;\r?\n'
+        if ([regex]::IsMatch($content, $pattern)) { $content = [regex]::Replace($content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($m) $field.Value }) }
+        else { $content = $content.Replace('  public PowerDashboard(', $field.Value + "`n  public PowerDashboard(") }
     }
-
-    $rawPowerDashboard = @'
-// Copyright (c) FIRST and other WPILib contributors.
-// Open Source Software; you can modify and/or share it under the terms of
-// the WPILib BSD license file in the root directory of this project.
-
-package frc.robot.subsystems;
-
-import edu.wpi.first.networktables.NetworkTable;
-import edu.wpi.first.networktables.NetworkTableEntry;
-import edu.wpi.first.networktables.NetworkTableInstance;
-import edu.wpi.first.wpilibj.Timer;
-import edu.wpi.first.wpilibj2.command.Command;
-import edu.wpi.first.wpilibj2.command.CommandScheduler;
-import edu.wpi.first.wpilibj2.command.SubsystemBase;
-import frc.powerlib.PowerRobotContainer;
-import java.util.HashMap;
-import java.util.Map;
-
-public class PowerDashboard extends SubsystemBase {
-  private static final double TUNING_MODE_SYNC_INTERVAL_SECONDS = 1.0;
-
-  private final StateMachine stateMachine;
-  private final NetworkTable subsystemsTable =
-      NetworkTableInstance.getDefault().getTable("PowerLib").getSubTable("Subsystems");
-  private final NetworkTable commandsTable =
-      NetworkTableInstance.getDefault().getTable("PowerLib").getSubTable("Commands");
-  private final NetworkTable tuningTable =
-      NetworkTableInstance.getDefault().getTable("PowerLib").getSubTable("Tuning");
-  private final NetworkTableEntry tuningEnabledEntry = tuningTable.getEntry("Enabled");
-  private final NetworkTableEntry tuningRequestedEntry = tuningTable.getEntry("RequestedEnabled");
-  private final NetworkTable characterizationTable =
-      NetworkTableInstance.getDefault().getTable("PowerLib").getSubTable("Characterization");
-  private final Map<String, CharacterizationCommandBinding> characterizationCommands = new HashMap<>();
-  private double nextTuningModeSyncTime = 0.0;
-
-  public PowerDashboard(StateMachine stateMachine) {
-    this.stateMachine = stateMachine;
-    initCharacterizationRoutines();
-  }
-
-  private void initCharacterizationRoutines() {
-    // POWERLIB GENERATED CHARACTERIZATION START - DO NOT DELETE
-    // POWERLIB GENERATED CHARACTERIZATION END - DO NOT DELETE
-  }
-
-  @Override
-  public void periodic() {
-    syncTuningMode();
-    publishSubsystemData();
-    syncSubsystemVariables();
-    syncCommandVariables();
-    pollCharacterizationCommands();
-  }
-
-  private void syncTuningMode() {
-    double now = Timer.getFPGATimestamp();
-    if (now < nextTuningModeSyncTime) {
-      return;
+    foreach ($name in @('syncTuningMode', 'syncTuningValues', 'publishSubsystemData', 'syncSubsystemVariables', 'syncCommandVariables', 'syncVariables', 'syncVariable', 'registerCharacterizationCommand', 'pollCharacterizationCommands', 'VariableUpdater', 'CharacterizationCommandBinding')) {
+        $declaration = if ($name -in @('VariableUpdater', 'CharacterizationCommandBinding')) {
+            '(?:static )?(?:class|interface)\s+' + $name + '\b[^\r\n]*\{'
+        } else {
+            '(?:static )?[\w<>, ?\[\].]+\s+' + $name + '\s*\([^;{]*\)\s*\{'
+        }
+        $pattern = '(?ms)^  private ' + $declaration + '.*?^  \}\r?\n'
+        $member = [regex]::Match($template, $pattern)
+        if (-not $member.Success) { throw "Canonical dashboard is missing $name." }
+        if ([regex]::IsMatch($content, $pattern)) { $content = [regex]::Replace($content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($m) $member.Value }) }
+        else { $content = [regex]::Replace($content, '\}\s*$', [System.Text.RegularExpressions.MatchEvaluator]{ param($m) "`n" + $member.Value + "}`n" }) }
     }
-
-    nextTuningModeSyncTime = now + TUNING_MODE_SYNC_INTERVAL_SECONDS;
-    boolean currentEnabled = PowerRobotContainer.isTuningEnabled();
-    boolean requestedEnabled = tuningRequestedEntry.getBoolean(currentEnabled);
-    PowerRobotContainer.setTuningEnabled(requestedEnabled);
-    tuningEnabledEntry.setBoolean(requestedEnabled);
-  }
-
-  private void publishSubsystemData() {
-    frc.powerlib.dashboard.SubsystemTelemetry.publish();
-  }
-
-  private void syncSubsystemVariables() {
-    syncVariables(
-        PowerRobotContainer.getAllSubsystemVariables(),
-        subsystemsTable,
-        PowerRobotContainer::updateSubsystemVariable);
-  }
-
-  private void syncCommandVariables() {
-    syncVariables(
-        PowerRobotContainer.getAllCommandVariables(),
-        commandsTable,
-        PowerRobotContainer::updateCommandVariable);
-  }
-
-  private void syncVariables(
-      Map<String, Map<String, Object>> variablesByOwner,
-      NetworkTable ownerTable,
-      VariableUpdater updater) {
-    new java.util.HashMap<>(variablesByOwner)
-        .forEach(
-            (ownerName, variables) -> {
-              NetworkTable variablesTable = ownerTable.getSubTable(ownerName).getSubTable("Variables");
-              new java.util.HashMap<>(variables)
-                  .forEach(
-                      (key, defaultValue) -> {
-                        Object value =
-                            syncVariable(
-                                variablesTable.getEntry(key),
-                                defaultValue,
-                                PowerRobotContainer.isTuningEnabled());
-                        updater.update(ownerName, key, value);
-                      });
-            });
-  }
-
-  private Object syncVariable(NetworkTableEntry entry, Object defaultValue, boolean tuningEnabled) {
-    if (defaultValue instanceof Boolean) {
-      boolean fallback = (Boolean) defaultValue;
-      if (!entry.exists()) {
-        entry.setBoolean(fallback);
-      }
-      if (!tuningEnabled) {
-        return fallback;
-      }
-      return entry.getBoolean(fallback);
+    foreach ($import in @('edu.wpi.first.wpilibj.Timer', 'java.util.Map', 'java.util.HashMap', 'edu.wpi.first.wpilibj2.command.CommandScheduler', 'edu.wpi.first.networktables.NetworkTableEntry', 'frc.powerlib.PowerRobotContainer')) {
+        if (-not $content.Contains("import $import;")) { $content = $content.Replace('package frc.robot.subsystems;', "package frc.robot.subsystems;`n`nimport $import;") }
     }
-
-    if (defaultValue instanceof Number) {
-      double fallback = ((Number) defaultValue).doubleValue();
-      if (!entry.exists()) {
-        entry.setDouble(fallback);
-      }
-      if (!tuningEnabled) {
-        return fallback;
-      }
-      return entry.getDouble(fallback);
+    foreach ($call in @('syncTuningMode();', 'publishSubsystemData();', 'syncTuningValues();', 'pollCharacterizationCommands();')) {
+        $periodic = [regex]::Match($content, '(?ms)^  public void periodic\(\) \{.*?^  \}')
+        if (-not $periodic.Success) { throw 'Dashboard periodic method is missing.' }
+        if (-not $periodic.Value.Contains($call)) { $content = $content.Replace('  public void periodic() {', "  public void periodic() {`n    $call") }
     }
-
-    String fallback = defaultValue == null ? "" : defaultValue.toString();
-    if (!entry.exists()) {
-      entry.setString(fallback);
-    }
-    if (!tuningEnabled) {
-      return fallback;
-    }
-    return entry.getString(fallback);
-  }
-
-  private void publishValue(NetworkTable table, String key, Object value) {
-    NetworkTableEntry entry = table.getEntry(key);
-    if (value instanceof Boolean) {
-      entry.setBoolean((Boolean) value);
-      return;
-    }
-
-    if (value instanceof Number) {
-      entry.setDouble(((Number) value).doubleValue());
-      return;
-    }
-
-    entry.setString(value == null ? "" : value.toString());
-  }
-
-  private interface VariableUpdater {
-    void update(String ownerName, String key, Object value);
-  }
-
-  private void registerCharacterizationCommand(String subsystemName, String commandName, Command command) {
-    NetworkTable commandTable = characterizationTable.getSubTable(subsystemName).getSubTable(commandName);
-    NetworkTableEntry requestEntry = commandTable.getEntry("request");
-    NetworkTableEntry runningEntry = commandTable.getEntry("running");
-
-    commandTable.getEntry(".type").setString("PowerLibCommand");
-    commandTable.getEntry("name").setString(commandName);
-    requestEntry.setBoolean(false);
-    runningEntry.setBoolean(false);
-    characterizationCommands.put(
-        subsystemName + "/" + commandName,
-        new CharacterizationCommandBinding(command, requestEntry, runningEntry));
-  }
-
-  private void pollCharacterizationCommands() {
-    CommandScheduler scheduler = CommandScheduler.getInstance();
-    characterizationCommands.values().forEach(
-        binding -> {
-          if (binding.requestEntry.getBoolean(false)) {
-            binding.requestEntry.setBoolean(false);
-            if (!scheduler.isScheduled(binding.command)) {
-              scheduler.schedule(binding.command);
-            }
-          }
-
-          binding.runningEntry.setBoolean(scheduler.isScheduled(binding.command));
-        });
-  }
-
-  private static class CharacterizationCommandBinding {
-    private final Command command;
-    private final NetworkTableEntry requestEntry;
-    private final NetworkTableEntry runningEntry;
-
-    private CharacterizationCommandBinding(
-        Command command, NetworkTableEntry requestEntry, NetworkTableEntry runningEntry) {
-      this.command = command;
-      this.requestEntry = requestEntry;
-      this.runningEntry = runningEntry;
-    }
-  }
+    $content = [regex]::Replace($content, '(?ms)^  public void periodic\(\) \{.*?^  \}', [Text.RegularExpressions.MatchEvaluator]{
+        param($match)
+        [regex]::Replace($match.Value, '(?m)^    (?:syncSubsystemVariables\(\)|syncCommandVariables\(\)|frc.powerlib.tuning.TunableConstants.sync\(\));\r?\n', '')
+    })
+    [IO.File]::WriteAllText($PowerDashboardPath, $content)
 }
-'@
-
-    Set-Content -Path $PowerDashboardPath -Value $rawPowerDashboard -Encoding ascii
-}
-
 function Rewrite-PowerDashboardCharacterizationBlock {
     param(
         [Parameter(Mandatory = $true)][string]$PowerDashboardPath,
         [Parameter(Mandatory = $true)]$Subsystems
     )
 
-    $content = Get-Content -Path $PowerDashboardPath -Raw
+    $content = Get-Content -Encoding UTF8 -Path $PowerDashboardPath -Raw
     if (-not $content.Contains($CharacterizationStartMarker) -or -not $content.Contains($CharacterizationEndMarker)) {
         throw "Could not find POWERLIB GENERATED CHARACTERIZATION markers in PowerDashboard.java. Re-run the installer or add the DO NOT DELETE markers manually."
     }
@@ -1666,7 +1502,7 @@ function Rewrite-PowerDashboardCharacterizationBlock {
     $end = $content.IndexOf($CharacterizationEndMarker)
     $block = if ($entries.Count -eq 0) { "`n" } else { "`n" + ($entries -join "`n") + "`n" }
     $updated = $content.Substring(0, $start) + $block + $content.Substring($end)
-    Set-Content -Path $PowerDashboardPath -Value $updated -Encoding ascii
+    [IO.File]::WriteAllText($PowerDashboardPath, $updated.TrimEnd() + "`n", [Text.UTF8Encoding]::new($false))
 }
 
 function Remove-DeletedGeneratedFiles {
@@ -1682,7 +1518,7 @@ function Remove-DeletedGeneratedFiles {
 
     if (Test-Path $constantsDir) {
         Get-ChildItem -Path $constantsDir -Filter "*Constants.java" -File | ForEach-Object {
-            $content = Get-Content -Path $_.FullName -Raw
+            $content = Get-Content -Encoding UTF8 -Path $_.FullName -Raw
             if ($content.Contains($GeneratedFileMarkerPrefix) -and -not $wantedFiles.ContainsKey($_.Name)) {
                 Remove-Item -LiteralPath $_.FullName -Force
                 Write-Host "Deleted removed subsystem constants $($_.Name)"
@@ -1697,7 +1533,7 @@ function Remove-LegacyGeneratedSubsystemFiles {
     $subsystemsDir = Join-Path (Get-Location) "src/main/java/frc/robot/subsystems"
     if (Test-Path $subsystemsDir) {
         Get-ChildItem -Path $subsystemsDir -Filter "*.java" -File | ForEach-Object {
-            $content = Get-Content -Path $_.FullName -Raw
+            $content = Get-Content -Encoding UTF8 -Path $_.FullName -Raw
             if ($content.Contains($GeneratedFileMarkerPrefix)) {
                 Remove-Item -LiteralPath $_.FullName -Force
                 Write-Host "Deleted legacy generated subsystem $($_.Name)"
@@ -1708,7 +1544,7 @@ function Remove-LegacyGeneratedSubsystemFiles {
     $ioDir = Join-Path $subsystemsDir "io"
     if (Test-Path $ioDir) {
         Get-ChildItem -Path $ioDir -Filter "*.java" -File | ForEach-Object {
-            $content = Get-Content -Path $_.FullName -Raw
+            $content = Get-Content -Encoding UTF8 -Path $_.FullName -Raw
             if ($content.Contains($GeneratedFileMarkerPrefix)) {
                 Remove-Item -LiteralPath $_.FullName -Force
                 Write-Host "Deleted legacy generated subsystem IO $($_.Name)"
@@ -1734,7 +1570,7 @@ function Remove-StaleCharacterizationFiles {
     }
 
     Get-ChildItem -Path $characterizationDir -Filter "*Characterization.java" -File | ForEach-Object {
-        $content = Get-Content -Path $_.FullName -Raw
+        $content = Get-Content -Encoding UTF8 -Path $_.FullName -Raw
         if ($content.Contains($GeneratedFileMarkerPrefix) -and -not $wantedFiles.ContainsKey($_.Name)) {
             Remove-Item -LiteralPath $_.FullName -Force
             Write-Host "Deleted stale characterization $($_.Name)"
@@ -1745,7 +1581,18 @@ function Remove-StaleCharacterizationFiles {
 function Format-JavaDoubleLiteral {
     param([Parameter(Mandatory = $true)]$Value)
 
-    $text = $Value.ToString()
+    $culture = [Globalization.CultureInfo]::InvariantCulture
+    $text = if ($Value -is [IFormattable]) { $Value.ToString($null, $culture) } else { $Value.ToString() }
+    $numeric = 0.0
+    $isNumeric = $Value -is [double] -or $Value -is [decimal] -or $Value -is [single]
+    if ($isNumeric) { $numeric = [double]$Value }
+    else { $isNumeric = [double]::TryParse($text, [Globalization.NumberStyles]::Float, $culture, [ref]$numeric) }
+    if ($isNumeric) {
+        if ([double]::IsNaN($numeric) -or [double]::IsInfinity($numeric)) { throw 'Java constants must be finite.' }
+        # Windows PowerShell JSON can return decimal where defaults used double.
+        # Normalize both to the same round-trip Java double representation.
+        $text = $numeric.ToString('R', $culture)
+    }
     if ($text -notmatch '\.' -and $text -notmatch '[eE]') {
         $text = "$text.0"
     }
@@ -1780,7 +1627,7 @@ $($registrations -join "`n")
   }
 }
 "@
-    Set-Content -Path (Join-Path $constantsDir "GeneratedTunableConstants.java") -Value $content -Encoding ascii
+    [IO.File]::WriteAllText((Join-Path $constantsDir "GeneratedTunableConstants.java"), $content.TrimEnd() + "`n", [Text.UTF8Encoding]::new($false))
 }
 
 function Get-JavaConstantRows {
@@ -1826,7 +1673,7 @@ function Test-NumericConstantType {
 function Read-ConstantsConfiguration {
     $path = Join-Path (Get-Location) 'power-tool/generated/powerlib-constants.json'
     if (-not (Test-Path $path)) { return [pscustomobject]@{ version = 1; files = [pscustomobject]@{} } }
-    $configuration = Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json
+    $configuration = Get-Content -Encoding UTF8 -LiteralPath $path -Raw | ConvertFrom-Json
     if ($configuration.version -ne 1 -or -not (Test-IsJsonObject $configuration.files)) { throw 'Invalid powerlib-constants.json configuration.' }
     return $configuration
 }
@@ -1848,7 +1695,7 @@ function Import-ConstantsConfiguration {
     foreach ($target in @(Get-ConstantsConfigurationTargets $Subsystems)) {
         if ($null -ne $Configuration.files.PSObject.Properties[$target.key]) { continue }
         $path = Join-Path $directory "$($target.name)Constants.java"
-        $source = if (Test-Path $path) { Get-Content -LiteralPath $path -Raw -Encoding UTF8 } else { '' }
+        $source = if (Test-Path $path) { Get-Content -Encoding UTF8 -LiteralPath $path -Raw } else { '' }
         if ($target.customOnly -and $CustomBlocksById.ContainsKey($target.key.Substring('subsystem:'.Length))) {
             $source = "public class Imported {`n$CustomConstantsStartMarker`n$($CustomBlocksById[$target.key.Substring('subsystem:'.Length)])`n$CustomConstantsEndMarker`n}"
         }
@@ -1866,14 +1713,14 @@ function Move-ControllerPortToOI {
     $directory = Join-Path (Get-Location) 'src/main/java/frc/robot/constants'
     $oldPath = Join-Path $directory 'RobotContainerConstants.java'
     $oiPath = Join-Path $directory 'OIConstants.java'
-    $oldSource = if (Test-Path $oldPath) { Get-Content -LiteralPath $oldPath -Raw -Encoding UTF8 } else { '' }
+    $oldSource = if (Test-Path $oldPath) { Get-Content -Encoding UTF8 -LiteralPath $oldPath -Raw } else { '' }
     $original = Get-JavaConstantRows $oldSource | Where-Object { -not $_.custom -and $_.name -ceq 'DRIVER_CONTROLLER_PORT' } | Select-Object -First 1
     $oldEntry = $Configuration.files.PSObject.Properties['robot:RobotContainer']
     $port = if ($null -ne $oldEntry) { $oldEntry.Value.constants | Where-Object { -not $_.custom -and $_.name -ceq 'DRIVER_CONTROLLER_PORT' } | Select-Object -First 1 } else { $null }
     if ($null -eq $port) { $port = $original }
     if ($null -ne $port) {
         if (-not (Test-Path $oiPath)) { throw 'Missing OIConstants.java for controller port migration.' }
-        $oiSource = Get-Content -LiteralPath $oiPath -Raw -Encoding UTF8
+        $oiSource = Get-Content -Encoding UTF8 -LiteralPath $oiPath -Raw
         $existingPort = Get-JavaConstantRows $oiSource | Where-Object { $_.name -ceq 'DRIVER_CONTROLLER_PORT' } | Select-Object -First 1
         if ($null -eq $existingPort) {
             $pattern = '(public\s+class\s+OIConstants\s*\{)'
@@ -1899,7 +1746,7 @@ function Move-ControllerPortToOI {
     }
     $containerPath = Join-Path (Get-Location) 'src/main/java/frc/robot/RobotContainer.java'
     if (Test-Path $containerPath) {
-        $source = Get-Content -LiteralPath $containerPath -Raw -Encoding UTF8
+        $source = Get-Content -Encoding UTF8 -LiteralPath $containerPath -Raw
         $updated = $source.Replace('Constants.RobotContainer.DRIVER_CONTROLLER_PORT', 'Constants.OI.DRIVER_CONTROLLER_PORT')
         if ($updated -cne $source) {
             [System.IO.File]::WriteAllText($containerPath, $updated, [System.Text.UTF8Encoding]::new($false))
@@ -1923,7 +1770,7 @@ function Write-ConfiguredConstants {
         if ($null -eq $Configuration.files.PSObject.Properties[$target.key]) { continue }
         $path = Join-Path $directory "$($target.name)Constants.java"
         if (-not (Test-Path $path)) { continue }
-        $source = Get-Content -LiteralPath $path -Raw -Encoding UTF8
+        $source = Get-Content -Encoding UTF8 -LiteralPath $path -Raw
         $constants = @($Configuration.files.PSObject.Properties[$target.key].Value.constants)
         $parsed = @(Get-JavaConstantRows $source)
         foreach ($original in @($parsed | Sort-Object start -Descending)) {
@@ -1945,7 +1792,7 @@ function Write-ConfiguredConstants {
         if ($start -lt 0 -or $end -le $start) { throw "Invalid custom constants markers in $path." }
         $start += $CustomConstantsStartMarker.Length
         $source = $source.Substring(0, $start) + "`n$customContent`n" + $source.Substring($end)
-        [System.IO.File]::WriteAllText($path, $source + "`n", [System.Text.UTF8Encoding]::new($false))
+        [System.IO.File]::WriteAllText($path, $source.TrimEnd() + "`n", [System.Text.UTF8Encoding]::new($false))
     }
     [System.IO.File]::WriteAllText((Join-Path (Get-Location) 'power-tool/generated/powerlib-constants.json'), ($Configuration | ConvertTo-Json -Depth 16) + "`n", [System.Text.UTF8Encoding]::new($false))
 }
@@ -1953,58 +1800,84 @@ function Ensure-SwerveCachedTuningSupport {
     param([Parameter(Mandatory = $true)][string]$SwervePath)
 
     if (-not (Test-Path -LiteralPath $SwervePath)) { return }
-    $content = Get-Content -LiteralPath $SwervePath -Raw -Encoding UTF8
+    $content = Get-Content -Encoding UTF8 -LiteralPath $SwervePath -Raw
     $pattern = '(?m)^  private void applyTunableValues\(\) \{'
     # Custom drivetrains without the PowerLib tuning methods are managed by their owner.
     if (-not [regex]::IsMatch($content, $pattern)) { return }
-    $syncCall = 'frc.powerlib.utils.DriveUtil.syncTunableValues();'
-    if (-not $content.Contains($syncCall)) {
-        $guard = @"
-    if (!PowerRobotContainer.isTuningEnabled()) {
+    $cadenceField = '  private final frc.powerlib.tuning.TuningCadence powerlibTuningCadence = new frc.powerlib.tuning.TuningCadence();'
+    if (-not $content.Contains('TuningCadence powerlibTuningCadence')) {
+        $content = [regex]::Replace($content, '(?m)^(public class Swerve[^\{]*\{)', ('$1' + "`n" + $cadenceField))
+    }
+    $cadenceGuard = @"
+    if (!PowerRobotContainer.isTuningEnabled() || !powerlibTuningCadence.isDue()) {
       return;
     }
-    $syncCall
 "@
-        $content = [regex]::Replace($content, $pattern, ('$0' + "`n" + $guard))
+    $oldGuard = '(?m)(^  private void applyTunableValues\(\) \{\r?\n)    if \(!PowerRobotContainer\.isTuningEnabled\(\)\) \{\r?\n      return;\r?\n    \}'
+    $content = [regex]::Replace($content, $oldGuard, ('$1' + $cadenceGuard))
+    $method = [regex]::Match($content, '(?ms)^  private void applyTunableValues\(\) \{.*?^  \}')
+    if (-not $method.Value.Contains('powerlibTuningCadence.isDue()')) {
+        $content = [regex]::Replace($content, $pattern, ('$0' + "`n" + $cadenceGuard))
+    }
+    $syncCall = 'frc.powerlib.utils.DriveUtil.syncTunableValues();'
+    if (-not $content.Contains($syncCall)) {
+        $guardPattern = '(?m)(^    if \(!PowerRobotContainer\.isTuningEnabled\(\) \|\| !powerlibTuningCadence\.isDue\(\)\) \{\r?\n      return;\r?\n    \})'
+        $content = [regex]::Replace($content, $guardPattern, ('$1' + "`n    " + $syncCall))
     }
     $pattern = '(?m)(^  private double getSwerveVariable\(String key, double defaultValue\) \{\r?\n)    if \(!PowerRobotContainer\.isTuningEnabled\(\)\) \{\r?\n      return defaultValue;\r?\n    \}\r?\n\r?\n'
     $content = [regex]::Replace($content, $pattern, '$1')
     [System.IO.File]::WriteAllText($SwervePath, $content, [System.Text.UTF8Encoding]::new($false))
 }
 
-function Ensure-SubsystemTelemetrySupport {
-    param([Parameter(Mandatory = $true)][string]$PowerDashboardPath)
-
-    $content = Get-Content -Path $PowerDashboardPath -Raw
-    $content = [regex]::Replace($content,
-        '(?ms)^  private void publishSubsystemData\(\) \{.*?^  \}',
-        "  private void publishSubsystemData() {`n    frc.powerlib.dashboard.SubsystemTelemetry.publish();`n  }")
-    $content = [regex]::Replace($content,
-        '(?ms)^  private void publishValue\(NetworkTable table, String key, Object value\) \{.*?^  \}\r?\n\r?\n', '')
-
-    if (-not $content.Contains('private final frc.powerlib.dashboard.DriveTelemetry driveTelemetry;')) {
-        $content = $content.Replace('  private final StateMachine stateMachine;',
-            "  private final StateMachine stateMachine;`n  private final frc.powerlib.dashboard.DriveTelemetry driveTelemetry;")
-        $driveInitialization = @'
-    this.stateMachine = stateMachine;
-    driveTelemetry = new frc.powerlib.dashboard.DriveTelemetry()
-        .withPose(() -> stateMachine.drivetrain.getState().Pose)
-        .withSpeeds(() -> stateMachine.drivetrain.getState().Speeds)
-        .withState(() -> stateMachine.getWantedState().name());
-'@
-        $content = $content.Replace('    this.stateMachine = stateMachine;', $driveInitialization)
+function Ensure-RobotStateTelemetrySupport {
+    param([Parameter(Mandatory = $true)][string]$StateMachinePath)
+    $content = Get-Content -Encoding UTF8 -LiteralPath $StateMachinePath -Raw
+    if ([regex]::IsMatch($content, '\bRobotState\s+getActualState\s*\(')) { return }
+    if (-not [regex]::IsMatch($content, '\bRobotState\s+actualState\b')) {
+        $field = '(?m)^[ \t]*private\s+RobotState\s+wantedState\b'
+        if (-not [regex]::IsMatch($content, $field)) { throw 'Cannot add actual state: StateMachine has no wantedState field.' }
+        $content = [regex]::Replace($content, $field, ('  private RobotState actualState = Constants.StateMachine.DEFAULT_STATE;' + "`n" + '$0'))
     }
-    if (-not $content.Contains('driveTelemetry.publish();')) {
-        $content = $content.Replace('  public void periodic() {',
-            "  public void periodic() {`n    driveTelemetry.publish();")
-    }
-    Set-Content -Path $PowerDashboardPath -Value $content -Encoding ascii
+    $methods = @"
+  /** Actual state changes when the controller fulfills a transition. */
+  public RobotState getActualState() { return actualState; }
+  public void setActualState(RobotState state) { actualState = java.util.Objects.requireNonNull(state); }
+"@
+    $content = [regex]::Replace($content, '\}\s*$', [Text.RegularExpressions.MatchEvaluator]{param($m) "`n$methods`n}`n"})
+    [IO.File]::WriteAllText($StateMachinePath, $content)
 }
 
+function Ensure-SubsystemTelemetrySupport {
+    param([Parameter(Mandatory = $true)][string]$PowerDashboardPath)
+    $content = Get-Content -Encoding UTF8 -LiteralPath $PowerDashboardPath -Raw
+    $template = Get-PowerDashboardTemplate
+    foreach ($name in @('driveTelemetry', 'robotLogTelemetry')) {
+        $pattern = '(?ms)^    ' + $name + ' = .*?;\r?\n'
+        if (-not [regex]::IsMatch($content, $pattern)) {
+            $initialization = [regex]::Match($template, $pattern).Value
+            if (-not $initialization) { throw "Canonical dashboard is missing $name initialization." }
+            $content = $content.Replace('    this.stateMachine = stateMachine;', '    this.stateMachine = stateMachine;' + "`n" + $initialization)
+        }
+    }
+    # Remove retired builder methods while retaining custom state/pose suppliers.
+    $content = [regex]::Replace($content, '(?ms)^    driveTelemetry = .*?;\r?\n', [Text.RegularExpressions.MatchEvaluator]{
+        param($match)
+        $initialization = [regex]::Replace($match.Value, '\r?\n[ \t]*\.with(?:Speeds|GyroConnected|ModuleStates|ModuleConnected|DriverControllerPort)\([^\r\n;]*\)', '').Replace('.withState(', '.withRequestedState(')
+        if (-not $initialization.Contains('.withActualState(')) {
+            $initialization = $initialization.TrimEnd().TrimEnd(';') + "`n        .withActualState(() -> stateMachine.getActualState().name());`n"
+        }
+        $initialization
+    })
+    foreach ($call in @('driveTelemetry.publish();', 'robotLogTelemetry.log();')) {
+        if (-not $content.Contains($call)) { $content = $content.Replace('  public void periodic() {', "  public void periodic() {`n    $call") }
+    }
+    $content = [regex]::Replace($content, '(?ms)^  private void publishValue\(NetworkTable table, String key, Object value\) \{.*?^  \}\r?\n', '')
+    [IO.File]::WriteAllText($PowerDashboardPath, $content)
+}
 function Ensure-TunableConstantsSupport {
     param([Parameter(Mandatory = $true)][string]$PowerDashboardPath)
 
-    $content = Get-Content -Path $PowerDashboardPath -Raw -Encoding UTF8
+    $content = Get-Content -Encoding UTF8 -Path $PowerDashboardPath -Raw
     $registerCall = "frc.robot.constants.GeneratedTunableConstants.register();"
     $syncCall = "frc.powerlib.tuning.TunableConstants.sync();"
     if (-not $content.Contains($registerCall)) {
@@ -2050,7 +1923,7 @@ function Update-SubsystemsFromJson {
     param([Parameter(Mandatory = $true)][string]$JsonPath)
 
     $document = Read-SubsystemDocument $JsonPath
-    $subsystems = @($document.subsystems)
+    $subsystems = @($document.subsystems | Sort-Object { (Get-SubsystemMetadata $_).PascalName })
 
     $constantsBarrel = Join-Path (Get-Location) "src/main/java/frc/robot/Constants.java"
     if (-not (Test-Path $constantsBarrel)) {
@@ -2066,6 +1939,9 @@ function Update-SubsystemsFromJson {
     if (-not (Test-Path $powerDashboardFile)) {
         throw "Missing src/main/java/frc/robot/subsystems/PowerDashboard.java. Run robotLibraryInstall first."
     }
+
+    # Resolve the canonical migration asset before generating or replacing robot files.
+    $null = Get-PowerDashboardTemplate
 
     $written = @()
     $characterizationWritten = @()
@@ -2086,6 +1962,7 @@ function Update-SubsystemsFromJson {
 
     Rewrite-ConstantsBlock $constantsBarrel $subsystems
     Rewrite-StateMachineBlock $stateMachineFile $subsystems
+    Ensure-RobotStateTelemetrySupport $stateMachineFile
     Ensure-PowerDashboardRawNetworkTablesSupport $powerDashboardFile
     Ensure-SubsystemTelemetrySupport $powerDashboardFile
     Write-ConfiguredConstants $constantsConfiguration $subsystems

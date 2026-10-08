@@ -1,9 +1,10 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField } from "@mui/material";
 import TuneIcon from "@mui/icons-material/Tune";
-import { useNetworkTables } from "../networktables/NetworkTablesContext";
-import { discoverCameras, getPowerLibAutoChooser, driveModel, formatTime, streamUrl, template } from "./driveModel";
+import { useNetworkTables, useTopics } from "../networktables/NetworkTablesContext";
+import { discoverCameras, discoverMechanisms, getPowerLibAutoChooser, driveModel, formatTime, streamUrl, template } from "./driveModel";
 import type { DriveCamera } from "./driveModel";
+import type { GeneratedSubsystem } from "../subsystems/types";
 import "./drive.css";
 
 type DisplaySettings = { length: number; width: number; flip: boolean; urls: Record<string, string> };
@@ -75,12 +76,6 @@ function CameraCanvas({ camera, images, failed, active = true }: { camera: Drive
   </div>;
 }
 
-function StatusFlag({ label, ok }: { label: string; ok?: boolean }) {
-  const state = ok === undefined ? "unknown" : ok ? "good" : "bad";
-  const description = `${label}: ${ok === undefined ? "unknown" : ok ? "OK" : "unavailable"}`;
-  return <span className={`drive-status-flag ${state}`} title={description} aria-label={description}><i aria-hidden="true" />{label}</span>;
-}
-
 function CameraUrlSetting({ camera, url, onSave }: { camera: DriveCamera; url: string; onSave: (url?: string) => void }) {
   const [draft, setDraft] = useState(url);
   const invalid = !!draft.trim() && !streamUrl(draft.trim());
@@ -90,8 +85,9 @@ function CameraUrlSetting({ camera, url, onSave }: { camera: DriveCamera; url: s
     onBlur={() => { if (!invalid) onSave(streamUrl(draft.trim())); }} />;
 }
 
-export function DrivePanel() {
-  const { topics, status, clientRef } = useNetworkTables();
+export function DrivePanel({ subsystems = [] }: { subsystems?: GeneratedSubsystem[] }) {
+  const { status, clientRef } = useNetworkTables();
+  const topics = useTopics("drive");
   const [settings, setSettings] = useState(readSettings);
   const [tools, setTools] = useState(false);
   const [now, setNow] = useState(performance.now());
@@ -107,12 +103,14 @@ export function DrivePanel() {
   const cameras = useMemo(() => discoverCameras(topics), [topics]);
   const chooser = useMemo(() => getPowerLibAutoChooser(topics), [topics]);
   const model = driveModel(topics, status === "connected", now);
+  const mechanisms = useMemo(() => discoverMechanisms(topics, subsystems, status === "connected", now), [topics, subsystems, status, now]);
   const cameraIds = cameras.map(camera => camera.id).join("\n");
   const selectedCamera = cameras.find(c => c.id === selectedView);
   const streaming = cameras.filter(camera => visibleCameraIds.includes(camera.id) || camera.id === selectedView);
   const mode = model.live ? model.text("mode") ?? "UNKNOWN" : "UNKNOWN";
-  const invalidFeedback = model.live && (model.boolean("poseValid") === false || model.boolean("speedsValid") === false);
-  const state = model.live ? model.text("state") : undefined;
+  const invalidFeedback = model.live && model.boolean("poseValid") === false;
+  const requestedState = model.live ? model.text("requestedState") : undefined;
+  const actualState = model.live ? model.text("actualState") : undefined;
   const number = (key: Parameters<typeof model.number>[0]) => model.live ? model.number(key) : undefined;
   const metric = (value: number | undefined, places = 1) => value === undefined ? "—" : value.toFixed(places);
 
@@ -176,11 +174,14 @@ export function DrivePanel() {
       {model.topic("mode") && <section className="drive-top-metric drive-match-time" aria-label="Match time">
         <span className="drive-top-metric-label">{mode}</span><b>{formatTime(number("time"))}</b>
       </section>}
-      {model.topic("battery") && <section className={`drive-top-metric drive-battery ${model.live && model.boolean("brownout") ? "drive-danger" : ""}`} aria-label="Battery voltage">
-        <span className="drive-top-metric-label">BATTERY{model.live && model.boolean("brownout") ? " · BROWNOUT" : ""}</span>
+      {model.topic("battery") && <section className="drive-top-metric drive-battery" aria-label="Battery voltage">
+        <span className="drive-top-metric-label">BATTERY</span>
         <b>{metric(number("battery"))} V</b>
       </section>}
-      <div className={`drive-robot-mode ${model.live ? "live" : ""}`}><span>ROBOT STATE</span><b>{state || "UNKNOWN"}</b></div>
+      <section className={`drive-robot-mode ${model.live ? "live" : ""}`} aria-label="Robot status">
+        <div className="drive-state-row"><span>REQUESTED STATE</span><b title={requestedState}>{requestedState?.replaceAll("_", " ") || "UNKNOWN"}</b></div>
+        <div className="drive-state-row"><span>ACTUAL STATE</span><b title={actualState}>{actualState?.replaceAll("_", " ") || "UNKNOWN"}</b></div>
+      </section>
       <button className="drive-tools" onClick={() => setTools(true)} aria-label="Open crew tools"><TuneIcon /><span>Crew tools</span></button>
     </div>
     <div className="drive-main">
@@ -212,26 +213,27 @@ export function DrivePanel() {
         </section>}
       </aside>
     </div>
-    {(model.poseSupported || model.topic("gyro") || model.modules.length > 0) && <section className={`drive-drivetrain ${model.health}`} aria-label={`Drivetrain, health ${model.health}`}>
+    {(model.poseSupported || mechanisms.length > 0) && <div className="drive-subsystems" role="region" aria-label="Subsystems">
+    {model.poseSupported && <section className="drive-drivetrain" aria-label="Drivetrain pose">
       <b className="drive-card-heading">Drivetrain</b>
       {model.poseSupported && <div className="drive-pose">
         <span>X <b>{metric(model.pose?.x, 2)}<small> m</small></b></span>
         <span>Y <b>{metric(model.pose?.y, 2)}<small> m</small></b></span>
-        <span title="Heading">H <b>{metric(model.pose?.heading, 0)}°</b></span>
+        <span className="drive-heading" title="Heading">H <b>{metric(model.pose?.heading, 0)}°</b>
+          {model.headingSetpoint !== undefined && <small className="drive-setpoint">Setpoint: {metric(model.headingSetpoint, 0)}°</small>}
+        </span>
       </div>}
-      <div className="drive-hardware">
-        {model.topic("gyro") && <span className={!model.live || model.boolean("gyro") === undefined ? "unknown" : model.boolean("gyro") ? "good" : "bad"} title="Gyro communication health">GYRO</span>}
-        {model.modules.map(module => <span key={module.name} className={module.connected === undefined ? "unknown" : module.connected ? "good" : "bad"}
-          title={`${module.name}: ${module.connected === undefined ? "unknown" : module.connected ? "connected" : "disconnected"}`}>{module.name}</span>)}
-      </div>
     </section>}
+    {mechanisms.map(mechanism => <section key={mechanism.id} className="drive-mechanism" aria-label={mechanism.name}>
+      <b className="drive-card-heading" title={mechanism.name}>{mechanism.name}</b>
+      <div className="drive-mechanism-value"><b>{metric(mechanism.value, mechanism.places)}</b><small> {mechanism.units}</small></div>
+      {mechanism.setpoint !== undefined && <small className="drive-setpoint">Setpoint: {metric(mechanism.setpoint, mechanism.places)} {mechanism.units}</small>}
+    </section>)}
+    </div>}
     <div className={`drive-status ${model.live && !invalidFeedback ? "healthy" : "unavailable"}`} role="status">
       <span className="drive-status-message">{status !== "connected" ? "ROBOT DATA UNAVAILABLE · CHECK CONNECTION" : invalidFeedback ? "DRIVETRAIN FEEDBACK INVALID" : model.live ? "ROBOT DATA LIVE" : model.topic("heartbeat") ? "ROBOT FEEDBACK STALE" : "CONNECTED · WAITING FOR DRIVE TELEMETRY"}</span>
       <div className="drive-health">
-        <StatusFlag label="DS" ok={model.live ? model.boolean("ds") : undefined} />
-        <StatusFlag label="FMS" ok={model.live ? model.boolean("fms") : undefined} />
-        <StatusFlag label="CONTROLLER" ok={model.live ? model.boolean("controller") : undefined} />
-        <StatusFlag label="POWER" ok={model.live && model.boolean("brownout") !== undefined ? !model.boolean("brownout") : undefined} />
+        <span>ALLIANCE {model.live ? model.text("alliance")?.toUpperCase() || "UNKNOWN" : "UNKNOWN"}</span>
         <span>RIO CAN {number("can") === undefined ? "—" : `${metric(number("can")! * 100, 0)}%`}</span>
       </div>
     </div>

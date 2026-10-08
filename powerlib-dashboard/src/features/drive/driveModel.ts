@@ -1,10 +1,37 @@
 import type { NtTopicSnapshot } from "../../networktables/nt4Client";
+import type { GeneratedSubsystem } from "../subsystems/types";
 import template from "./drive-template.json";
 
 export { template };
 export type DriveKey = keyof typeof template.topics;
 export type DriveCamera = { id: string; name: string; urls: string[]; connected?: boolean };
 export type AutoChooser = { path: string; name: string; options: string[]; active?: string; selected?: string; default?: string; controllable: boolean };
+
+/** Mechanism cards use the same measured values and targets as the shared data map. */
+export function discoverMechanisms(topics: NtTopicSnapshot[], subsystems: GeneratedSubsystem[], connected: boolean, now: number) {
+  const readings = new Map<string, Map<string, NtTopicSnapshot>>();
+  for (const topic of topics) {
+    const match = /^\/PowerLib\/Subsystems\/([^/]+)\/Data\/([^/]+)$/.exec(topic.name);
+    if (!match || ["Drive", "Swerve"].includes(match[1])) continue;
+    const metrics = readings.get(match[1]) ?? new Map<string, NtTopicSnapshot>();
+    metrics.set(match[2], topic);
+    readings.set(match[1], metrics);
+  }
+  const normalize = (name: string) => name.replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const configs = new Map(subsystems.map(config => [normalize(config.name || config.id || ""), config]));
+  const number = (topic: NtTopicSnapshot | undefined) => connected && topic?.receivedAt !== undefined
+    && now - topic.receivedAt < 1200 && typeof topic.value === "number" && Number.isFinite(topic.value) ? topic.value : undefined;
+  return [...readings].flatMap(([id, metrics]) => {
+    const velocity = metrics.has("Velocity");
+    const actual = metrics.get(velocity ? "Velocity" : "Position");
+    if (!actual) return [];
+    const target = velocity ? metrics.get("VelocitySetpoint") : metrics.get("SetpointRotations") ?? metrics.get("Setpoint");
+    const config = configs.get(normalize(id));
+    const units = velocity ? "rps" : config?.absolutePosition?.units ?? config?.position?.units ?? config?.relativePosition?.units ?? "rot";
+    return [{ id, name: config?.name || id.replace(/([a-z0-9])([A-Z])/g, "$1 $2"),
+      value: number(actual), setpoint: number(target), units, places: velocity ? 1 : 3 }];
+  });
+}
 
 export function streamUrl(value: string): string | undefined {
   try {
@@ -56,24 +83,7 @@ export function driveModel(topics: NtTopicSnapshot[], connected: boolean, now: n
   const text = (key: DriveKey) => typeof value(key) === "string" ? value(key) as string : undefined;
   const heartbeat = topic("heartbeat");
   const live = connected && heartbeat?.receivedAt !== undefined && now - heartbeat.receivedAt < 1200;
-  const moduleMap = new Map<string, boolean | undefined>();
-  for (const prefix of template.modulePrefixes) {
-    for (const entry of topics) {
-      if (!entry.name.startsWith(prefix) || !entry.name.endsWith("/Connected")) continue;
-      const name = entry.name.slice(prefix.length, -"/Connected".length);
-      if (!name || name.includes("/") || moduleMap.has(name)) continue;
-      moduleMap.set(name, live && typeof entry.value === "boolean" ? entry.value : undefined);
-    }
-  }
-  const moduleOrder = ["FL", "FR", "BL", "BR"];
-  const modules = [...moduleMap].map(([name, connected]) => ({ name, connected })).sort((a, b) => {
-    const index = (name: string) => moduleOrder.includes(name) ? moduleOrder.indexOf(name) : moduleOrder.length;
-    return index(a.name) - index(b.name) || a.name.localeCompare(b.name);
-  });
-  const healthSignals = [...(topic("gyro") ? [boolean("gyro")] : []), ...modules.map(module => module.connected)];
-  const health = !live ? "unknown" : boolean("poseValid") === false || boolean("speedsValid") === false
-    || healthSignals.some(value => value === false) ? "fault"
-    : healthSignals.length && healthSignals.every(value => value === true) ? "healthy" : "unknown";
+  const health = !live ? "unknown" : boolean("poseValid") === false ? "fault" : "unknown";
   let pose: { x: number; y: number; heading: number } | undefined;
   const [x, y, heading] = [number("x"), number("y"), number("heading")];
   if (x !== undefined && y !== undefined && heading !== undefined && boolean("poseValid") !== false) pose = { x, y, heading };
@@ -82,7 +92,7 @@ export function driveModel(topics: NtTopicSnapshot[], connected: boolean, now: n
     if (Array.isArray(fieldPose) && fieldPose.length === 3 && fieldPose.every(v => typeof v === "number" && Number.isFinite(v))) {
       pose = { x: fieldPose[0] as number, y: fieldPose[1] as number, heading: fieldPose[2] as number };
     }
-    const struct = byName.get("/Robot/Pose");
+    const struct = byName.get("/PowerLib/Subsystems/Drive/Data/Pose") ?? byName.get("/Robot/Pose");
     if (!pose && struct?.type === "struct:Pose2d" && struct.value instanceof ArrayBuffer && struct.value.byteLength === 24) {
       const data = new DataView(struct.value);
       const values = [data.getFloat64(0, true), data.getFloat64(8, true), data.getFloat64(16, true) * 180 / Math.PI];
@@ -91,10 +101,12 @@ export function driveModel(topics: NtTopicSnapshot[], connected: boolean, now: n
   }
   // Without the helper, stationary legacy pose data has no reliable loop heartbeat.
   // Show it as an unverified pose; never use it to unlock autonomous selection.
-  const poseFresh = live || (connected && !heartbeat && [topic("x"), byName.get("/Robot/Pose"), byName.get("/SmartDashboard/Field/Robot")]
+  const poseFresh = live || (connected && !heartbeat && [topic("x"), byName.get("/PowerLib/Subsystems/Drive/Data/Pose"), byName.get("/Robot/Pose"), byName.get("/SmartDashboard/Field/Robot")]
     .some(t => t?.receivedAt !== undefined && now - t.receivedAt < 1200));
-  return { topic, number, boolean, text, live, modules, health, pose: poseFresh ? pose : undefined,
-    poseSupported: !!topic("x") || byName.has("/Robot/Pose") || byName.has("/SmartDashboard/Field/Robot"),
+  return { topic, number, boolean, text, live, health,
+    headingSetpoint: live && boolean("enabled") === true && text("mode") !== "TEST"
+      && boolean("poseValid") !== false ? number("headingSetpoint") : undefined, pose: poseFresh ? pose : undefined,
+    poseSupported: !!topic("x") || byName.has("/PowerLib/Subsystems/Drive/Data/Pose") || byName.has("/Robot/Pose") || byName.has("/SmartDashboard/Field/Robot"),
     canSelectAuto: live && boolean("enabled") === false };
 }
 

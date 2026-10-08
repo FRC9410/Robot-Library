@@ -74,3 +74,12 @@ function Invoke-PowerToolNpm {
         throw "npm $($Arguments -join ' ') failed with exit code $LASTEXITCODE."
     }
 }
+
+function Copy-PowerToolGeneratorTemplate {
+    param([Parameter(Mandatory = $true)][string]$SourceRoot, [Parameter(Mandatory = $true)][string]$ScriptsRoot)
+    $source = Join-Path $SourceRoot 'templates/replacements/src/main/java/frc/robot/subsystems/PowerDashboard.java'
+    if (-not (Test-Path -LiteralPath $source)) { throw "Missing canonical generator template: $source" }
+    $destination = Join-Path $ScriptsRoot 'templates/PowerDashboard.java'
+    New-Item -ItemType Directory -Path (Split-Path $destination) -Force | Out-Null
+    Copy-Item -LiteralPath $source -Destination $destination -Force
+}

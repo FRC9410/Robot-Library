@@ -6,6 +6,16 @@ package frc.powerlib.subsystems;
 
 import com.ctre.phoenix6.CANBus;
 import com.ctre.phoenix6.configs.MotorOutputConfigs;
+import com.ctre.phoenix6.configs.TalonFXConfiguration;
+import com.ctre.phoenix6.configs.ParentConfiguration;
+import com.ctre.phoenix6.configs.Slot0Configs;
+import com.ctre.phoenix6.configs.FeedbackConfigs;
+import com.ctre.phoenix6.configs.MotionMagicConfigs;
+import com.ctre.phoenix6.configs.MagnetSensorConfigs;
+import com.ctre.phoenix6.hardware.CANcoder;
+import com.ctre.phoenix6.StatusCode;
+import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.RobotBase;
 import com.ctre.phoenix6.controls.Follower;
 import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.signals.InvertedValue;
@@ -18,6 +28,9 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.function.DoublePredicate;
+import java.util.function.Function;
 
 /**
  * PowerSubsystem: extensible subsystem with helpers for controlling devices by CAN ID.
@@ -38,12 +51,70 @@ public abstract class PowerSubsystem extends SubsystemBase {
   private final Map<Integer, Boolean> reversedByCanId;
   private Integer leaderCanId;
   private String subsystemName;
+  private boolean configured = true;
+  private final Map<String, Object> rejectedTuning = new HashMap<>();
+  private final frc.powerlib.tuning.TuningCadence tuningCadence = new frc.powerlib.tuning.TuningCadence();
+  protected static final double CONFIG_TIMEOUT_SECONDS = 0.05;
+  private final ConfigurationQueue configurationQueue =
+      new ConfigurationQueue(message -> DriverStation.reportWarning(message, false));
+
+  protected final boolean pendingConfiguration(TalonFX motor, Class<?> group) {
+    return configurationQueue.pending(motor.getDeviceID() + "/" + group.getSimpleName());
+  }
+
+  protected final boolean applyRuntimeConfiguration(TalonFX motor, ParentConfiguration config) {
+    String key = motor.getDeviceID() + "/" + config.getClass().getSimpleName();
+    return configurationQueue.request(key, config.serialize(), () -> {
+      if (config instanceof Slot0Configs slot) return motor.getConfigurator().apply(slot, CONFIG_TIMEOUT_SECONDS);
+      if (config instanceof FeedbackConfigs feedback) return motor.getConfigurator().apply(feedback, CONFIG_TIMEOUT_SECONDS);
+      if (config instanceof MotionMagicConfigs motion) return motor.getConfigurator().apply(motion, CONFIG_TIMEOUT_SECONDS);
+      if (config instanceof MotorOutputConfigs output) return motor.getConfigurator().apply(output, CONFIG_TIMEOUT_SECONDS);
+      throw new IllegalArgumentException("Unsupported runtime config: " + config.getClass());
+    });
+  }
+
+  protected final boolean pendingEncoderConfiguration(CANcoder encoder) {
+    return configurationQueue.pending("encoder/" + encoder.getDeviceID());
+  }
+
+  protected final boolean applyRuntimeConfiguration(CANcoder encoder, MagnetSensorConfigs config) {
+    return configurationQueue.request("encoder/" + encoder.getDeviceID(), config.serialize(),
+        () -> encoder.getConfigurator().apply(config, CONFIG_TIMEOUT_SECONDS));
+  }
+
+  private void checkStartupConfiguration(TalonFX motor, TalonFXConfiguration config) {
+    recordStartupConfiguration(motor.getConfigurator().apply(config, CONFIG_TIMEOUT_SECONDS),
+        "motor " + motor.getDeviceID());
+  }
+
+  /** Sticky startup result: one failed device prevents this subsystem from reporting healthy. */
+  protected final void recordStartupConfiguration(StatusCode result, String device) {
+    if (!result.isOK()) {
+      configured = false;
+      DriverStation.reportError("PowerLib " + subsystemName + " startup config for "
+          + device + " failed: " + result, false);
+    }
+  }
+
+  public final boolean isConfigured() {
+    return configured;
+  }
 
   /**
    * Constructor for subclasses that register their own motors (e.g. velocity/position configured).
    *
    */
   protected PowerSubsystem(List<MotorConfig> configList, String subsystemName) {
+    this(configList, subsystemName, MotorConfiguration::output);
+  }
+
+  protected PowerSubsystem(List<MotorConfig> configList, String subsystemName,
+      Function<MotorConfig, TalonFXConfiguration> leaderConfiguration) {
+    this(configList, subsystemName, leaderConfiguration, !RobotBase.isSimulation());
+  }
+
+  protected PowerSubsystem(List<MotorConfig> configList, String subsystemName,
+      Function<MotorConfig, TalonFXConfiguration> leaderConfiguration, boolean createHardware) {
     super();
 
     this.bus = new CANBus(DEFAULT_CAN_BUS_NAME);
@@ -57,20 +128,27 @@ public abstract class PowerSubsystem extends SubsystemBase {
       registerMotorTunableState(motorConfig);
     }
 
+    if (!createHardware) return;
+
     // Get the leader motor and register it
     for (MotorConfig motorConfig : configList) {
       if (!motorConfig.isFollower()) {
         if (this.leaderCanId == null) {
           this.leaderCanId = motorConfig.canId();
         }
-        registerMotor(motorConfig.canId(), motorConfig.neutralMode(), motorConfig.isReversed());
+        TalonFX motor = createTalonFx(motorConfig.canId());
+        checkStartupConfiguration(motor, motorConfig.canId() == leaderCanId
+            ? leaderConfiguration.apply(motorConfig) : MotorConfiguration.output(motorConfig));
+        motorsByCanId.put(motorConfig.canId(), motor);
       }
     }
 
     // Register and setup all motors
     for (MotorConfig motorConfig : configList) {
       if (motorConfig.isFollower()) {
-        registerMotor(motorConfig.canId(), motorConfig.neutralMode());
+        TalonFX motor = createTalonFx(motorConfig.canId());
+        checkStartupConfiguration(motor, MotorConfiguration.output(motorConfig));
+        motorsByCanId.put(motorConfig.canId(), motor);
 
         if (this.leaderCanId == null) {
           continue; // Theres no leader to follow so no need to continue
@@ -155,10 +233,14 @@ public abstract class PowerSubsystem extends SubsystemBase {
   public void setFollower(int followerCanId, int leaderCanId, boolean inverted) {
     TalonFX follower = getMotorById(followerCanId);
     if (follower != null) {
-      follower.setControl(
-        new Follower(leaderCanId, inverted ? MotorAlignmentValue.Opposed : MotorAlignmentValue.Aligned)
-      );
+      StatusCode status = applyFollower(follower, leaderCanId, inverted);
+      recordStartupConfiguration(status, "follower " + followerCanId);
     }
+  }
+
+  private static StatusCode applyFollower(TalonFX follower, int leaderCanId, boolean inverted) {
+    return follower.setControl(new Follower(leaderCanId,
+        inverted ? MotorAlignmentValue.Opposed : MotorAlignmentValue.Aligned));
   }
 
   /**
@@ -187,7 +269,7 @@ public abstract class PowerSubsystem extends SubsystemBase {
   /** Sets percent output for the device at the given CAN ID (if registered). */
   public void setOutput(int canId, double output) {
     TalonFX motor = motorsByCanId.get(canId);
-    if (motor != null) {
+    if (motor != null && (configured || output == 0)) {
       motor.set(output);
     }
   }
@@ -241,7 +323,40 @@ public abstract class PowerSubsystem extends SubsystemBase {
   }
 
   protected double getSubsystemVariable(String key, double defaultValue) {
-    return frc.powerlib.PowerRobotContainer.getSubsystemVariable(subsystemName, key, defaultValue);
+    return getSubsystemVariable(key, defaultValue, value -> true, "a finite number");
+  }
+
+  protected double getPositiveSubsystemVariable(String key, double defaultValue) {
+    return getSubsystemVariable(key, defaultValue, value -> value > 0, "a positive finite number");
+  }
+
+  protected double getNonnegativeSubsystemVariable(String key, double defaultValue) {
+    return getSubsystemVariable(key, defaultValue, value -> value >= 0, "a nonnegative finite number");
+  }
+
+  protected double getSubsystemVariable(String key, double defaultValue,
+      DoublePredicate valid, String requirement) {
+    Object raw = frc.powerlib.PowerRobotContainer.getSubsystemVariable(subsystemName, key, (Object) defaultValue);
+    double value;
+    try {
+      value = raw instanceof Number number ? number.doubleValue()
+          : raw instanceof String text ? Double.parseDouble(text) : Double.NaN;
+    } catch (NumberFormatException exception) {
+      value = Double.NaN;
+    }
+    if (Double.isFinite(value) && valid.test(value)) {
+      rejectedTuning.remove(key);
+      return value;
+    }
+    if (!Objects.equals(rejectedTuning.put(key, raw), raw)) {
+      reportRejectedTuning(subsystemName + "/" + key + " rejected " + raw
+          + "; expected " + requirement + ". Keeping " + defaultValue);
+    }
+    return defaultValue;
+  }
+
+  protected void reportRejectedTuning(String message) {
+    DriverStation.reportWarning("PowerLib tuning: " + message, false);
   }
 
   protected boolean getSubsystemVariable(String key, boolean defaultValue) {
@@ -249,26 +364,37 @@ public abstract class PowerSubsystem extends SubsystemBase {
   }
 
   protected void applyMotorTunableValues() {
-    if (!frc.powerlib.PowerRobotContainer.isTuningEnabled()) {
-      return;
-    }
+    if (!frc.powerlib.PowerRobotContainer.isTuningEnabled()) return;
     for (int canId : reversedByCanId.keySet()) {
-      boolean currentBrakeMode = brakeModeByCanId.getOrDefault(canId, true);
-      boolean nextBrakeMode =
-          getSubsystemVariable(getMotorVariableKey(canId, "BrakeMode"), currentBrakeMode);
-      if (nextBrakeMode != currentBrakeMode) {
-        setNeutralMode(canId, nextBrakeMode ? NeutralModeValue.Brake : NeutralModeValue.Coast);
-        brakeModeByCanId.put(canId, nextBrakeMode);
+      TalonFX motor = getMotorById(canId);
+      if (motor == null) continue;
+      boolean brake = getSubsystemVariable(getMotorVariableKey(canId, "BrakeMode"), brakeModeByCanId.get(canId));
+      boolean reversed = getSubsystemVariable(getMotorVariableKey(canId, "Reversed"), reversedByCanId.get(canId));
+      boolean follower = followerByCanId.getOrDefault(canId, false);
+      String followerKey = "follower/" + canId;
+      if (follower && leaderCanId != null
+          && (reversed != reversedByCanId.get(canId) || configurationQueue.pending(followerKey))) {
+        if (configurationQueue.request(followerKey, Boolean.toString(reversed),
+            () -> applyFollower(motor, leaderCanId, reversed))) {
+          reversedByCanId.put(canId, reversed);
+        }
       }
-
-      boolean currentReversed = reversedByCanId.getOrDefault(canId, false);
-      boolean nextReversed =
-          getSubsystemVariable(getMotorVariableKey(canId, "Reversed"), currentReversed);
-      if (nextReversed != currentReversed) {
-        applyMotorDirection(canId, nextReversed);
-        reversedByCanId.put(canId, nextReversed);
+      if (brake != brakeModeByCanId.get(canId) || (!follower && reversed != reversedByCanId.get(canId))
+          || pendingConfiguration(motor, MotorOutputConfigs.class)) {
+        MotorOutputConfigs output = new MotorOutputConfigs();
+        output.NeutralMode = brake ? NeutralModeValue.Brake : NeutralModeValue.Coast;
+        output.Inverted = !follower && reversed ? InvertedValue.Clockwise_Positive : InvertedValue.CounterClockwise_Positive;
+        if (applyRuntimeConfiguration(motor, output)) {
+          brakeModeByCanId.put(canId, brake);
+          if (!follower) reversedByCanId.put(canId, reversed);
+        }
       }
     }
+  }
+
+  /** Call once per periodic loop to gate motor and mechanism tuning together. */
+  protected final boolean shouldSyncTuning() {
+    return frc.powerlib.PowerRobotContainer.isTuningEnabled() && tuningCadence.isDue();
   }
 
   private void registerMotorTunableState(MotorConfig motorConfig) {
@@ -287,21 +413,6 @@ public abstract class PowerSubsystem extends SubsystemBase {
     return "Motors/" + canId + "/" + key;
   }
 
-  private void applyMotorDirection(int canId, boolean reversed) {
-    if (followerByCanId.getOrDefault(canId, false)) {
-      if (leaderCanId != null) {
-        setFollower(canId, leaderCanId, reversed);
-      }
-      return;
-    }
-
-    TalonFX motor = getMotorById(canId);
-    if (motor != null) {
-      boolean brakeMode = brakeModeByCanId.getOrDefault(canId, true);
-      applyMotorOutputConfig(motor, reversed, brakeMode ? NeutralModeValue.Brake : NeutralModeValue.Coast);
-    }
-  }
-
   private static void applyMotorOutputConfig(
       TalonFX motor, boolean reversed, NeutralModeValue neutralMode) {
     MotorOutputConfigs motorOutputConfigs = new MotorOutputConfigs();
@@ -311,11 +422,21 @@ public abstract class PowerSubsystem extends SubsystemBase {
     motor.getConfigurator().apply(motorOutputConfigs);
   }
 
-  public boolean isMotorRunning (int id) {
-    return motorsByCanId.get(id).getVelocity().getValueAsDouble() == 0.0;
+  protected static boolean isRunningVelocity(double rotationsPerSecond) {
+    return Double.isFinite(rotationsPerSecond) && Math.abs(rotationsPerSecond) > 0.1;
+  }
+
+  protected static boolean changed(double left, double right) {
+    return Math.abs(left - right) > 1.0e-9;
+  }
+
+  public boolean isMotorRunning(int id) {
+    TalonFX motor = motorsByCanId.get(id);
+    return motor != null && isRunningVelocity(motor.getVelocity().getValueAsDouble());
   }
 
   public boolean isAllMotorsRunning () {
+    if (!configured || motorsByCanId.isEmpty()) return false;
     for (int key : motorsByCanId.keySet()) {
       
       if (!isMotorRunning(key)) {

@@ -6,6 +6,10 @@ package frc.powerlib.configs;
 
 /** Motion Magic profiler configuration: cruise velocity and acceleration. No leader CAN ID. */
 public record MotionMagicConfig(double cruiseVelocity, double acceleration) {
+  public MotionMagicConfig {
+    ConfigValidation.nonnegative(cruiseVelocity, "cruiseVelocity");
+    ConfigValidation.nonnegative(acceleration, "acceleration");
+  }
 
   /** Builds a MotionMagicConfig for velocity control (cruise velocity unused; use acceleration only). */
   public static MotionMagicConfig forVelocity(double acceleration) {

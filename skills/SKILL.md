@@ -45,7 +45,8 @@ Use raw NetworkTables APIs for all generated logging/publishing. Do NOT import o
 topics should stay under `/Simulation/...`; PowerLib dashboard data and commands, if touched,
 belong under `/PowerLib/...`:
 
-- Subsystem telemetry: `/PowerLib/Subsystems/<SubsystemName>/Data/<Metric>`
+- Subsystem telemetry: one complete JSON data-map frame at `/PowerLib/Data` every 100 ms. Power Tool derives `/PowerLib/Subsystems/<SubsystemName>/Data/<Metric>` views locally; those scalar topics are no longer individually transmitted.
+- AdvantageScope pose: `/PowerLib/Subsystems/Drive/Data/Pose` (`struct:Pose2d`), derived from the same captured map.
 - Subsystem tunables: `/PowerLib/Subsystems/<SubsystemName>/Variables/<Variable>`
 - Command tunables: `/PowerLib/Commands/<CommandName>/Variables/<Variable>`
 - Tuning enable switch: `/PowerLib/Tuning/Enabled` (default false; robot code should only consume

@@ -1,42 +1,23 @@
 package frc.powerlib.subsystems.io;
 
+import frc.powerlib.configs.VelocitySubsystemConfig;
+
 public class VelocitySubsystemIOSim implements VelocitySubsystemIO {
-  private double positionRotations = 0.0;
-  private double velocityRotationsPerSecond = 0.0;
-  private double velocitySetpoint = 0.0;
-  private double appliedVolts = 0.0;
-
-  @Override
-  public void updateInputs(Inputs inputs) {
-    inputs.connected = true;
-    inputs.positionRotations = positionRotations;
-    inputs.velocityRotationsPerSecond = velocityRotationsPerSecond;
-    inputs.velocitySetpoint = velocitySetpoint;
-    inputs.appliedVolts = appliedVolts;
+  private final MechanismSimulation model;
+  private double setpoint;
+  public VelocitySubsystemIOSim() { model = new MechanismSimulation(1, 100, 100); }
+  public VelocitySubsystemIOSim(VelocitySubsystemConfig config) {
+    model = new MechanismSimulation(config.leadConfig().sensorToMechanismRatio() * config.leadConfig().rotorToSensorRatio(),
+        config.motionMagicConfig().cruiseVelocity(), config.motionMagicConfig().acceleration());
   }
-
-  @Override
-  public void setVelocity(double velocityRotationsPerSecond) {
-    this.velocitySetpoint = velocityRotationsPerSecond;
-    this.velocityRotationsPerSecond = velocityRotationsPerSecond;
+  @Override public void updateInputs(Inputs inputs) {
+    model.update();
+    inputs.positionRotations = model.position;
+    inputs.velocityRotationsPerSecond = model.velocity;
+    inputs.velocitySetpoint = setpoint;
   }
-
-  @Override
-  public void setVoltage(double volts) {
-    this.appliedVolts = volts;
-    this.velocitySetpoint = volts;
-    this.velocityRotationsPerSecond = volts;
-  }
-
-  @Override
-  public void stop() {
-    velocityRotationsPerSecond = 0.0;
-    velocitySetpoint = 0.0;
-    appliedVolts = 0.0;
-  }
-
-  @Override
-  public void brake() {
-    stop();
-  }
+  @Override public void setVelocity(double velocity) { setpoint = velocity; model.velocity(velocity); }
+  @Override public void setVelocityWithoutFOC(double velocity) { setVelocity(velocity); }
+  @Override public void setVoltage(double volts) { model.voltage(volts); }
+  @Override public void brake() { setpoint = 0; model.voltage(0); }
 }

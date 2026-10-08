@@ -16,14 +16,12 @@ public class RelativePositionSubsystemIOReal implements RelativePositionSubsyste
   @Override
   public void updateInputs(Inputs inputs) {
     TalonFX motor = subsystem.getPositionMotor();
-    inputs.connected = motor != null;
     inputs.setpoint = setpoint;
     if (motor == null) {
       return;
     }
 
     inputs.position = motor.getPosition().getValueAsDouble();
-    inputs.appliedVolts = motor.getMotorVoltage().getValueAsDouble();
   }
 
   @Override

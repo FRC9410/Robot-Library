@@ -7,7 +7,6 @@ package frc.powerlib.subsystems;
 import com.ctre.phoenix6.configs.FeedbackConfigs;
 import com.ctre.phoenix6.configs.MotionMagicConfigs;
 import com.ctre.phoenix6.configs.Slot0Configs;
-import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.hardware.TalonFX;
 
 import edu.wpi.first.wpilibj.RobotBase;
@@ -25,7 +24,7 @@ public class VelocitySubsystem extends PowerSubsystem {
   protected TalonFX velocityMotor;
   public final VelocitySubsystemIO.Inputs inputs = new VelocitySubsystemIO.Inputs();
   private final VelocitySubsystemIO io;
-  private String subsystemName;
+  private final VelocitySubsystemConfig config;
   private boolean focEnabled;
   private double torqueFeedForward;
   private double velocitySetpoint;
@@ -51,13 +50,14 @@ public class VelocitySubsystem extends PowerSubsystem {
   }
 
   public VelocitySubsystem(VelocitySubsystemConfig config, VelocitySubsystemIO io) {
-    super(config.motorConfigs(), config.subsystemName());
+    super(config.motorConfigs(), config.subsystemName(),
+        motor -> MotorConfiguration.closedLoop(motor, config.leadConfig(), config.motionMagicConfig()),
+        io == null && !RobotBase.isSimulation());
     TalonFX leader = getLeaderMotor();
     if (leader != null) {
-      configureMotorForVelocity(leader, config.leadConfig(), config.motionMagicConfig());
       this.velocityMotor = leader;
     }
-    this.subsystemName = config.subsystemName();
+    this.config = config;
     this.focEnabled = config.leadConfig().focEnabled();
     this.torqueFeedForward = config.torqueFeedForward();
     this.velocitySetpoint = 0.0;
@@ -66,46 +66,20 @@ public class VelocitySubsystem extends PowerSubsystem {
   }
 
   protected VelocitySubsystemIO createDefaultIO() {
-    return RobotBase.isSimulation() ? new VelocitySubsystemIOSim() : new VelocitySubsystemIOReal(this);
+    return RobotBase.isSimulation() ? createSimulationIO() : new VelocitySubsystemIOReal(this);
   }
+
+  protected VelocitySubsystemIO createSimulationIO() { return new VelocitySubsystemIOSim(config); }
 
   @Override
   public void periodic() {
     io.updateInputs(inputs);
-    applyMotorTunableValues();
-    applyTunableValues();
+    if (shouldSyncTuning()) {
+      applyMotorTunableValues();
+      applyTunableValues();
+    }
     setSubsystemData("Velocity", inputs.velocityRotationsPerSecond, "rotations per second");
     setSubsystemData("VelocitySetpoint", inputs.velocitySetpoint, "rotations per second");
-    setSubsystemData("AppliedVolts", inputs.appliedVolts, "volts");
-    setSubsystemData("Connected", inputs.connected);
-  }
-
-  /**
-   * Applies lead and motion magic config to an existing TalonFX for velocity control.
-   */
-  private static void configureMotorForVelocity(
-      TalonFX motor,
-      LeadMotorConfig leadConfig,
-      MotionMagicConfig motionMagicConfig) {
-    TalonFXConfiguration config = new TalonFXConfiguration();
-    config.Slot0.kP = leadConfig.kP();
-    config.Slot0.kI = leadConfig.kI();
-    config.Slot0.kD = leadConfig.kD();
-    config.Slot0.kG = leadConfig.kG();
-    config.Feedback.SensorToMechanismRatio = leadConfig.sensorToMechanismRatio();
-    config.Feedback.RotorToSensorRatio = leadConfig.rotorToSensorRatio();
-    if (leadConfig.kS().isPresent()) {
-      config.Slot0.kS = leadConfig.kS().get();
-      config.Slot0.kV = leadConfig.kV().get();
-      config.Slot0.kA = leadConfig.kA().get();
-    }
-
-    MotionMagicConfigs motionMagicConfigs = new MotionMagicConfigs();
-    motionMagicConfigs.withMotionMagicCruiseVelocity(motionMagicConfig.cruiseVelocity());
-    motionMagicConfigs.withMotionMagicAcceleration(motionMagicConfig.acceleration());
-
-    motor.getConfigurator().apply(config);
-    motor.getConfigurator().apply(motionMagicConfigs);
   }
 
   private void initializeTunableState(
@@ -157,24 +131,17 @@ public class VelocitySubsystem extends PowerSubsystem {
         || changed(nextKG, kG)
         || changed(nextKS, kS)
         || changed(nextKV, kV)
-        || changed(nextKA, kA)) {
-      Slot0Configs slot0 = new Slot0Configs();
-      slot0.kP = nextKP;
-      slot0.kI = nextKI;
-      slot0.kD = nextKD;
-      slot0.kG = nextKG;
-      slot0.kS = nextKS;
-      slot0.kV = nextKV;
-      slot0.kA = nextKA;
-      velocityMotor.getConfigurator().apply(slot0);
-
-      kP = nextKP;
-      kI = nextKI;
-      kD = nextKD;
-      kG = nextKG;
-      kS = nextKS;
-      kV = nextKV;
-      kA = nextKA;
+        || changed(nextKA, kA) || pendingConfiguration(velocityMotor, Slot0Configs.class)) {
+      Slot0Configs slot0 = MotorConfiguration.slot0(nextKP, nextKI, nextKD, nextKG, nextKS, nextKV, nextKA);
+      if (applyRuntimeConfiguration(velocityMotor, slot0)) {
+        kP = nextKP;
+        kI = nextKI;
+        kD = nextKD;
+        kG = nextKG;
+        kS = nextKS;
+        kV = nextKV;
+        kA = nextKA;
+      }
     }
 
     if (changed(nextTorqueFeedForward, torqueFeedForward)) {
@@ -187,39 +154,37 @@ public class VelocitySubsystem extends PowerSubsystem {
     }
 
     double nextSensorToMechanismRatio =
-        getSubsystemVariable("Ratios/SensorToMechanism", sensorToMechanismRatio);
-    double nextRotorToSensorRatio = getSubsystemVariable("Ratios/RotorToSensor", rotorToSensorRatio);
+        getPositiveSubsystemVariable("Ratios/SensorToMechanism", sensorToMechanismRatio);
+    double nextRotorToSensorRatio = getPositiveSubsystemVariable("Ratios/RotorToSensor", rotorToSensorRatio);
     if (changed(nextSensorToMechanismRatio, sensorToMechanismRatio)
-        || changed(nextRotorToSensorRatio, rotorToSensorRatio)) {
-      applyFeedbackRatios(velocityMotor, nextSensorToMechanismRatio, nextRotorToSensorRatio);
-      sensorToMechanismRatio = nextSensorToMechanismRatio;
-      rotorToSensorRatio = nextRotorToSensorRatio;
+        || changed(nextRotorToSensorRatio, rotorToSensorRatio) || pendingConfiguration(velocityMotor, FeedbackConfigs.class)) {
+      if (applyFeedbackRatios(velocityMotor, nextSensorToMechanismRatio, nextRotorToSensorRatio)) {
+        sensorToMechanismRatio = nextSensorToMechanismRatio;
+        rotorToSensorRatio = nextRotorToSensorRatio;
+      }
     }
 
     double nextCruiseVelocity =
-        getSubsystemVariable("MotionMagic/CruiseVelocity", motionMagicCruiseVelocity);
-    double nextAcceleration = getSubsystemVariable("MotionMagic/Acceleration", motionMagicAcceleration);
+        getNonnegativeSubsystemVariable("MotionMagic/CruiseVelocity", motionMagicCruiseVelocity);
+    double nextAcceleration = getNonnegativeSubsystemVariable("MotionMagic/Acceleration", motionMagicAcceleration);
     if (changed(nextCruiseVelocity, motionMagicCruiseVelocity)
-        || changed(nextAcceleration, motionMagicAcceleration)) {
+        || changed(nextAcceleration, motionMagicAcceleration) || pendingConfiguration(velocityMotor, MotionMagicConfigs.class)) {
       MotionMagicConfigs motionMagicConfigs = new MotionMagicConfigs();
       motionMagicConfigs.withMotionMagicCruiseVelocity(nextCruiseVelocity);
       motionMagicConfigs.withMotionMagicAcceleration(nextAcceleration);
-      velocityMotor.getConfigurator().apply(motionMagicConfigs);
-      motionMagicCruiseVelocity = nextCruiseVelocity;
-      motionMagicAcceleration = nextAcceleration;
+      if (applyRuntimeConfiguration(velocityMotor, motionMagicConfigs)) {
+        motionMagicCruiseVelocity = nextCruiseVelocity;
+        motionMagicAcceleration = nextAcceleration;
+      }
     }
   }
 
-  private static boolean changed(double left, double right) {
-    return Math.abs(left - right) > 1.0e-9;
-  }
-
-  private static void applyFeedbackRatios(
+  private boolean applyFeedbackRatios(
       TalonFX motor, double sensorToMechanismRatio, double rotorToSensorRatio) {
     FeedbackConfigs feedbackConfigs = new FeedbackConfigs();
     feedbackConfigs.SensorToMechanismRatio = sensorToMechanismRatio;
     feedbackConfigs.RotorToSensorRatio = rotorToSensorRatio;
-    motor.getConfigurator().apply(feedbackConfigs);
+    return applyRuntimeConfiguration(motor, feedbackConfigs);
   }
 
   /**
@@ -227,11 +192,13 @@ public class VelocitySubsystem extends PowerSubsystem {
    * directly after {@link #velocityMotor} is set.
    */
   public void setVelocity(double velocityRotationsPerSecond) {
+    if (!isConfigured()) return;
     velocitySetpoint = velocityRotationsPerSecond;
     io.setVelocity(velocityRotationsPerSecond);
   }
 
   public void setVelocityWithoutFOC(double velocityRotationsPerSecond) {
+    if (!isConfigured()) return;
     velocitySetpoint = velocityRotationsPerSecond;
     io.setVelocityWithoutFOC(velocityRotationsPerSecond);
   }
@@ -247,6 +214,7 @@ public class VelocitySubsystem extends PowerSubsystem {
    * Use for SysId characterization. Voltage is in volts.
    */
   public void setVoltage(double volts) {
+    if (!isConfigured()) return;
     io.setVoltage(volts);
   }
 
@@ -268,7 +236,7 @@ public class VelocitySubsystem extends PowerSubsystem {
   }
 
   public boolean isRunning () {
-    return velocityMotor.getVelocity().getValueAsDouble() <= 0.1;
+    return isConfigured() && isRunningVelocity(inputs.velocityRotationsPerSecond);
   }
   
   public void brake () {
