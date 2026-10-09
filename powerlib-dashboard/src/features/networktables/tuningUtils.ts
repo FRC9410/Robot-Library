@@ -50,6 +50,7 @@ export function parseDraftValue(type: NtTopicType, draft: string): NtPrimitive {
     throw new Error("Use true/false, yes/no, on/off, or 1/0 for booleans.");
   }
 
+  if (!draft.trim()) throw new Error("Enter a number.");
   const parsed = Number(draft);
   if (!Number.isFinite(parsed)) {
     throw new Error(`"${draft}" is not a valid ${type} value.`);

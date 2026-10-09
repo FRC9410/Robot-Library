@@ -1608,10 +1608,7 @@ function Write-TunableConstantsRegistry {
     param([Parameter(Mandatory = $true)][AllowEmptyCollection()]$Subsystems)
 
     $constantsDir = Join-Path (Get-Location) "src/main/java/frc/robot/constants"
-    $classNames = @("Vision", "StateMachine", "OI", "RobotContainer", "Swerve")
-    foreach ($subsystem in @($Subsystems)) {
-        $classNames += (Get-SubsystemMetadata $subsystem).PascalName
-    }
+    $classNames = @(Get-ConstantsConfigurationTargets $Subsystems | ForEach-Object { $_.name })
     $registrations = @()
     foreach ($className in $classNames) {
         if (Test-Path (Join-Path $constantsDir "${className}Constants.java")) {
@@ -1684,12 +1681,22 @@ function Read-ConstantsConfiguration {
 
 function Get-ConstantsConfigurationTargets {
     param([Parameter(Mandatory = $true)][AllowEmptyCollection()]$Subsystems)
-    foreach ($name in @('Vision', 'StateMachine', 'OI', 'RobotContainer', 'Swerve')) {
-        [pscustomobject]@{ key = "robot:$name"; name = $name; customOnly = $false }
-    }
+    $subsystemNames = @()
     foreach ($subsystem in @($Subsystems)) {
         $metadata = Get-SubsystemMetadata $subsystem
+        $subsystemNames += $metadata.PascalName
         [pscustomobject]@{ key = "subsystem:$($metadata.Id)"; name = $metadata.PascalName; customOnly = $true }
+    }
+    $directory = Join-Path (Get-Location) 'src/main/java/frc/robot/constants'
+    $names = @('Vision', 'StateMachine', 'OI', 'RobotContainer', 'Swerve')
+    if (Test-Path -LiteralPath $directory) {
+        $names += @(Get-ChildItem -LiteralPath $directory -Filter '*Constants.java' -File | ForEach-Object {
+            $_.BaseName -replace 'Constants$', ''
+        })
+    }
+    foreach ($name in @($names | Sort-Object -Unique)) {
+        if ($name -in @('GeneratedTunable', 'Tuner') -or $name -in $subsystemNames) { continue }
+        [pscustomobject]@{ key = "robot:$name"; name = $name; customOnly = $false }
     }
 }
 

@@ -77,6 +77,57 @@ views.replace([{ ...gain, value: 3 }], false); views.refreshTuning();
 assert.equal(views.get("tuning")[0].value, 3, "The next tuning refresh must show the latest value");
 const current = views.get("tuning"); views.refreshTuning();
 assert.equal(views.get("tuning"), current, "Unchanged tuning must retain a stable React snapshot");
+assert.equal(views.get("robot").length, 0, "Robot telemetry must not bypass the 5 Hz tuning snapshot");
+
+const { createRobotCards, createTuningValues, groupTunables, parseTuningValue } = await load("../src/features/robot/robotModel.ts");
+const { parseDraftValue } = await load("../src/features/networktables/tuningUtils.ts");
+assert.throws(() => parseDraftValue("double", " "), /Enter a number/, "Clearing a numeric input must not silently send zero");
+const variable = (owner, key, value = 1, scope = "Subsystems", type = "double") =>
+  ({ name: `/PowerLib/${scope}/${owner}/Variables/${key}`, type, value });
+const file = (name, kind = "robot") => ({ id: `${kind}:${name}`, name, kind, constants: [], source: "", path: "", exists: true });
+const hoodFile = file("Hood", "subsystem");
+const discovered = [variable("Hood", "PID/kP"), variable("Hood", "Custom/READY_TOLERANCE"),
+  variable("Hood", "Other/kP"), variable("Shooting", "Custom/DISTANCE"), variable("Swerve", "Heading/kP"),
+  variable("Hood", "Speed", 2, "Commands"), variable("Ignored", "Array", [1], "Subsystems", "double[]")];
+const cards = createRobotCards([{ id: "hood", name: "Hood", type: "absolutePosition" }], [
+  { name: "/PowerLib/Subsystems/Hood/Data/Position", type: "double", value: 0.1 },
+  { name: "/PowerLib/Subsystems/Hood/Data/Connected", type: "boolean", value: true },
+  { name: "/PowerLib/Subsystems/Drive/Data/Pose/XMeters", type: "double", value: 2 }
+], discovered, [file("OI"), hoodFile, file("Swerve"), file("Shooting")]);
+assert.deepEqual(cards.map(card => card.key), ["subsystem:Hood", "subsystem:Swerve", "command:Hood", "subsystem:OI", "subsystem:Shooting"],
+  "Mechanisms must lead, each non-subsystem group must follow once, and command owners must stay distinct");
+assert.equal(cards[0].constantsFile, hoodFile, "Subsystem constants must attach to their existing card");
+assert.equal(cards[0].metrics.length, 1, "Removed health fields must stay hidden");
+assert.equal(cards[0].tunableCount, 3, "A card must expose every writable variable without a saved selection");
+assert.equal(cards[1].tunableCount, 1, "Drive telemetry and Swerve tunables must share the drivetrain card");
+assert.equal(cards[1].constantsFile.id, "robot:Swerve");
+assert.equal(groupTunables(discovered).get("subsystem:Hood").length, 3);
+assert.ok(!cards.some(card => card.owner === "Ignored"), "Unsupported variables must not create empty live groups");
+const offlineCards = createRobotCards([{ name: "Hood" }], [], [], [hoodFile, file("Shooting")]);
+assert.deepEqual(offlineCards.map(card => card.key), ["subsystem:Hood", "subsystem:Shooting"], "Project cards must remain available while disconnected");
+console.log("Robot card merging, complete per-group tunables, offline constants and numeric validation passed.");
+
+const shootingFile = { ...file("Shooting"), constants: [
+  { originalName: "DISTANCE", name: "DISTANCE", type: "double", value: "3.5", custom: false, tunable: true },
+  { originalName: "ENABLED", name: "ENABLED", type: "boolean", value: "true", custom: false, tunable: false },
+  { originalName: "LABEL", name: "LABEL", type: "String", value: '"Hub"', custom: true, tunable: false },
+  { originalName: "COUNT", name: "COUNT", type: "int", value: "2", custom: true, tunable: true }
+] };
+const liveConstants = [variable("Shooting", "Custom/DISTANCE", 4.1), variable("Shooting", "Custom/COUNT", 2)];
+const merged = createTuningValues(liveConstants, shootingFile);
+assert.equal(merged.length, 4, "Live constants must appear once alongside saved-only values in the same list");
+const distance = merged.find(value => value.constant.name === "DISTANCE");
+assert.equal(distance.baseline, "4.1", "A published value must override the saved default");
+assert.equal(parseTuningValue(distance, "4.5").live, 4.5);
+assert.equal(parseTuningValue(merged.find(value => value.constant.name === "LABEL"), 'Hub "left"').saved, '"Hub \\"left\\""');
+assert.equal(parseTuningValue(merged.find(value => value.constant.name === "ENABLED"), "false").saved, "false");
+assert.throws(() => parseTuningValue(merged.find(value => value.constant.name === "COUNT"), "2.5"), /whole-number/);
+assert.equal(createTuningValues([], shootingFile).find(value => value.constant.name === "DISTANCE").id, distance.id,
+  "Connecting must keep an existing constant edit associated with the same row");
+const swerveFile = { ...file("Swerve"), constants: [{ originalName: "HEADING_KP", name: "HEADING_KP", type: "double", value: "6.5", custom: false, tunable: true }] };
+assert.equal(createTuningValues([variable("Swerve", "Heading/kP", 7)], swerveFile).length, 1,
+  "Native drivetrain constants and their live variables must share one row");
+console.log("Inline constants, live-value deduplication, reconnect identity and Java type validation passed.");
 
 const { PowerLibNt4Client } = await load("../src/networktables/nt4Client.ts");
 globalThis.window = { setTimeout };

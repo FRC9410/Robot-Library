@@ -1,3 +1,3 @@
 export type ConnectionState = "idle" | "connecting" | "connected" | "disconnected";
 
-export type AppView = "drive" | "robot" | "tuning" | "subsystems" | "constants" | "limelights" | "networktables";
+export type AppView = "drive" | "robot" | "subsystems" | "limelights" | "networktables";

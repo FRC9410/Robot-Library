@@ -80,6 +80,17 @@ try {
     [IO.File]::WriteAllText($constantsBarrel, $source)
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'generate-subsystem.ps1') -UpdateSubsystems -SkipBuild *> (Join-Path $fixture 'generate.log')
     if ($LASTEXITCODE -ne 0) { throw (Get-Content (Join-Path $fixture 'generate.log') -Tail 40 | Out-String) }
+    $configurationPath = Join-Path $fixture 'power-tool/generated/powerlib-constants.json'
+    $configuration = Get-Content -LiteralPath $configurationPath -Raw | ConvertFrom-Json
+    $shooting = $configuration.files.PSObject.Properties['robot:Shooting']
+    if ($null -eq $shooting) { throw 'Generation omitted a discovered non-subsystem constants group.' }
+    ($shooting.Value.constants | Where-Object { $_.name -eq 'CHECK_DISTANCE' }).value = '3.25'
+    [IO.File]::WriteAllText($configurationPath, ($configuration | ConvertTo-Json -Depth 16))
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'generate-subsystem.ps1') -UpdateSubsystems -SkipBuild *> (Join-Path $fixture 'generate-constants.log')
+    if ($LASTEXITCODE -ne 0) { throw (Get-Content (Join-Path $fixture 'generate-constants.log') -Tail 40 | Out-String) }
+    if (-not ([IO.File]::ReadAllText($customConstants).Contains('CHECK_DISTANCE = 3.25;'))) { throw 'Update Code did not apply discovered group values.' }
+    $registry = Join-Path $fixture 'src/main/java/frc/robot/constants/GeneratedTunableConstants.java'
+    if (-not ([IO.File]::ReadAllText($registry).Contains('TunableConstants.register(ShootingConstants.class);'))) { throw 'Discovered constants were not registered for live tuning.' }
     $first = Get-Content $dashboard -Raw -Encoding UTF8
     $barrel = [IO.File]::ReadAllText($constantsBarrel)
     if (-not $barrel.Contains('class Shooting extends frc.robot.constants.ShootingConstants')) { throw 'Generation removed custom constants alias.' }

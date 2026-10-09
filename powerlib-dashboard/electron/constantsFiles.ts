@@ -124,7 +124,7 @@ async function targets(robotRoot: string) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
   const directory = path.join(robotRoot, "src", "main", "java", "frc", "robot", "constants");
-  const result: ConstantsTarget[] = ["Vision", "StateMachine", "OI", "RobotContainer", "Swerve"].map((name) => ({ id: `robot:${name}`, storageKey: `robot:${name}`, name, kind: "robot", path: path.join(directory, `${name}Constants.java`) }));
+  const result: ConstantsTarget[] = [];
   const seen = new Set<string>();
   for (const subsystem of document.subsystems ?? []) {
     const name = pascalName(subsystem.name ?? "");
@@ -134,6 +134,16 @@ async function targets(robotRoot: string) {
     seen.add(name.toLowerCase());
     result.push({ id: `subsystem:${name}`, storageKey: `subsystem:${subsystem.id || name[0].toLowerCase() + name.slice(1)}`, name: subsystem.name ?? name, kind: "subsystem", path: path.join(directory, `${name}Constants.java`) });
   }
+  let entries: string[] = [];
+  try { entries = await fs.readdir(directory); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+  const robotNames = new Set(["Vision", "StateMachine", "OI", "RobotContainer", "Swerve"]);
+  for (const entry of entries) {
+    const match = /^([A-Za-z_$][\w$]*)Constants\.java$/.exec(entry);
+    if (match && !["GeneratedTunable", "Tuner"].includes(match[1]) && !seen.has(match[1].toLowerCase())) robotNames.add(match[1]);
+  }
+  for (const name of [...robotNames].sort()) result.push({ id: `robot:${name}`, storageKey: `robot:${name}`,
+    name, kind: "robot", path: path.join(directory, `${name}Constants.java`) });
   return result;
 }
 

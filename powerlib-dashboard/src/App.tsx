@@ -20,10 +20,7 @@ import ConstructionIcon from "@mui/icons-material/Construction";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import ElectricBoltIcon from "@mui/icons-material/ElectricBolt";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
-import TuneIcon from "@mui/icons-material/Tune";
 import VideocamIcon from "@mui/icons-material/Videocam";
-import DataObjectIcon from "@mui/icons-material/DataObject";
-import { ConstantsPanel } from "./features/constants/ConstantsPanel";
 import type {
   CharacterizationCommand,
   GeneratedSubsystem,
@@ -49,7 +46,6 @@ import { ConnectionSettingsDialog } from "./features/networktables/ConnectionSet
 import { tuningModeRequestTopicName, tuningModeTopicName } from "./features/networktables/tuningUtils";
 import { RobotPanel } from "./features/robot/RobotPanel";
 import { DrivePanel } from "./features/drive/DrivePanel";
-import { TuningPanel } from "./features/tuning/TuningPanel";
 import { LimelightsPanel } from "./features/limelights/LimelightsPanel";
 import { detectLimelights } from "./features/limelights/limelightUtils";
 import type { AppView } from "./types/app";
@@ -559,12 +555,13 @@ function AppContent() {
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
+    <Box sx={{ minHeight: activeView === "robot" ? 0 : "100vh", height: activeView === "robot" ? "100dvh" : undefined,
+      overflow: activeView === "robot" ? "hidden" : undefined, display: "flex", flexDirection: "column", bgcolor: "background.default" }}>
       <AppBar
         position="sticky"
         color="inherit"
         elevation={0}
-        sx={{ borderBottom: 1, borderColor: "divider", top: 0, zIndex: (theme) => theme.zIndex.drawer + 1 }}
+        sx={{ flexShrink: 0, borderBottom: 1, borderColor: "divider", top: 0, zIndex: (theme) => theme.zIndex.drawer + 1 }}
       >
         <Container maxWidth={false}>
           <Toolbar disableGutters sx={{ gap: 2, flexWrap: "wrap" }}>
@@ -622,20 +619,12 @@ function AppContent() {
               sx={{ minHeight: 44 }}
             />
             <Tab
-              icon={<TuneIcon />}
-              iconPosition="start"
-              label="Tuning"
-              value="tuning"
-              sx={{ minHeight: 44 }}
-            />
-            <Tab
               icon={<ConstructionIcon />}
               iconPosition="start"
               label="Subsystems"
               value="subsystems"
               sx={{ minHeight: 44 }}
             />
-            <Tab icon={<DataObjectIcon />} iconPosition="start" label="Constants" value="constants" sx={{ minHeight: 44 }} />
             {limelights.length > 0 && (
               <Tab
                 icon={<VideocamIcon />}
@@ -713,25 +702,20 @@ function AppContent() {
         </Alert>
       </Snackbar>
 
-      <Container maxWidth={false} sx={activeView === "drive" ? { p: "0 !important" } : { py: 2 }}>
+      <Container maxWidth={false} disableGutters={activeView === "robot"} sx={activeView === "drive" ? { p: "0 !important" } : activeView === "robot"
+        ? { py: 0, pl: { xs: 2, sm: 3 }, flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" } : { py: 2 }}>
         {telemetryError && <Alert severity="warning" sx={{ m: 1 }}>{telemetryError}</Alert>}
-        <Stack spacing={2}>
+        <Stack spacing={2} sx={activeView === "robot" ? { flex: 1, minHeight: 0 } : undefined}>
           {activeView === "drive" && <DrivePanel subsystems={subsystemDocument.subsystems} />}
-          <Box sx={{ display: activeView === "constants" ? "block" : "none" }}>
-            <ConstantsPanel active={activeView === "constants"} />
-          </Box>
           {activeView === "robot" && (
             <RobotPanelWithTelemetry
               subsystems={subsystemDocument.subsystems}
+              tuningRequested={tuningModeEnabled}
             />
           )}
 
           {activeView === "networktables" && (
             <NetworkTablesPanel />
-          )}
-
-          {activeView === "tuning" && (
-            <TuningPanel />
           )}
 
           {activeView === "limelights" && (
@@ -766,6 +750,6 @@ function AppContent() {
   );
 }
 
-function RobotPanelWithTelemetry({ subsystems }: { subsystems: GeneratedSubsystem[] }) {
-  return <RobotPanel subsystems={subsystems} topics={useTopics("robot")} />;
+function RobotPanelWithTelemetry({ subsystems, tuningRequested }: { subsystems: GeneratedSubsystem[]; tuningRequested: boolean }) {
+  return <RobotPanel subsystems={subsystems} topics={useTopics("robot")} tuningRequested={tuningRequested} />;
 }

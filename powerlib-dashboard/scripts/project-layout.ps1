@@ -1,3 +1,4 @@
+# Continue relocating legacy selection files during upgrades; Power Tool no longer reads them.
 $PowerLibGeneratedFiles = @('powerlib-subsystems.json', 'powerlib-constants.json', 'powerlib-tuning-selection.json')
 
 function Get-PowerLibRobotRoot {

@@ -10,7 +10,7 @@ const matches = (view: TopicView, name: string) => {
     || name.startsWith("/SmartDashboard/Auto Chooser/") || name.startsWith("/SmartDashboard/Field/")
     || name.startsWith("/Robot/") || name.startsWith("/CameraPublisher/") || /^\/limelight[^/]*\//.test(name);
   if (view === "tuning") return /^\/PowerLib\/(?:Subsystems|Commands)\/[^/]+\/Variables\//.test(name) || name.startsWith("/PowerLib/Tuning/");
-  return name.startsWith("/PowerLib/") && name !== "/PowerLib/Data";
+  return /^\/PowerLib\/Subsystems\/[^/]+\/Data\//.test(name) || name.startsWith("/PowerLib/Data/");
 };
 
 /** Stable snapshots let React skip consumers whose selected topics did not change. */

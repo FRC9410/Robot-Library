@@ -34,6 +34,14 @@ Use the prefix explorer to watch areas like:
 
 Rows appear as matching topic values arrive from NetworkTables.
 
+## Robot tuning
+
+The Robot tab shows clickable subsystem cards with their live readings. Click a card to open all of its tunables in the side panel; there is no variable selection or separate Tuning/Constants tab. Other constants groups appear after the subsystem cards, including groups discovered from the project's constants files or live NetworkTables variables. Commands with tunables also get their own cards.
+
+The tuning switch stays in the header. Live edits require a connected robot and its acknowledgement that tuning is enabled. Apply publishes changes for that group; the Reset icon beside each field clears only that field's pending edit. Search filters the list without changing which variables belong to the group. Save Tuned Values saves that group's live values as project defaults.
+
+Existing constants appear directly in the same side panel, alongside the group's live tunables. A published constant has one live row rather than a duplicate saved row. Apply sends live edits through NetworkTables and saves edits to saved-only values in the project configuration. Live values show their baseline beneath the field. Saved values can also be changed while disconnected; run Update Code, rebuild, and deploy to apply those defaults. Names and Java types stay fixed, and constants cannot be added or deleted. Numeric edits must fit the declared Java type.
+
 ## Scripts
 
 ```text

@@ -20,35 +20,6 @@ declare global {
         subsystems: unknown[];
         swerve?: unknown;
       }>;
-      readTuningSelection: () => Promise<{
-        exists: boolean;
-        path: string;
-        selectedTopics: string[];
-        monitorDrawerOpen: boolean;
-        sidebarExpandedSection: "subsystem" | "command";
-        error?: string;
-      }>;
-      saveTuningSelection: (selectedTopics: string[]) => Promise<{
-        exists: boolean;
-        path: string;
-        selectedTopics: string[];
-        monitorDrawerOpen: boolean;
-        sidebarExpandedSection: "subsystem" | "command";
-      }>;
-      saveTuningMonitorDrawerOpen: (open: boolean) => Promise<{
-        exists: boolean;
-        path: string;
-        selectedTopics: string[];
-        monitorDrawerOpen: boolean;
-        sidebarExpandedSection: "subsystem" | "command";
-      }>;
-      saveTuningSidebarExpandedSection: (section: "subsystem" | "command") => Promise<{
-        exists: boolean;
-        path: string;
-        selectedTopics: string[];
-        monitorDrawerOpen: boolean;
-        sidebarExpandedSection: "subsystem" | "command";
-      }>;
       updateSubsystemCode: () => Promise<{
         stdout: string;
         stderr: string;
