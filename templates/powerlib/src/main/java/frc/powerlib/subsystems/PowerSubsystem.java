@@ -330,6 +330,11 @@ public abstract class PowerSubsystem extends SubsystemBase {
     return getSubsystemVariable(key, defaultValue, value -> value > 0, "a positive finite number");
   }
 
+  protected double getFeedbackRatioSubsystemVariable(String key, double defaultValue) {
+    return getSubsystemVariable(key, defaultValue,
+        value -> value != 0 && Math.abs(value) <= 1000, "a nonzero finite ratio in [-1000, 1000]");
+  }
+
   protected double getNonnegativeSubsystemVariable(String key, double defaultValue) {
     return getSubsystemVariable(key, defaultValue, value -> value >= 0, "a nonnegative finite number");
   }

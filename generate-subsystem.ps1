@@ -1129,9 +1129,13 @@ function Remove-UnmarkedGeneratedConstants {
     $lines = @(Get-Content -Encoding UTF8 -Path $ConstantsPath)
     $kept = @()
     foreach ($line in $lines) {
-        $match = [regex]::Match($line, "^\s*public static final class\s+([A-Za-z0-9_]+)\s+extends\s+frc\.robot\.constants\.[A-Za-z0-9_]+Constants\s+\{\}\s*$")
+        $match = [regex]::Match($line, "^\s*public static final class\s+([A-Za-z0-9_]+)\s+extends\s+frc\.robot\.constants\.([A-Za-z0-9_]+Constants)\s+\{\}\s*$")
         if ($match.Success -and -not ($BuiltInConstantNames -contains $match.Groups[1].Value)) {
-            continue
+            $target = Join-Path (Split-Path $ConstantsPath -Parent) "constants/$($match.Groups[2].Value).java"
+            if ((Test-Path -LiteralPath $target) -and
+                (Get-Content -LiteralPath $target -Raw -Encoding UTF8).Contains($GeneratedFileMarkerPrefix)) {
+                continue
+            }
         }
         $kept += $line
     }

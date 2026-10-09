@@ -1,5 +1,6 @@
 package frc.powerlib.auto;
 
+import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj2.command.Command;
@@ -11,6 +12,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.function.Function;
 
 /** Publishes an autonomous chooser and builds a fresh command when autonomous starts. */
 public final class AutoBuilder extends SubsystemBase implements AutoCloseable {
@@ -23,10 +25,31 @@ public final class AutoBuilder extends SubsystemBase implements AutoCloseable {
   private String defaultName = "None";
   private Optional<Alliance> displayedAlliance;
   private boolean optionsDirty = true;
+  private final Function<Pose2d, Command> driveToPoint;
 
   public AutoBuilder() {
+    this(null);
+  }
+
+  /** The factory creates a fresh command that finishes when the supplied destination is reached. */
+  public AutoBuilder(Function<Pose2d, Command> driveToPoint) {
+    this.driveToPoint = driveToPoint;
     routines.put("None", new Routine(Commands::none, null));
     refreshOptions();
+  }
+
+  /** Registers either direct-point or path-cursor definitions, capturing their current steps. */
+  public AutoBuilder addAuto(Auto auto) {
+    Objects.requireNonNull(auto, "Auto must not be null.");
+    register(auto.getName(), auto.commandFactory(driveToPoint), auto.getAlliance().orElse(null));
+    return this;
+  }
+
+  public AutoBuilder setDefaultAuto(Auto auto) {
+    addAuto(auto);
+    defaultName = auto.getName();
+    optionsDirty = true;
+    return this;
   }
 
   /** Register a factory, rather than a shared command instance or command group. */

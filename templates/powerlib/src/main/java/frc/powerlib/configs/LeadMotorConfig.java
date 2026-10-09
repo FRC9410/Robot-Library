@@ -29,8 +29,8 @@ public record LeadMotorConfig(
     ConfigValidation.optional(kS, "kS");
     ConfigValidation.optional(kV, "kV");
     ConfigValidation.optional(kA, "kA");
-    ConfigValidation.positive(sensorToMechanismRatio, "sensorToMechanismRatio");
-    ConfigValidation.positive(rotorToSensorRatio, "rotorToSensorRatio");
+    ConfigValidation.feedbackRatio(sensorToMechanismRatio, "sensorToMechanismRatio");
+    ConfigValidation.feedbackRatio(rotorToSensorRatio, "rotorToSensorRatio");
   }
 
   public LeadMotorConfig(

@@ -1,4 +1,4 @@
-package frc.robot.subsystems.states.idle;
+package frc.robot.subsystems.states;
 
 import frc.powerlib.statemachine.State;
 import frc.robot.subsystems.StateMachine;

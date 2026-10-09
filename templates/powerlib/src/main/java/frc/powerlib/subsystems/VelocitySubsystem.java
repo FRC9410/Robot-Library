@@ -154,8 +154,8 @@ public class VelocitySubsystem extends PowerSubsystem {
     }
 
     double nextSensorToMechanismRatio =
-        getPositiveSubsystemVariable("Ratios/SensorToMechanism", sensorToMechanismRatio);
-    double nextRotorToSensorRatio = getPositiveSubsystemVariable("Ratios/RotorToSensor", rotorToSensorRatio);
+        getFeedbackRatioSubsystemVariable("Ratios/SensorToMechanism", sensorToMechanismRatio);
+    double nextRotorToSensorRatio = getFeedbackRatioSubsystemVariable("Ratios/RotorToSensor", rotorToSensorRatio);
     if (changed(nextSensorToMechanismRatio, sensorToMechanismRatio)
         || changed(nextRotorToSensorRatio, rotorToSensorRatio) || pendingConfiguration(velocityMotor, FeedbackConfigs.class)) {
       if (applyFeedbackRatios(velocityMotor, nextSensorToMechanismRatio, nextRotorToSensorRatio)) {

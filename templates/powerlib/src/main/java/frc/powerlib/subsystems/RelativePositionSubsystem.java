@@ -318,8 +318,8 @@ public class RelativePositionSubsystem extends PowerSubsystem {
     }
 
     double nextSensorToMechanismRatio =
-        getPositiveSubsystemVariable("Ratios/SensorToMechanism", sensorToMechanismRatio);
-    double nextRotorToSensorRatio = getPositiveSubsystemVariable("Ratios/RotorToSensor", rotorToSensorRatio);
+        getFeedbackRatioSubsystemVariable("Ratios/SensorToMechanism", sensorToMechanismRatio);
+    double nextRotorToSensorRatio = getFeedbackRatioSubsystemVariable("Ratios/RotorToSensor", rotorToSensorRatio);
     if (changed(nextSensorToMechanismRatio, sensorToMechanismRatio)
         || changed(nextRotorToSensorRatio, rotorToSensorRatio) || pendingConfiguration(positionMotor, FeedbackConfigs.class)) {
       if (applyFeedbackRatios(positionMotor, nextSensorToMechanismRatio, nextRotorToSensorRatio)) {

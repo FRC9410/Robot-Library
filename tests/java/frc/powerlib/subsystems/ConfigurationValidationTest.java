@@ -25,9 +25,12 @@ public class ConfigurationValidationTest {
   }
 
   @Test public void rejectsInvalidRatiosAndNonfiniteGains() {
-    for (double ratio : new double[] {0, -1, Double.NaN, Double.POSITIVE_INFINITY}) {
+    for (double ratio : new double[] {0, -1001, 1001, Double.NaN, Double.POSITIVE_INFINITY}) {
       assertThrows(IllegalArgumentException.class, () -> lead(ratio));
     }
+    assertEquals(-1, lead(-1).sensorToMechanismRatio(), 0);
+    assertEquals(-44.444, new LeadMotorConfig(0, 0, 0, 0,
+        Optional.empty(), Optional.empty(), Optional.empty(), -1, -44.444).rotorToSensorRatio(), 0);
     assertThrows(IllegalArgumentException.class, () -> new LeadMotorConfig(Double.NaN, 0, 0, 0,
         Optional.empty(), Optional.empty(), Optional.empty(), 1, 1));
     assertThrows(IllegalArgumentException.class, () -> new LeadMotorConfig(0, 0, 0, 0,
@@ -76,7 +79,7 @@ public class ConfigurationValidationTest {
   private static class TuningProbe extends PowerSubsystem {
     int warnings;
     TuningProbe() { super(List.of(), "ValidationProbe", MotorConfiguration::output, false); }
-    double readRatio(double fallback) { return getPositiveSubsystemVariable("Ratio", fallback); }
+    double readRatio(double fallback) { return getFeedbackRatioSubsystemVariable("Ratio", fallback); }
     double readGain(double fallback) { return getSubsystemVariable("Gain", fallback); }
     protected void reportRejectedTuning(String message) { warnings++; }
     void result(StatusCode status) { recordStartupConfiguration(status, "test device"); }
@@ -85,15 +88,17 @@ public class ConfigurationValidationTest {
   @Test public void rejectsLiveValuesKeepsFallbackAndReportsEachDistinctRejectionOnce() {
     var probe = new TuningProbe();
     try {
-      PowerRobotContainer.updateSubsystemVariable("ValidationProbe", "Ratio", -1.0);
+      PowerRobotContainer.updateSubsystemVariable("ValidationProbe", "Ratio", 0.0);
       assertEquals(3, probe.readRatio(3), 0);
       probe.readRatio(3);
       assertEquals(1, probe.warnings);
       PowerRobotContainer.updateSubsystemVariable("ValidationProbe", "Ratio", 4.0);
       assertEquals(4, probe.readRatio(3), 0);
-      PowerRobotContainer.updateSubsystemVariable("ValidationProbe", "Ratio", -1.0);
+      PowerRobotContainer.updateSubsystemVariable("ValidationProbe", "Ratio", 0.0);
       assertEquals(4, probe.readRatio(4), 0);
       assertEquals(2, probe.warnings);
+      PowerRobotContainer.updateSubsystemVariable("ValidationProbe", "Ratio", -1.0);
+      assertEquals(-1, probe.readRatio(4), 0);
       PowerRobotContainer.updateSubsystemVariable("ValidationProbe", "Gain", Double.NaN);
       assertEquals(2, probe.readGain(2), 0);
       PowerRobotContainer.updateSubsystemVariable("ValidationProbe", "Gain", "invalid");
@@ -116,9 +121,11 @@ public class ConfigurationValidationTest {
     var wrist = new FailingWrist(io);
     try {
       assertTrue(wrist.isConfigured());
+      assertTrue(frc.powerlib.health.HealthChecks.mechanismHealthy(wrist, wrist.getPositionMotor(), 0.5));
       int before = io.positions;
       wrist.fail(); wrist.succeed(); wrist.setPosition(0.5);
       assertFalse(wrist.isConfigured());
+      assertFalse(frc.powerlib.health.HealthChecks.mechanismHealthy(wrist, wrist.getPositionMotor(), 0.5));
       assertFalse(wrist.isReady());
       assertFalse(wrist.atTargetPosition());
       assertEquals(before, io.positions);

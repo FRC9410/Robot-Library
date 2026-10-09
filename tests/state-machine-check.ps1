@@ -1,7 +1,11 @@
 param([string]$WpilibRoot = "$env:PUBLIC/wpilib/2026")
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
-$fixture = Join-Path $root 'build/state-machine-check'
+$fixture = [IO.Path]::GetFullPath((Join-Path $root 'build/state-machine-check'))
+if (-not $fixture.StartsWith([IO.Path]::GetFullPath($root) + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Fixture directory escaped the workspace.'
+}
+if (Test-Path -LiteralPath $fixture) { Remove-Item -LiteralPath $fixture -Recurse -Force }
 $sourceRoot = Join-Path $fixture 'src'
 $dependencies = Join-Path $root 'build/library-checks/dependencies'
 if (-not (Test-Path $dependencies)) { throw 'Run run-library-checks.ps1 first.' }
@@ -17,7 +21,7 @@ $machine = [IO.File]::ReadAllText((Join-Path $robotTemplate 'frc/robot/subsystem
 # Add one test-only request to exercise transitions without expanding the shipped IDLE enum.
 $machine = $machine.Replace("    IDLE", "    IDLE, CHECK")
 Write-FixtureSource 'frc/robot/subsystems/StateMachine.java' $machine
-foreach ($path in @('frc/robot/subsystems/states/idle/IdleState.java', 'frc/robot/commands/RequestState.java', 'frc/robot/commands/SwerveDriveCommand.java')) {
+foreach ($path in @('frc/robot/subsystems/states/IdleState.java', 'frc/robot/commands/RequestState.java', 'frc/robot/commands/SwerveDriveCommand.java')) {
     Write-FixtureSource $path ([IO.File]::ReadAllText((Join-Path $robotTemplate $path)))
 }
 Write-FixtureSource 'frc/powerlib/statemachine/State.java' ([IO.File]::ReadAllText((Join-Path $root 'templates/powerlib/src/main/java/frc/powerlib/statemachine/State.java')))

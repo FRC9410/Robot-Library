@@ -56,6 +56,7 @@ These robot starter/template files are written into the robot project. On the fi
 ```text
 src/main/java/frc/robot/Constants.java
 src/main/java/frc/robot/RobotContainer.java
+src/main/java/frc/robot/autos/RobotAutos.java
 src/main/java/frc/robot/commands/SwerveDriveCommand.java
 src/main/java/frc/robot/constants/CanBusConstants.java
 src/main/java/frc/robot/constants/LEDConstants.java
@@ -72,6 +73,9 @@ src/main/java/frc/robot/utils/FieldUtils.java
 
 The installer creates temporary backups before replacing files. Successful installs delete those backups by default.
 
+`RobotAutos.java` is created only when missing. Existing robot autos are preserved on
+every install, including the first, without creating a `.template` copy for this file.
+
 ## Autonomous Chooser
 
 The starter `RobotContainer` publishes a standard autonomous dropdown at
@@ -81,22 +85,24 @@ Selection takes effect when `Robot.autonomousInit()` calls `getAutonomousCommand
 The library's `NTChooser` publishes options and reads selections directly through NetworkTables.
 `AutoBuilder` updates the robot acknowledgement from its subsystem `periodic()` method.
 
-Register routines in `RobotContainer.configureAutos()` before `autoBuilder.publish()`:
+Register routines in `RobotAutos.register(AutoBuilder autoBuilder, StateMachine robot)`.
+`RobotContainer.configureAutos()` calls it before `autoBuilder.publish()`. The starter
+method is empty and includes commented examples of both waypoint styles below. Your
+robot's coordinates and mechanism commands belong in this file.
 
 ```java
-autoBuilder.addAuto("My Auto", this::buildMyAuto);
+autoBuilder.addAuto("My Auto", () -> buildMyAuto(robot));
 // Optional: register a different default instead of None.
-autoBuilder.setDefaultAuto("Default Auto", this::buildDefaultAuto);
-autoBuilder.publish();
+autoBuilder.setDefaultAuto("Default Auto", () -> buildDefaultAuto(robot));
 ```
 
 Optionally tag a routine with WPILib's `DriverStation.Alliance`:
 
 ```java
-autoBuilder.addAuto("Red Auto", DriverStation.Alliance.Red, this::buildRedAuto);
-autoBuilder.addAuto("Blue Auto", DriverStation.Alliance.Blue, this::buildBlueAuto);
+autoBuilder.addAuto("Red Auto", DriverStation.Alliance.Red, () -> buildRedAuto(robot));
+autoBuilder.addAuto("Blue Auto", DriverStation.Alliance.Blue, () -> buildBlueAuto(robot));
 // Without an alliance argument, a routine is available for either alliance.
-autoBuilder.addAuto("Shared Auto", this::buildSharedAuto);
+autoBuilder.addAuto("Shared Auto", () -> buildSharedAuto(robot));
 ```
 
 Import `edu.wpi.first.wpilibj.DriverStation` for this example. The chooser updates its
@@ -106,16 +112,71 @@ unavailable, the chooser falls back to `None`. A selected routine that becomes u
 resolves to the available default. These tags filter routines; they do not mirror paths or
 coordinates. Existing running commands continue unchanged.
 
+`frc.powerlib.auto.Auto` defines a routine using either direct destinations or a path
+cursor. Configure `AutoBuilder` with your robot's drive-command factory once:
+
+```java
+private final AutoBuilder autoBuilder = new AutoBuilder(this::driveToPoint);
+```
+
+`driveToPoint(Pose2d destination)` is a robot-provided method returning a fresh command
+that requires the drivetrain, finishes when the destination is reached, and stops its
+outputs in `end()`. The builder sequences these commands; it does not choose a motion
+controller, arrival tolerance, timeout, starting pose, or coordinate transformation.
+
+Both definitions below execute the same steps. `pickupPoint` and `shootingPoint` are
+`Pose2d` destinations; the command methods are factories for your robot's actions.
+
+```java
+autoBuilder.addAuto(new frc.powerlib.auto.Auto("Blue direct")
+    .withAlliance(DriverStation.Alliance.Blue)
+    .addCommand(() -> buildIntakeCommand(robot))
+    .addDriveToPoint(pickupPoint)
+    .addCommand(() -> buildSpinUpCommand(robot))
+    .addDriveToPoint(shootingPoint)
+    .addCommand(() -> buildShootCommand(robot)));
+
+autoBuilder.addAuto(new frc.powerlib.auto.Auto("Blue path")
+    .withAlliance(DriverStation.Alliance.Blue)
+    .withPath(new Pose2d[] {pickupPoint, shootingPoint})
+    .addCommand(() -> buildIntakeCommand(robot))
+    .toNextPoint()
+    .addCommand(() -> buildSpinUpCommand(robot))
+    .toNextPoint()
+    .addCommand(() -> buildShootCommand(robot)));
+```
+
+Import `edu.wpi.first.math.geometry.Pose2d` for this example. `withPath()` stores a copy
+of the destination list and adds no drive steps. Each `toNextPoint()` appends the next
+destination. `addDriveToPoint()` leaves that cursor unchanged, so the styles can also be
+mixed. All defined path points must be consumed before registering/building the auto
+or replacing its path. An exhausted cursor or invalid destination fails during definition
+with the auto's name. Consecutive destinations run as separate drive commands; this API
+does not smooth them into a continuous trajectory.
+
+Commands run in order and the next step waits for the active command to finish. Instant
+state requests advance immediately while the requested state remains active. Mechanism
+commands are responsible for the lifetime and cleanup of their owned state requests.
+Cancellation interrupts the active command and leaves later steps unstarted.
+
+`addCommand()` accepts `Supplier<Command>` so each autonomous run gets fresh commands.
+The chooser captures the definition when it is registered; later edits to that `Auto`
+do not change the registered routine. `setDefaultAuto(auto)` accepts the same definition.
+For standalone use, `auto.build(this::driveToPoint)` creates a fresh command sequence;
+command-only definitions also support `auto.build()`. Existing factory registration
+and `CommandBuilder` remain supported.
+
 Factories must return fresh commands, including the children of command groups. The reusable
 `frc.powerlib.auto.CommandBuilder` can assemble sequences from factories:
 
 ```java
-private Command buildMyAuto() {
+private static Command buildMyAuto(StateMachine robot) {
+  Object owner = new Object();
   return new frc.powerlib.auto.CommandBuilder()
-      .runOnce(() -> stateMachine.setWantedState(StateMachine.RobotState.IDLE), stateMachine)
+      .runOnce(() -> robot.requestState(StateMachine.RobotState.IDLE, owner), robot)
       .waitSeconds(0.5)
       .command(() -> new com.pathplanner.lib.commands.PathPlannerAuto("My Path"))
-      .build();
+      .build().finallyDo(() -> robot.clearRequest(owner));
 }
 ```
 
@@ -126,31 +187,65 @@ acknowledgement. Changing the selection does not change an already running routi
 
 Existing installations receive `RobotContainer.java.template`; adopt its `autoBuilder`
 field, `configureAutos()` call/method, and `getAutonomousCommand()` implementation in your
-robot container. Updating PowerLib alone preserves your existing robot container.
+robot container. Move registrations into `RobotAutos.register()` and call it before
+publishing the chooser. Updating PowerLib alone preserves your existing robot container.
 
 ## Robot states
 
 The PowerLib `frc.powerlib.statemachine.State<R, M>` contract requires
 `match(requestedState, stateMachine)` and `execute(requestedState, stateMachine)`.
 Robot handlers live under `frc.robot.subsystems.states`; the starter handler is
-`states.idle.IdleState`.
+`states.IdleState`.
 
-`StateMachine.periodic()` calls `execute()`, which selects the first matching handler
-in registration order, then executes the active handler. The selection scan is skipped
-when requested and actual state agree. When no handler matches, the current handler
-continues executing and the request stays pending. Each handler reports its actual
-state with `setActualState()`; a request alone does not change actual state.
+`requestState(state, owner)` stores one request per owner; another request from that
+owner replaces its entry. `clearRequest(owner)` removes only that entry. The state
+machine scans handlers in registration order and checks each owner's request against
+each handler. The first matching handler wins, so the `states` list defines priority
+across all requests. Empty requests use `Constants.StateMachine.DEFAULT_STATE`.
 
-Use `new RequestState(RobotState.IDLE, stateMachine)` in a controller binding or
-autonomous sequence. This instant command sets the requested state through the existing
-`setWantedState()` API. It finishes after making the request, without waiting for the
-transition. Add future handlers to the `states` list in `StateMachine` in priority order.
+`StateMachine.periodic()` calls each handler's optional `prepare(stateMachine)` once,
+resolves the winning request, then executes its handler. Preparation keeps state-owned
+inputs fresh even when selection is skipped; it should not command hardware.
+Handlers can also override `reset()` to clear their internal behavior on mode changes;
+robot mode-reset code must call it on the registered handlers.
+`getWantedState()` reports that resolved request. A single unchanged request skips
+selection when requested and current state agree. Multiple requests are checked each
+cycle so a higher-priority request whose guard becomes ready can take over. When no
+handler matches, the current handler continues and the request stays pending. Each
+handler reports its actual state with `setActualState()`.
+
+Use `new RequestState(RobotState.IDLE, owner, stateMachine)` in an autonomous sequence.
+This instant command registers the request and finishes without waiting for the
+transition. Use a stable owner for related requests and clear it when the routine ends.
 Idle currently only reports `IDLE`; add robot-specific idle outputs to its `execute()`.
+
+`frc.powerlib.controls.ButtonBindings` provides two press/release helpers:
+
+```java
+ButtonBindings.bindFunctions(button, onPress, onRelease);
+ButtonBindings.bindStates(button, pressState, releaseState, stateMachine::requestState);
+```
+
+The state helper creates a stable owner per binding. Releasing one button updates only
+its own request, preserving other held buttons. For example, requesting `IDLE` on release
+allows a higher-priority held request to continue. The function helper also accepts
+optional subsystem requirements for actions that need command ownership.
+
+For a press-only action, use `ButtonBindings.bindFunctions(button, onPress, runWhenDisabled)`.
+Setting the last argument to `true` permits the action while disabled; enforce any
+disabled-only restriction inside the action itself.
 
 `getCurrentState()` returns the current robot state; `getActualState()` exposes the same
 value for dashboard telemetry. The drive command receives `stateMachine::getCurrentState`
 as a supplier, so its `getCurrentState()` reads live state whenever drive logic needs it.
 Changing the request alone does not change this value.
+
+`frc.powerlib.health.HealthChecks` shares finite-pose, timestamp freshness, CTRE signal,
+mechanism configuration/feedback, and Phoenix drivetrain checks. Callers supply the
+maximum signal age. Drivetrain checks support CANcoder modules. Simulation checks retain
+configuration and pose validation while bypassing physical CAN connection requirements.
+Choose the mechanisms required for a particular action in your robot code; the helper
+does not depend on robot states or shooting settings.
 
 ## Telemetry Logging
 
@@ -234,6 +329,12 @@ such as trusting vision more during wheel slip; wheel-slip detection is left to 
 The starter enables corrections during both autonomous and teleop. Call
 `stateMachine.vision.setShouldUpdatePose(false)` to disable corrections, and `true` to restore them.
 It always suppresses corrections while the robot is disabled.
+
+`stateMachine.vision.seedFromFreshVision()` explicitly resets the drivetrain pose from
+the last accepted camera measurement while disabled. It returns `false` when enabled,
+when no accepted frame is cached, or when the frame is stale, future-dated, or invalid.
+The freshness limit comes from `Constants.Vision.CONFIG.maxMeasurementAgeSeconds()`.
+Vision keeps reading and caching accepted frames while normal pose corrections are disabled.
 
 On existing installations, the installer writes updated robot files beside the originals as
 `.template` files. Adopt the updated `Vision`, `VisionConstants`, and `StateMachine` files together;

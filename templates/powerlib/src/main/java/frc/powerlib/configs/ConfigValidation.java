@@ -23,6 +23,11 @@ final class ConfigValidation {
     if (value < 0) throw new IllegalArgumentException(name + " must be nonnegative");
   }
 
+  static void feedbackRatio(double value, String name) {
+    range(value, -1000, 1000, name);
+    if (value == 0) throw new IllegalArgumentException(name + " must be nonzero");
+  }
+
   static void range(double value, double minimum, double maximum, String name) {
     finite(value, name);
     if (value < minimum || value > maximum) {

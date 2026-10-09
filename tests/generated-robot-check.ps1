@@ -28,9 +28,31 @@ try {
     $installLog = Join-Path $fixture 'install.log'
     & $GradleExecutable --offline --no-daemon --console=plain -g (Join-Path $root 'build/validation-gradle-cache') -I (Join-Path $root 'install.gradle') robotLibraryInstall -PpowerlibInteractive=false -PpowerlibInstall=true -PpowerlibInstallLib=true -PpowerlibInstallTemplates=true -PpowerlibInstallVendordeps=false -PpowerlibInstallTools=false -PpowerlibInstallDashboard=false -PpowerlibInstallSkills=false -PpowerlibSkipBuild=true *> $installLog
     if ($LASTEXITCODE -ne 0) { throw (Get-Content $installLog -Tail 35 | Out-String) }
+    foreach ($helper in @('health/HealthChecks.java', 'controls/ButtonBindings.java', 'auto/Auto.java')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $fixture "src/main/java/frc/powerlib/$helper"))) {
+            throw "Fresh install omitted library helper $helper."
+        }
+    }
+    $robotAutos = Join-Path $fixture 'src/main/java/frc/robot/autos/RobotAutos.java'
+    if (-not (Test-Path -LiteralPath $robotAutos)) { throw 'Fresh install omitted RobotAutos template.' }
+    $robotContainer = Join-Path $fixture 'src/main/java/frc/robot/RobotContainer.java'
+    if (-not ([IO.File]::ReadAllText($robotContainer).Contains('RobotAutos.register(autoBuilder, stateMachine);'))) {
+        throw 'Fresh RobotContainer does not register RobotAutos before publishing the chooser.'
+    }
     & $GradleExecutable --offline --no-daemon --console=plain -g (Join-Path $root 'build/validation-gradle-cache') compileJava *> (Join-Path $fixture 'compile-fresh.log')
     if ($LASTEXITCODE -ne 0) { throw (Get-Content (Join-Path $fixture 'compile-fresh.log') -Tail 40 | Out-String) }
     Write-Host 'Fresh installed robot compiled with real WPILib and vendor dependencies.'
+
+    # Robot routes belong to the team. Reinstalling must preserve their edited source.
+    $customAutoSource = [IO.File]::ReadAllText($robotAutos).Replace(
+        'public static void register(AutoBuilder autoBuilder, StateMachine robot) {',
+        'public static void register(AutoBuilder autoBuilder, StateMachine robot) { autoBuilder.addAuto("Custom Auto", edu.wpi.first.wpilibj2.command.Commands::none);')
+    [IO.File]::WriteAllText($robotAutos, $customAutoSource)
+    & $GradleExecutable --offline --no-daemon --console=plain -g (Join-Path $root 'build/validation-gradle-cache') -I (Join-Path $root 'install.gradle') robotLibraryInstall -PpowerlibInteractive=false -PpowerlibInstall=true -PpowerlibInstallLib=true -PpowerlibInstallTemplates=true -PpowerlibInstallVendordeps=false -PpowerlibInstallTools=false -PpowerlibInstallDashboard=false -PpowerlibInstallSkills=false -PpowerlibSkipBuild=true *> (Join-Path $fixture 'reinstall.log')
+    if ($LASTEXITCODE -ne 0) { throw (Get-Content (Join-Path $fixture 'reinstall.log') -Tail 35 | Out-String) }
+    if ([IO.File]::ReadAllText($robotAutos) -cne $customAutoSource) { throw 'Reinstall overwrote custom RobotAutos.' }
+    if (Test-Path -LiteralPath "$robotAutos.template") { throw 'Reinstall created an unnecessary RobotAutos template copy.' }
+    Write-Host 'Reinstall preserved custom robot autos without creating a template copy.'
 
     $subsystems = @(); $id = 40
     foreach ($type in @('velocity', 'velocityTorque', 'absolutePosition', 'relativePosition')) {
@@ -50,9 +72,18 @@ try {
     $source = $source.Replace('  public void periodic() {', "  public void periodic() {`n    customAction();")
     $source = [regex]::Replace($source, '\}\s*$', "  // mécanisme`n  private void customAction() {}`n}`n")
     [IO.File]::WriteAllText($dashboard, $source)
+    $constantsBarrel = Join-Path $fixture 'src/main/java/frc/robot/Constants.java'
+    $customConstants = Join-Path $fixture 'src/main/java/frc/robot/constants/ShootingConstants.java'
+    [IO.File]::WriteAllText($customConstants, "package frc.robot.constants;`npublic class ShootingConstants { public static final double CHECK_DISTANCE = 2.5; }`n")
+    $source = [IO.File]::ReadAllText($constantsBarrel)
+    $source = $source.Replace('  private Constants() {}', "  private Constants() {}`n  public static final class Shooting extends frc.robot.constants.ShootingConstants {}`n  public static final class CheckVelocity extends frc.robot.constants.CheckVelocityConstants {}")
+    [IO.File]::WriteAllText($constantsBarrel, $source)
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'generate-subsystem.ps1') -UpdateSubsystems -SkipBuild *> (Join-Path $fixture 'generate.log')
     if ($LASTEXITCODE -ne 0) { throw (Get-Content (Join-Path $fixture 'generate.log') -Tail 40 | Out-String) }
     $first = Get-Content $dashboard -Raw -Encoding UTF8
+    $barrel = [IO.File]::ReadAllText($constantsBarrel)
+    if (-not $barrel.Contains('class Shooting extends frc.robot.constants.ShootingConstants')) { throw 'Generation removed custom constants alias.' }
+    if ([regex]::Matches($barrel, 'class CheckVelocity extends').Count -ne 1) { throw 'Generation retained a duplicate generated constants alias.' }
     $generatedSources = @{}
     Get-ChildItem src/main/java -Recurse -Filter '*.java' | ForEach-Object {
         $generatedSources[$_.FullName] = [IO.File]::ReadAllText($_.FullName)
@@ -63,6 +94,7 @@ try {
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'generate-subsystem.ps1') -UpdateSubsystems -SkipBuild *> (Join-Path $fixture 'generate-again.log')
     if ($LASTEXITCODE -ne 0) { throw (Get-Content (Join-Path $fixture 'generate-again.log') -Tail 40 | Out-String) }
     if ($first -cne (Get-Content $dashboard -Raw -Encoding UTF8)) { throw 'Repeated generation changed the dashboard.' }
+    if ([IO.File]::ReadAllText($robotAutos) -cne $customAutoSource) { throw 'Subsystem generation changed custom RobotAutos.' }
     foreach ($path in $generatedSources.Keys) {
         if ($generatedSources[$path] -cne [IO.File]::ReadAllText($path)) { throw "Repeated generation changed $path" }
     }

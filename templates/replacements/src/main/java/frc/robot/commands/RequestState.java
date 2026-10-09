@@ -7,9 +7,10 @@ import java.util.Objects;
 
 /** Requests a state once; the state machine decides when the robot can enter it. */
 public class RequestState extends InstantCommand {
-  public RequestState(RobotState requestedState, StateMachine stateMachine) {
-    super(() -> stateMachine.setWantedState(requestedState), stateMachine);
+  public RequestState(RobotState requestedState, Object owner, StateMachine stateMachine) {
+    super(() -> stateMachine.requestState(requestedState, owner), stateMachine);
     Objects.requireNonNull(requestedState);
+    Objects.requireNonNull(owner);
     Objects.requireNonNull(stateMachine);
   }
 }

@@ -8,6 +8,7 @@ import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import frc.powerlib.PowerRobotContainer;
 import frc.powerlib.auto.AutoBuilder;
+import frc.robot.autos.RobotAutos;
 import frc.robot.commands.SwerveDriveCommand;
 import frc.robot.Constants;
 import frc.robot.subsystems.PowerDashboard;
@@ -30,11 +31,13 @@ public class RobotContainer implements PowerRobotContainer {
 
   private void configureBindings() {
     // Configure driver controller button commands here.
+    // ButtonBindings.bindStates(button, pressState, releaseState, stateMachine::requestState);
+    // ButtonBindings.bindFunctions(button, onPress, onRelease);
+    // ButtonBindings.bindFunctions(button, onPress, runWhenDisabled);
   }
 
   private void configureAutos() {
-    // Register command factories here before publishing, for example:
-    // autoBuilder.addAuto("My Auto", this::buildMyAuto);
+    RobotAutos.register(autoBuilder, stateMachine);
     autoBuilder.publish();
   }
 
