@@ -257,6 +257,21 @@ def templateFiles = [
         replacement: true
     ),
     new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/statemachine/State.java',
+        destination: 'src/main/java/frc/powerlib/statemachine/State.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/commands/RequestState.java',
+        destination: 'src/main/java/frc/robot/commands/RequestState.java',
+        replacement: true
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/subsystems/states/idle/IdleState.java',
+        destination: 'src/main/java/frc/robot/subsystems/states/idle/IdleState.java',
+        replacement: true
+    ),
+    new TemplateFile(
         source: 'replacements/src/main/java/frc/robot/constants/SwerveConstants.java',
         destination: 'src/main/java/frc/robot/constants/SwerveConstants.java',
         replacement: true

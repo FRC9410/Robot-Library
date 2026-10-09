@@ -5,11 +5,15 @@
 package frc.robot.subsystems;
 
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import frc.powerlib.statemachine.State;
 import frc.powerlib.subsystems.AbsolutePositionSubsystem;
 import frc.powerlib.subsystems.RelativePositionSubsystem;
 import frc.powerlib.subsystems.VelocitySubsystem;
 import frc.powerlib.subsystems.VelocityTorqueSubsystem;
 import frc.robot.Constants;
+import frc.robot.subsystems.states.idle.IdleState;
+import java.util.List;
+import java.util.Objects;
 
 public class StateMachine extends SubsystemBase {
   public enum RobotState {
@@ -23,23 +27,51 @@ public class StateMachine extends SubsystemBase {
   // POWERLIB GENERATED SUBSYSTEMS END - DO NOT DELETE
 
   private RobotState wantedState = Constants.StateMachine.DEFAULT_STATE;
-  private RobotState actualState = Constants.StateMachine.DEFAULT_STATE;
+  private RobotState currentState = Constants.StateMachine.DEFAULT_STATE;
+  // Registration order is priority: the first matching handler wins.
+  private final List<State<RobotState, StateMachine>> states = List.of(new IdleState());
+  private State<RobotState, StateMachine> activeState = states.get(0);
 
   public RobotState getWantedState() {
     return wantedState;
   }
 
   public void setWantedState(RobotState wantedState) {
-    this.wantedState = wantedState;
+    this.wantedState = Objects.requireNonNull(wantedState);
   }
 
-  /** Update this when the state controller actually transitions, independently of its demand. */
-  public RobotState getActualState() { return actualState; }
+  public RobotState getCurrentState() {
+    return currentState;
+  }
+
+  /** The dashboard's actual state is the same state exposed to robot commands. */
+  public RobotState getActualState() { return getCurrentState(); }
 
   public void setActualState(RobotState actualState) {
-    this.actualState = java.util.Objects.requireNonNull(actualState);
+    this.currentState = Objects.requireNonNull(actualState);
+  }
+
+  public void execute() {
+    selectState();
+    activeState.execute(wantedState, this);
+  }
+
+  private void selectState() {
+    if (wantedState == currentState) {
+      return;
+    }
+
+    for (State<RobotState, StateMachine> state : states) {
+      if (state.match(wantedState, this)) {
+        activeState = state;
+        return;
+      }
+    }
+    // Keep running the current state until a handler can accept the request.
   }
 
   @Override
-  public void periodic() {}
+  public void periodic() {
+    execute();
+  }
 }

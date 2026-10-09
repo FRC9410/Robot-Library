@@ -70,7 +70,7 @@ foreach ($swerveSource in @($oldSwerve, $oldSwerve.Replace('    frc.powerlib.uti
 }
 $statePath = Join-Path $fixture 'StateMachine.java'
 $stateTemplate = Get-Content (Join-Path $root 'templates/replacements/src/main/java/frc/robot/subsystems/StateMachine.java') -Raw -Encoding UTF8
-$oldState = [regex]::Replace($stateTemplate, '(?m)^  private RobotState actualState.*\r?\n', '')
+$oldState = [regex]::Replace($stateTemplate.Replace('currentState', 'actualState'), '(?m)^  private RobotState actualState.*\r?\n', '')
 $oldState = [regex]::Replace($oldState, '(?m)^  public RobotState getActualState\(\).*\r?\n', '')
 $oldState = [regex]::Replace($oldState, '(?ms)^  public void setActualState\(RobotState actualState\).*?^  \}\r?\n', '')
 [IO.File]::WriteAllText($statePath, $oldState)

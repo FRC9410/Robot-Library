@@ -128,6 +128,30 @@ Existing installations receive `RobotContainer.java.template`; adopt its `autoBu
 field, `configureAutos()` call/method, and `getAutonomousCommand()` implementation in your
 robot container. Updating PowerLib alone preserves your existing robot container.
 
+## Robot states
+
+The PowerLib `frc.powerlib.statemachine.State<R, M>` contract requires
+`match(requestedState, stateMachine)` and `execute(requestedState, stateMachine)`.
+Robot handlers live under `frc.robot.subsystems.states`; the starter handler is
+`states.idle.IdleState`.
+
+`StateMachine.periodic()` calls `execute()`, which selects the first matching handler
+in registration order, then executes the active handler. The selection scan is skipped
+when requested and actual state agree. When no handler matches, the current handler
+continues executing and the request stays pending. Each handler reports its actual
+state with `setActualState()`; a request alone does not change actual state.
+
+Use `new RequestState(RobotState.IDLE, stateMachine)` in a controller binding or
+autonomous sequence. This instant command sets the requested state through the existing
+`setWantedState()` API. It finishes after making the request, without waiting for the
+transition. Add future handlers to the `states` list in `StateMachine` in priority order.
+Idle currently only reports `IDLE`; add robot-specific idle outputs to its `execute()`.
+
+`getCurrentState()` returns the current robot state; `getActualState()` exposes the same
+value for dashboard telemetry. The drive command receives `stateMachine::getCurrentState`
+as a supplier, so its `getCurrentState()` reads live state whenever drive logic needs it.
+Changing the request alone does not change this value.
+
 ## Telemetry Logging
 
 Subsystems continuously store their latest values through `PowerRobotContainer.setData()`

@@ -9,16 +9,27 @@ import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import frc.powerlib.utils.DriveUtil;
 import frc.robot.subsystems.Swerve;
+import frc.robot.subsystems.StateMachine.RobotState;
+import java.util.Objects;
+import java.util.function.Supplier;
 
 public class SwerveDriveCommand extends Command {
   private final Swerve drivetrain;
   private final CommandXboxController controller;
+  private final Supplier<RobotState> currentStateSupplier;
 
-  public SwerveDriveCommand(Swerve drivetrain, CommandXboxController controller) {
+  public SwerveDriveCommand(
+      Swerve drivetrain, CommandXboxController controller, Supplier<RobotState> currentStateSupplier) {
     this.drivetrain = drivetrain;
     this.controller = controller;
+    this.currentStateSupplier = Objects.requireNonNull(currentStateSupplier);
 
     addRequirements(drivetrain);
+  }
+
+  /** Reads the robot's latest state when needed by drive behavior. */
+  public RobotState getCurrentState() {
+    return currentStateSupplier.get();
   }
 
   @Override

@@ -65,7 +65,7 @@ function Invoke-PowerToolNpm {
     param([Parameter(Mandatory = $true)][string[]]$Arguments)
     $isWindowsHost = [System.Environment]::OSVersion.Platform -eq 'Win32NT'
     $commandName = if ($isWindowsHost) { 'npm.cmd' } else { 'npm' }
-    $npmCommand = Get-Command $commandName -CommandType Application -ErrorAction Stop
+    $npmCommand = Get-Command $commandName -CommandType Application -ErrorAction Stop | Select-Object -First 1
     # npm warnings on stderr must not terminate Windows PowerShell before npm finishes.
     $ErrorActionPreference = 'Continue'
     $PSNativeCommandUseErrorActionPreference = $false

@@ -4,6 +4,7 @@ Run these checks from the Robot-Library root in PowerShell 7. They write fixture
 
 ```powershell
 ./tests/run-library-checks.ps1
+./tests/state-machine-check.ps1
 ./tests/generator-checks.ps1
 ./tests/generated-robot-check.ps1
 Push-Location powerlib-dashboard
@@ -17,6 +18,11 @@ try {
 ```
 
 The generated-robot check runs the actual installer in an isolated fixture, compiles the full robot template with real WPILib/vendor jars, runs the actual generator using Windows PowerShell 5.1, verifies unchanged Java sources on a second update, and compiles all four generated mechanism types. Supply `-GradleExecutable` if Gradle 8.11 is outside the normal WPILib cache. This validates Java compilation, not deployment to a roboRIO.
+
+The state-machine check runs the template state logic and real WPILib instant command
+with hardware stubs and one test-only enum value. It checks first-match priority,
+guarded transitions, retrying pending requests, skipping the search when already in the
+requested state, continued active execution, returning to Idle and request/actual separation.
 
 | Step | Change reviewed | Regression coverage |
 | --- | --- | --- |

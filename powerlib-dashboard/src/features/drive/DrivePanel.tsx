@@ -219,7 +219,7 @@ export function DrivePanel({ subsystems = [] }: { subsystems?: GeneratedSubsyste
       {model.poseSupported && <div className="drive-pose">
         <span>X <b>{metric(model.pose?.x, 2)}<small> m</small></b></span>
         <span>Y <b>{metric(model.pose?.y, 2)}<small> m</small></b></span>
-        <span className="drive-heading" title="Heading">H <b>{metric(model.pose?.heading, 0)}°</b>
+        <span className="drive-heading">Heading <b>{metric(model.pose?.heading, 0)}°</b>
           {model.headingSetpoint !== undefined && <small className="drive-setpoint">Setpoint: {metric(model.headingSetpoint, 0)}°</small>}
         </span>
       </div>}
