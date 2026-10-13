@@ -51,13 +51,13 @@
 .drive-top-metric.drive-danger { background: #352129; border-color: #84505c; color: #ff7986; }
 .drive-card .drive-warning { color: #ffaf77; }
 .drive-subsystems { flex: 0 0 110px; display: flex; gap: 8px; min-width: 0; min-height: 0; overflow-x: auto; scrollbar-width: thin; }
-.drive-drivetrain { flex: 0 0 270px; box-sizing: border-box; padding: 9px 12px; border: 1px solid #303b46; border-radius: 7px; background: #192330; display: flex; flex-direction: column; justify-content: space-between; min-height: 0; overflow: hidden; }
+.drive-drivetrain { flex: 0 0 135px; box-sizing: border-box; padding: 9px 12px; border: 1px solid #303b46; border-radius: 7px; background: #192330; display: flex; flex-direction: column; justify-content: space-between; min-height: 0; overflow: hidden; }
 .drive-mechanism { flex: 1 0 130px; box-sizing: border-box; min-width: 0; padding: 9px 12px; border: 1px solid #365b4c; border-radius: 7px; background: #172b26; display: flex; flex-direction: column; justify-content: center; gap: 5px; }
 .drive-mechanism .drive-card-heading { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drive-mechanism-value { white-space: nowrap; font-size: 28px; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .drive-mechanism-value small { font-size: 10px; color: #9baabd; }
 .drive-setpoint, .drive-pose .drive-setpoint { display: block; color: #facc15; font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.drive-heading .drive-setpoint { grid-column: 2; text-align: right; }
+.drive-heading .drive-setpoint { grid-column: 1 / -1; text-align: right; }
 .drive-drivetrain.healthy { background: #172b26; border-color: #365b4c; }
 .drive-drivetrain.fault { background: #342329; border-color: #84505b; }
 .drive-card-heading { font-size: 13px; line-height: 1.2; }

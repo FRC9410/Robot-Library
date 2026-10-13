@@ -298,8 +298,8 @@ public static final String[] LIMELIGHT_NAMES = {
 };
 ```
 
-The starter `Vision` subsystem handles orientation publishing, MegaTag2 reads, disabled-mode
-throttling, and Swerve pose corrections. An empty array disables camera handling. Configure each
+The starter `Vision` subsystem handles orientation publishing, MegaTag2 position, independent
+MegaTag1 heading correction, disabled-mode throttling, and Swerve pose corrections. An empty array disables camera handling. Configure each
 camera's mounting pose, calibration, team number, and AprilTag pipeline in its own Limelight web UI;
 names alone cannot describe mounting geometry. All measurements use blue-origin field coordinates.
 
@@ -307,8 +307,21 @@ The reusable `frc.powerlib.vision.LimelightVision` class selects the first accep
 with position uncertainty `0.07 * distance^2 / tagCount` and
 average tag distance below 6.25 meters. It additionally rejects malformed, non-finite, repeated,
 future-dated, and stale measurements (over 0.5 seconds old, including latency). Every update consumes
-all current camera frames so skipped lower-priority frames are not replayed next loop. Vision
-corrects X/Y while preserving gyro heading. No LimelightHelpers file or extra vendordep is required.
+all current camera frames so skipped lower-priority frames are not replayed next loop. MegaTag2
+corrects X/Y and ignores its supplied heading. No LimelightHelpers file or extra vendordep is required.
+
+The starter separately reads `botpose_wpiblue` (MegaTag1) to correct slow heading drift in the
+pose estimator, without resetting the physical gyro. `VisionConstants.HEADING_CONFIG` uses
+conservative defaults: at least two distinct tags, positive tag span, ambiguity at most 0.2,
+average and individual tag distances at most 4 meters, total age at most 0.2 seconds, and
+drivetrain angular speed at most 45 degrees/second. The heading must be within 15 degrees of the
+historical drivetrain heading at capture time. Accepted observations use 20 degrees of heading
+standard deviation (stored in radians) for gradual correction, while ignoring MegaTag1 X/Y.
+The robot applies accepted measurements in timestamp order and discards late older measurements.
+Heading corrections are suppressed while disabled, during Test mode, or when pose updates are turned off;
+camera frames are still consumed. `Vision/Heading/ErrorDegrees` and `Vision/Heading/Accepted` are
+logged through CTRE SignalLogger, outside the dashboard data map. Large heading offsets still
+require an intentional heading/pose reset; validate camera mounting and these limits on the robot.
 
 For another drivetrain, call the reader once per robot loop and feed its optional result to your
 own pose estimator:
@@ -326,6 +339,14 @@ cameras.update(yawDegrees, pitchDegrees, rollDegrees).ifPresent(measurement -> {
 `LimelightVisionConfig` exposes the base position uncertainty, maximum tag distance, and maximum
 measurement age. `setMeasurementStdDevScale()` accepts robot-specific uncertainty adjustments,
 such as trusting vision more during wheel slip; wheel-slip detection is left to the robot.
+The three-argument `update()` above remains position-only. For heading candidates, construct with
+`new LimelightVision(positionConfig, headingConfig, cameraNames)`, call
+`update(yawDegrees, pitchDegrees, rollDegrees, yawRateDegreesPerSecond)`, and then read
+`getHeadingMeasurement()`. Call its `correctionPose(historicalPose, maxHeadingErrorDegrees)` with
+the estimator pose at the measurement timestamp, then use its heading-only `standardDeviations()`.
+`LimelightHeadingConfig` contains the uncertainty, distance, age, angular-rate, heading-error and
+ambiguity limits. In CTRE Swerve, `samplePoseAt()` needs `Utils.fpgaToCurrentTime()`; the installed
+Swerve wrapper already performs that conversion for `addVisionMeasurement()`.
 The starter enables corrections during both autonomous and teleop. Call
 `stateMachine.vision.setShouldUpdatePose(false)` to disable corrections, and `true` to restore them.
 It always suppresses corrections while the robot is disabled.

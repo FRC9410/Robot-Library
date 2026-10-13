@@ -6,13 +6,41 @@ import type { GeneratedSubsystem } from "../subsystems/types";
 import { stringifyValue } from "../subsystems/subsystemUtils";
 
 export type TuningGroup = { key: string; owner: string; kind: "subsystem" | "command" };
-export type RobotCard = TuningGroup & {
+export type RobotCard = Omit<TuningGroup, "kind"> & {
+  kind: TuningGroup["kind"] | "status";
   name: string;
   type: string;
   metrics: { label: string; value: string }[];
   tunableCount: number;
   constantsFile?: ConstantsFile;
 };
+
+const driveFields: Record<string, { label: string; unit: string }> = {
+  "Pose/XMeters": { label: "X", unit: "m" },
+  "Pose/YMeters": { label: "Y", unit: "m" },
+  "Pose/HeadingDegrees": { label: "Heading", unit: "°" },
+  HeadingSetpointDegrees: { label: "Heading setpoint", unit: "°" }
+};
+const robotStatusFields: Record<string, string> = {
+  RequestedState: "Requested state",
+  ActualState: "Actual state",
+  BatteryVolts: "Battery voltage",
+  Alliance: "Alliance",
+  MatchTimeSeconds: "Match time",
+  RioCanUtilization: "CAN utilization"
+};
+
+function robotStatusValue(field: string, value: NtTopicSnapshot["value"]) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return formatValue(value);
+  if (field === "BatteryVolts") return `${formatValue(value)} V`;
+  if (field === "MatchTimeSeconds") return value < 0 ? "—" : `${formatValue(value)} s`;
+  if (field === "RioCanUtilization") return `${formatValue(value * 100)}%`;
+  return formatValue(value);
+}
+
+function driveValue(value: NtTopicSnapshot["value"], unit: string) {
+  return typeof value === "number" && Number.isFinite(value) ? `${formatValue(value)} ${unit}` : "—";
+}
 
 function topicKey(name: string) {
   return name.split(/[^a-zA-Z0-9]+/).filter(Boolean)
@@ -95,11 +123,12 @@ export function parseTuningValue(value: TuningValue, draft: string) {
 export function createRobotCards(subsystems: GeneratedSubsystem[], data: NtTopicSnapshot[],
   tunables: NtTopicSnapshot[], files: ConstantsFile[]): RobotCard[] {
   const cards = new Map<string, RobotCard>();
-  const makeCard = (owner: string, name: string, type: string, kind: TuningGroup["kind"] = "subsystem"): RobotCard =>
+  const makeCard = (owner: string, name: string, type: string, kind: RobotCard["kind"] = "subsystem"): RobotCard =>
     ({ key: `${kind}:${owner}`, owner, kind, name, type, metrics: [], tunableCount: 0 });
   for (const [index, subsystem] of subsystems.entries()) {
     const name = subsystem.name || subsystem.id || `Subsystem ${index + 1}`;
-    const card = makeCard(topicKey(name), name, subsystem.type || "subsystem");
+    const owner = topicKey(name) === "Drive" ? "Swerve" : topicKey(name);
+    const card = makeCard(owner, owner === "Swerve" ? "Drivetrain" : name, subsystem.type || "subsystem");
     cards.set(card.key, card);
   }
   for (const topic of data) {
@@ -108,10 +137,24 @@ export function createRobotCards(subsystems: GeneratedSubsystem[], data: NtTopic
     if (!match || /^(Connected|AppliedVolts)$/i.test(match[2])) continue;
     // PowerLib publishes drivetrain readings under Drive and tunables under Swerve.
     const owner = match[1] === "Drive" ? "Swerve" : match[1];
-    const key = `subsystem:${owner}`;
-    const card = cards.get(key) ?? makeCard(owner, owner === "Swerve" ? "Drivetrain" : formatLabel(owner), "subsystem");
-    card.metrics.push({ label: formatLabel(match[2]), value: formatValue(topic.value) });
-    cards.set(key, card);
+    const field = match[2];
+    const statusLabel = owner === "Swerve" ? robotStatusFields[field] : undefined;
+    const driveField = owner === "Swerve" ? driveFields[field] : undefined;
+    // Keep the pose struct and transport metadata available in NT, outside these readouts.
+    if (owner === "Swerve" && !statusLabel && !driveField) continue;
+    if (driveField && field === "HeadingSetpointDegrees"
+      && (typeof topic.value !== "number" || !Number.isFinite(topic.value))) continue;
+    const card = statusLabel
+      ? cards.get("status:Robot") ?? makeCard("Robot", "Robot Status", "status", "status")
+      : cards.get(`subsystem:${owner}`) ?? makeCard(owner,
+        owner === "Swerve" ? "Drivetrain" : formatLabel(owner), owner === "Swerve" ? "drivetrain" : "subsystem");
+    const metric = { label: statusLabel ?? driveField?.label ?? formatLabel(field),
+      value: statusLabel ? robotStatusValue(field, topic.value)
+        : driveField ? driveValue(topic.value, driveField.unit) : formatValue(topic.value) };
+    const existing = card.metrics.findIndex(item => item.label === metric.label);
+    if (existing === -1) card.metrics.push(metric);
+    else card.metrics[existing] = metric;
+    cards.set(card.key, card);
   }
   // A constants file belongs on an existing mechanism card when the owner matches.
   for (const file of files) {
@@ -135,9 +178,13 @@ export function createRobotCards(subsystems: GeneratedSubsystem[], data: NtTopic
   };
   for (const card of cards.values()) {
     card.tunableCount = createTuningValues(groups.get(card.key) ?? [], card.constantsFile).length;
-    card.metrics.sort((a, b) => metricOrder(a.label) - metricOrder(b.label) || a.label.localeCompare(b.label));
+    const labels = card.kind === "status" ? Object.values(robotStatusFields)
+      : card.owner === "Swerve" ? Object.values(driveFields).map(field => field.label) : null;
+    card.metrics.sort((a, b) => labels ? labels.indexOf(a.label) - labels.indexOf(b.label)
+      : metricOrder(a.label) - metricOrder(b.label) || a.label.localeCompare(b.label));
   }
   const all = [...cards.values()];
-  const isSubsystem = (card: RobotCard) => card.type !== "constants" && card.type !== "command";
-  return [...all.filter(isSubsystem), ...all.filter(card => !isSubsystem(card)).sort((a, b) => a.name.localeCompare(b.name))];
+  const isSubsystem = (card: RobotCard) => card.kind !== "status" && card.type !== "constants" && card.type !== "command";
+  return [...all.filter(card => card.kind === "status"), ...all.filter(isSubsystem),
+    ...all.filter(card => card.kind !== "status" && !isSubsystem(card)).sort((a, b) => a.name.localeCompare(b.name))];
 }

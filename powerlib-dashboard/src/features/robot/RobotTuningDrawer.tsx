@@ -98,7 +98,7 @@ export const RobotTuningDrawer = memo(function RobotTuningDrawer({ groupKey, nam
 
   return <>
     <Drawer anchor="right" variant={wide ? "persistent" : "temporary"} open onClose={onClose}
-      sx={{ width: wide ? 360 : undefined, minHeight: 0, flexShrink: 0, "& .MuiDrawer-paper": { width: { xs: "min(100vw, 400px)", md: 360 }, position: wide ? "relative" : undefined, height: "100%", minHeight: 0, overflow: "hidden", boxSizing: "border-box" } }}>
+      sx={{ width: wide ? 270 : undefined, minHeight: 0, flexShrink: 0, "& .MuiDrawer-paper": { width: { xs: "min(100vw, 300px)", md: 270 }, position: wide ? "relative" : undefined, height: "100%", minHeight: 0, overflow: "hidden", boxSizing: "border-box" } }}>
       <Stack component="aside" aria-label={`${name} tunables`} spacing={1.5} useFlexGap sx={{ p: 2, height: "100%", minHeight: 0, boxSizing: "border-box" }}>
         <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between" }}>
           <Box><Typography variant="h6">{name}</Typography><Typography variant="body2" color="text.secondary">{values.length} value{values.length === 1 ? "" : "s"}</Typography></Box>

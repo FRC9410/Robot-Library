@@ -28,7 +28,8 @@ try {
     $installLog = Join-Path $fixture 'install.log'
     & $GradleExecutable --offline --no-daemon --console=plain -g (Join-Path $root 'build/validation-gradle-cache') -I (Join-Path $root 'install.gradle') robotLibraryInstall -PpowerlibInteractive=false -PpowerlibInstall=true -PpowerlibInstallLib=true -PpowerlibInstallTemplates=true -PpowerlibInstallVendordeps=false -PpowerlibInstallTools=false -PpowerlibInstallDashboard=false -PpowerlibInstallSkills=false -PpowerlibSkipBuild=true *> $installLog
     if ($LASTEXITCODE -ne 0) { throw (Get-Content $installLog -Tail 35 | Out-String) }
-    foreach ($helper in @('health/HealthChecks.java', 'controls/ButtonBindings.java', 'auto/Auto.java')) {
+    foreach ($helper in @('health/HealthChecks.java', 'controls/ButtonBindings.java', 'auto/Auto.java',
+        'configs/LimelightHeadingConfig.java', 'vision/LimelightVision.java')) {
         if (-not (Test-Path -LiteralPath (Join-Path $fixture "src/main/java/frc/powerlib/$helper"))) {
             throw "Fresh install omitted library helper $helper."
         }

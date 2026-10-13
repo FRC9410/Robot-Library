@@ -61,26 +61,29 @@ export function RobotPanel({ subsystems, topics, tuningRequested }: Props) {
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {cards.length === 0 && <Alert severity="info">Subsystem and constants cards appear from the project configuration or live robot data.</Alert>}
       <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 280px), 1fr))" }}>
-        {cards.map(card => <Card key={card.key} variant="outlined" sx={{ borderColor: activeKey === card.key ? "primary.main" : "divider" }}>
-          <CardActionArea aria-label={`Open ${card.name} tunables`} aria-expanded={activeKey === card.key}
-            onClick={() => setActiveKey(card.key)} sx={{ height: "100%" }}>
-            <CardContent sx={{ p: 2, minHeight: 160 }}>
-              <Stack spacing={1.25}>
-                <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between" }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>{card.name}</Typography><TuneIcon sx={{ color: "text.secondary" }} />
-                </Stack>
-                <Stack direction="row" spacing={1}><Chip label={card.type} size="small" /><Chip label={`${card.tunableCount} tunable${card.tunableCount === 1 ? "" : "s"}`} size="small" variant="outlined" /></Stack>
-                <Divider />
-                {card.metrics.length ? card.metrics.map(metric => <Stack key={metric.label} direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "baseline" }}>
-                  <Typography variant="body2" color="text.secondary">{metric.label}</Typography>
-                  <Typography sx={{ fontFamily: "monospace", overflowWrap: "anywhere", textAlign: "right" }}>{metric.value}</Typography>
-                </Stack>) : <Typography variant="body2" color="text.secondary">
-                  {card.type === "constants" || card.type === "command" ? "Open to view this group's values." : "Waiting for NetworkTables data."}
-                </Typography>}
+        {cards.map(card => {
+          const readOnly = card.kind === "status";
+          const content = <CardContent sx={{ p: 2, minHeight: 160 }}>
+            <Stack spacing={1.25}>
+              <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between" }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>{card.name}</Typography>
+                {!readOnly && <TuneIcon sx={{ color: "text.secondary" }} />}
               </Stack>
-            </CardContent>
-          </CardActionArea>
-        </Card>)}
+              {!readOnly && <Stack direction="row" spacing={1}><Chip label={card.type} size="small" /><Chip label={`${card.tunableCount} tunable${card.tunableCount === 1 ? "" : "s"}`} size="small" variant="outlined" /></Stack>}
+              <Divider />
+              {card.metrics.length ? card.metrics.map(metric => <Stack key={metric.label} direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "baseline" }}>
+                <Typography variant="body2" color="text.secondary">{metric.label}</Typography>
+                <Typography sx={{ fontFamily: "monospace", overflowWrap: "anywhere", textAlign: "right" }}>{metric.value}</Typography>
+              </Stack>) : <Typography variant="body2" color="text.secondary">
+                {card.type === "constants" || card.type === "command" ? "Open to view this group's values." : "Waiting for NetworkTables data."}
+              </Typography>}
+            </Stack>
+          </CardContent>;
+          return <Card key={card.key} variant="outlined" sx={{ borderColor: activeKey === card.key ? "primary.main" : "divider" }}>
+            {readOnly ? content : <CardActionArea aria-label={`Open ${card.name} tunables`} aria-expanded={activeKey === card.key}
+              onClick={() => setActiveKey(card.key)} sx={{ height: "100%" }}>{content}</CardActionArea>}
+          </Card>;
+        })}
       </Box>
     </Box>
     {active && <RobotTuningDrawer groupKey={active.key} name={active.name} file={active.constantsFile}

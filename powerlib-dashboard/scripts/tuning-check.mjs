@@ -101,6 +101,37 @@ assert.equal(cards[0].metrics.length, 1, "Removed health fields must stay hidden
 assert.equal(cards[0].tunableCount, 3, "A card must expose every writable variable without a saved selection");
 assert.equal(cards[1].tunableCount, 1, "Drive telemetry and Swerve tunables must share the drivetrain card");
 assert.equal(cards[1].constantsFile.id, "robot:Swerve");
+const driveData = (field, value, prefix = "/PowerLib/Subsystems/Drive/Data") =>
+  ({ name: `${prefix}/${field}`, type: "double", value });
+const robotReadings = [driveData("Pose", new ArrayBuffer(24)), driveData("PoseValid", true),
+  driveData("Pose/XMeters", 2), driveData("Pose/YMeters", 3), driveData("Pose/HeadingDegrees", -30),
+  driveData("HeadingSetpointDegrees", null), driveData("Heartbeat", 6148), driveData("Enabled", true),
+  driveData("Mode", "TELEOP"), driveData("RequestedState", "SHOOTING"), driveData("ActualState", "SPINNING_UP"),
+  driveData("BatteryVolts", 12), driveData("Alliance", "Red"), driveData("MatchTimeSeconds", -1),
+  driveData("RioCanUtilization", 0.25)];
+const statusCards = createRobotCards([{ name: "Drive" }], robotReadings, discovered, [file("Swerve")]);
+assert.deepEqual(statusCards.find(card => card.owner === "Swerve").metrics, [
+  { label: "X", value: "2 m" }, { label: "Y", value: "3 m" }, { label: "Heading", value: "-30 °" }
+], "Drivetrain must show only position and heading, hiding an inactive target and transport fields");
+const robotStatus = statusCards.find(card => card.kind === "status");
+assert.equal(statusCards[0], robotStatus, "Robot status must be a separate read-only card before subsystem cards");
+assert.deepEqual(robotStatus.metrics, [
+  { label: "Requested state", value: "SHOOTING" }, { label: "Actual state", value: "SPINNING_UP" },
+  { label: "Battery voltage", value: "12 V" }, { label: "Alliance", value: "Red" },
+  { label: "Match time", value: "—" }, { label: "CAN utilization", value: "25%" }
+]);
+assert.equal(statusCards.filter(card => card.owner === "Swerve").length, 1, "Configured Drive must merge with Swerve tunables");
+for (const target of [NaN, Infinity, null, 0, 90]) {
+  const latestCards = createRobotCards([], [...robotReadings,
+    driveData("HeadingSetpointDegrees", target, "/PowerLib/Data/Drive"),
+    driveData("Pose/XMeters", 4, "/PowerLib/Data/Drive"),
+    driveData("MatchTimeSeconds", 42, "/PowerLib/Data/Drive")], [], []);
+  const metrics = latestCards.find(card => card.owner === "Swerve").metrics;
+  assert.equal(metrics.length, Number.isFinite(target) ? 4 : 3, "Only a finite heading target may appear");
+  assert.equal(metrics[0].value, "4 m", "Aliased data paths must update the same metric without duplicate rows");
+  if (Number.isFinite(target)) assert.equal(metrics.at(-1).value, `${target} °`);
+  assert.equal(latestCards[0].metrics.find(metric => metric.label === "Match time").value, "42 s");
+}
 assert.equal(groupTunables(discovered).get("subsystem:Hood").length, 3);
 assert.ok(!cards.some(card => card.owner === "Ignored"), "Unsupported variables must not create empty live groups");
 const offlineCards = createRobotCards([{ name: "Hood" }], [], [], [hoodFile, file("Shooting")]);

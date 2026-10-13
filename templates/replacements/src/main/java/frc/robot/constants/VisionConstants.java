@@ -1,6 +1,7 @@
 package frc.robot.constants;
 
 import frc.powerlib.configs.LimelightVisionConfig;
+import frc.powerlib.configs.LimelightHeadingConfig;
 
 public class VisionConstants {
   public static final String LIMELIGHT_NAME = "limelight";
@@ -8,6 +9,7 @@ public class VisionConstants {
   // Example: {"limelight-b", "limelight-l", "limelight-r"}
   public static final String[] LIMELIGHT_NAMES = {LIMELIGHT_NAME};
   public static final LimelightVisionConfig CONFIG = LimelightVisionConfig.DEFAULT;
+  public static final LimelightHeadingConfig HEADING_CONFIG = LimelightHeadingConfig.DEFAULT;
 
   // POWERLIB CUSTOM CONSTANTS START - DO NOT DELETE
   // POWERLIB CUSTOM CONSTANTS END - DO NOT DELETE
