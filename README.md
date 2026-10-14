@@ -430,6 +430,7 @@ Power Tool is installed into the robot project as source:
 
 ```text
 power-tool/
+build-dashboard.ps1
 power-tool/scripts/power-tool.cmd
 power-tool/scripts/power-tool.ps1
 power-tool/scripts/update-power-tool.ps1
@@ -446,6 +447,16 @@ Existing JSON files in the robot project root move into `power-tool/generated/`
 automatically. If both locations contain a file, the generated copy stays active
 and the old root copy is archived under `power-tool/generated/legacy/`.
 Power Tool updates preserve generated configuration and refresh the scripts.
+
+Installs and updates also leave `build-dashboard.ps1` in the robot project root.
+To rebuild and package the installed source without updating Power Tool, run
+`npm run package:app` from `power-tool/`, or run
+`powershell -ExecutionPolicy Bypass -File .\build-dashboard.ps1 -SkipInstall`
+from the project root. The Windows app is written to
+`PowerTool-local/win-unpacked/Power Tool.exe`. Use `-Publish` (or
+`npm run package:publish`) to write to `PowerTool/` instead; this only packages
+locally and does not upload a release. Omit `-SkipInstall` when dependencies
+need to be installed.
 
 Open it on Windows from the robot project root:
 

@@ -76,6 +76,11 @@ function Invoke-PowerToolNpm {
     }
 }
 
+function Copy-PowerToolBuildScript {
+    param([Parameter(Mandatory = $true)][string]$SourceRoot, [Parameter(Mandatory = $true)][string]$RobotRoot)
+    Copy-Item -LiteralPath (Join-Path $SourceRoot 'build-dashboard.ps1') -Destination (Join-Path $RobotRoot 'build-dashboard.ps1') -Force
+}
+
 function Copy-PowerToolGeneratorTemplate {
     param([Parameter(Mandatory = $true)][string]$SourceRoot, [Parameter(Mandatory = $true)][string]$ScriptsRoot)
     $source = Join-Path $SourceRoot 'templates/replacements/src/main/java/frc/robot/subsystems/PowerDashboard.java'

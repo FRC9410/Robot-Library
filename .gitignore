@@ -26,6 +26,8 @@ PowerLibDashboard.exe
 PowerLibDashboard.exe.blockmap
 PowerTool.exe
 PowerTool.exe.blockmap
+/PowerTool-local/
+/PowerTool/
 
 win-unpacked/
 builder-debug.yml

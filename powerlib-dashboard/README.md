@@ -72,7 +72,22 @@ powershell -ExecutionPolicy Bypass -File .\power-tool\scripts\power-tool.ps1
 
 Installed launchers run `npm start`, so Power Tool opens from the built app instead of starting the Vite dev server.
 
-For a local app rebuild from this library repo, run:
+Installs and updates retain `build-dashboard.ps1` in the robot project root.
+To rebuild and package the installed app without updating Power Tool, run:
+
+```powershell
+cd power-tool
+npm run package:app
+```
+
+This uses the existing dependencies and writes to `PowerTool-local/` beside
+`power-tool/`. On Windows, launch `PowerTool-local/win-unpacked/Power Tool.exe`.
+The equivalent command from the robot root is
+`powershell -ExecutionPolicy Bypass -File .\build-dashboard.ps1 -SkipInstall`.
+Omit `-SkipInstall` when dependencies need to be installed. `-Publish` packages
+to `PowerTool/` locally; it does not upload a release.
+
+The same script also supports a local app rebuild from this library repo:
 
 ```powershell
 cd E:\code\projects\Robot-Library

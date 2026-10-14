@@ -157,6 +157,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $sourceRoot 'install.ps1') -Destination (Join-Path $dashboardScriptsPath 'install.ps1') -Force
     Copy-Item -LiteralPath (Join-Path $dashboardSource 'scripts/project-layout.ps1') -Destination (Join-Path $dashboardScriptsPath 'project-layout.ps1') -Force
     . (Join-Path $dashboardScriptsPath 'project-layout.ps1')
+    Copy-PowerToolBuildScript -SourceRoot $sourceRoot -RobotRoot $installRoot
     Copy-PowerToolGeneratorTemplate -SourceRoot $sourceRoot -ScriptsRoot $dashboardScriptsPath
 
     Push-Location $dashboardOutput
