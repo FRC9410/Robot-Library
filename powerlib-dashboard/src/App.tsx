@@ -45,7 +45,7 @@ import { NetworkTablesProvider, useNetworkTables, useTopics } from "./features/n
 import { ConnectionSettingsDialog } from "./features/networktables/ConnectionSettingsDialog";
 import { tuningModeRequestTopicName, tuningModeTopicName } from "./features/networktables/tuningUtils";
 import { RobotPanel } from "./features/robot/RobotPanel";
-import { DrivePanel } from "./features/drive/DrivePanel";
+import { DashboardPanel } from "../dashboard";
 import { LimelightsPanel } from "./features/limelights/LimelightsPanel";
 import { detectLimelights } from "./features/limelights/limelightUtils";
 import type { AppView } from "./types/app";
@@ -706,7 +706,7 @@ function AppContent() {
         ? { py: 0, pl: { xs: 2, sm: 3 }, flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" } : { py: 2 }}>
         {telemetryError && <Alert severity="warning" sx={{ m: 1 }}>{telemetryError}</Alert>}
         <Stack spacing={2} sx={activeView === "robot" ? { flex: 1, minHeight: 0 } : undefined}>
-          {activeView === "drive" && <DrivePanel subsystems={subsystemDocument.subsystems} />}
+          {activeView === "drive" && <DashboardPanel subsystems={subsystemDocument.subsystems} />}
           {activeView === "robot" && (
             <RobotPanelWithTelemetry
               subsystems={subsystemDocument.subsystems}

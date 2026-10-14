@@ -193,6 +193,8 @@ try {
     }
     $sourceSkills = Join-Path $sourceRoot "skills"
     $robotSkills = Join-Path $robotRoot "skills"
+    # Use the new layout rules before replacing app files, even on an older install.
+    . (Join-Path $source 'scripts/project-layout.ps1')
     Initialize-PowerToolLayout -RobotRoot $robotRoot
     Stop-PowerToolProcesses $toolRoot
     Reset-PowerToolAppFiles -ToolRoot $toolRoot

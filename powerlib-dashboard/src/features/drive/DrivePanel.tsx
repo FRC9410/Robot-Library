@@ -5,6 +5,8 @@ import { useNetworkTables, useTopics } from "../networktables/NetworkTablesConte
 import { discoverCameras, discoverMechanisms, getPowerLibAutoChooser, driveModel, formatTime, streamUrl, template } from "./driveModel";
 import type { DriveCamera } from "./driveModel";
 import type { GeneratedSubsystem } from "../subsystems/types";
+import type { ReactNode } from "react";
+import type { NtTopicSnapshot } from "../../networktables/nt4Client";
 import "./drive.css";
 
 type DisplaySettings = { length: number; width: number; flip: boolean; urls: Record<string, string> };
@@ -85,7 +87,13 @@ function CameraUrlSetting({ camera, url, onSave }: { camera: DriveCamera; url: s
     onBlur={() => { if (!invalid) onSave(streamUrl(draft.trim())); }} />;
 }
 
-export function DrivePanel({ subsystems = [] }: { subsystems?: GeneratedSubsystem[] }) {
+export type DrivePanelData = { topics: NtTopicSnapshot[]; drive: ReturnType<typeof driveModel>; now: number };
+
+export function DrivePanel({ subsystems = [], renderTopCards, renderSidebar }: {
+  subsystems?: GeneratedSubsystem[];
+  renderTopCards?: (data: DrivePanelData) => ReactNode;
+  renderSidebar?: (data: DrivePanelData) => ReactNode;
+}) {
   const { status, clientRef } = useNetworkTables();
   const topics = useTopics("drive");
   const [settings, setSettings] = useState(readSettings);
@@ -174,6 +182,7 @@ export function DrivePanel({ subsystems = [] }: { subsystems?: GeneratedSubsyste
       {model.topic("mode") && <section className="drive-top-metric drive-match-time" aria-label="Match time">
         <span className="drive-top-metric-label">{mode}</span><b>{formatTime(number("time"))}</b>
       </section>}
+      {renderTopCards?.({ topics, drive: model, now })}
       {model.topic("battery") && <section className="drive-top-metric drive-battery" aria-label="Battery voltage">
         <span className="drive-top-metric-label">BATTERY</span>
         <b>{metric(number("battery"))} V</b>
@@ -211,6 +220,7 @@ export function DrivePanel({ subsystems = [] }: { subsystems?: GeneratedSubsyste
           {(autoError || pending) && <small className={autoError ? "drive-warning" : ""}>{autoError || "Waiting for robot…"}</small>}
           {!model.canSelectAuto && <small>{model.live ? "Locked while enabled" : "Waiting for live disabled state"}</small>}
         </section>}
+        {renderSidebar?.({ topics, drive: model, now })}
       </aside>
     </div>
     {(model.poseSupported || mechanisms.length > 0) && <div className="drive-subsystems" role="region" aria-label="Subsystems">

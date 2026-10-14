@@ -430,6 +430,7 @@ Power Tool is installed into the robot project as source:
 
 ```text
 power-tool/
+power-tool/dashboard/index.tsx
 build-dashboard.ps1
 power-tool/scripts/power-tool.cmd
 power-tool/scripts/power-tool.ps1
@@ -447,6 +448,13 @@ Existing JSON files in the robot project root move into `power-tool/generated/`
 automatically. If both locations contain a file, the generated copy stays active
 and the old root copy is archived under `power-tool/generated/legacy/`.
 Power Tool updates preserve generated configuration and refresh the scripts.
+
+The Drive tab renders `power-tool/dashboard/index.tsx`. This project-owned
+folder starts with the generic Drive dashboard and is preserved in full during
+updates and reinstalls. Put custom dashboard components, CSS, configuration and
+assets here; files under `power-tool/src/` are managed by Robot-Library and
+replaced on updates. See the installed `power-tool/dashboard/README.md` for the
+component contract and build instructions.
 
 Installs and updates also leave `build-dashboard.ps1` in the robot project root.
 To rebuild and package the installed source without updating Power Tool, run

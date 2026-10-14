@@ -34,6 +34,15 @@ Use the prefix explorer to watch areas like:
 
 Rows appear as matching topic values arrive from NetworkTables.
 
+## Custom dashboard
+
+The Drive tab renders `dashboard/index.tsx`, which initially re-exports the
+generic Drive dashboard. Customize that entry point and keep all custom
+components, styles and assets in `dashboard/`. Installs and updates seed this
+folder only when it is missing and preserve an existing folder without merging
+or overwriting any files. The shared application and generic dashboard still
+update normally. See [the custom dashboard guide](dashboard/README.md).
+
 ## Robot tuning
 
 The Robot tab shows clickable subsystem cards with their live readings. Click a card to open all of its tunables in the side panel; there is no variable selection or separate Tuning/Constants tab. Other constants groups appear after the subsystem cards, including groups discovered from the project's constants files or live NetworkTables variables. Commands with tunables also get their own cards.

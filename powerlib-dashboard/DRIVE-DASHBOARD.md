@@ -1,5 +1,11 @@
 # Generic Drive dashboard
 
+The Drive tab renders the project-owned `dashboard/index.tsx`, initially an
+export of this generic view. Customize the component and keep its assets in
+`dashboard/` to preserve them through Power Tool updates and reinstalls. The
+generic `src/features/drive/` files remain managed by Robot-Library. See
+[the custom dashboard guide](dashboard/README.md) before moving existing edits.
+
 Power Tool opens on the **Drive** tab. It is a season-independent competition view: match time, battery voltage, robot state, and Crew tools use the game prototype's header cards. Camera thumbnails sit on the left, a field or selected camera in the center, autonomous selection on the right, and drivetrain feedback at the bottom above the connection status bar. The drivetrain card shows X, Y, signed heading and an active heading target. Requested and actual robot states appear separately beside battery voltage. Invalid pose produces a fault indication; valid pose does not establish hardware health. The layout measures the Power Tool header and uses the remaining window height without page scrolling. The camera list scrolls independently; field and camera images preserve their actual aspect ratios.
 
 No shooter, intake, hub, passing, or other game-specific telemetry is assumed. Optional information appears only when its topics exist. The bottom row discovers subsystem `Velocity` or `Position` readings in the shared data map. Each mechanism card shows its actual value and, when published, a smaller yellow setpoint directly beneath it. Velocity uses `VelocitySetpoint`; position uses `SetpointRotations` or `Setpoint`. Zero is a valid setpoint; missing, invalid, disconnected, or stale targets stay hidden. Position units come from the subsystem configuration when available. The drivetrain heading target also appears below the measured heading. A grid provides the generic field view; configure field dimensions and orientation in **Crew tools**. The initial dimensions are 16.54 × 8.07 m and must be adjusted for the field being used. Coordinates use the blue origin; flipping rotates the display without changing coordinates.
@@ -73,6 +79,11 @@ Crew tools also exports a local JSON telemetry snapshot, including binary topic 
 ## Validation
 
 Run `npm run check:drive` for discovery, URL, chooser, freshness, validity, struct-pose, and clock checks. Run `npm run build` for renderer and Electron compilation. Live verification uses an isolated NT4 server and MJPEG fixtures; actual robot cameras should also be checked on the team's network before competition.
+
+From Robot-Library, run `powershell -NoProfile -ExecutionPolicy Bypass -File
+tests/dashboard-update-check.ps1` to check that fresh installs seed the dashboard,
+custom code and assets survive reinstalls and repeated updates, and managed app
+files still refresh. This uses an isolated fixture with npm and app launch stubbed.
 
 Drivetrain displays X, Y, heading, and a heading target only while heading control is active.
 Manual rotation, command completion, cancellation, disabled mode, and Test mode clear the

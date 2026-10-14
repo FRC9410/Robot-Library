@@ -43,7 +43,7 @@ function Reset-PowerToolAppFiles {
     $resolvedToolRoot = [System.IO.Path]::GetFullPath($ToolRoot).TrimEnd('\', '/')
     if (Test-Path -LiteralPath $resolvedToolRoot) {
         foreach ($item in Get-ChildItem -LiteralPath $resolvedToolRoot -Force) {
-            if ($item.Name -in @('generated', 'scripts')) { continue }
+            if ($item.Name -in @('generated', 'scripts', 'dashboard')) { continue }
             $target = [System.IO.Path]::GetFullPath($item.FullName)
             if (-not $target.StartsWith($resolvedToolRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
                 throw "Refusing to remove a path outside Power Tool: $target"
@@ -58,6 +58,8 @@ function Copy-PowerToolAppFiles {
     param([string]$Source, [string]$Destination)
     foreach ($item in Get-ChildItem -LiteralPath $Source -Force) {
         if ($item.Name -in @('generated', 'scripts', 'node_modules', 'dist-electron', 'dist-renderer')) { continue }
+        # Seed a new project, but never merge into or replace its custom dashboard.
+        if ($item.Name -eq 'dashboard' -and (Test-Path -LiteralPath (Join-Path $Destination 'dashboard'))) { continue }
         Copy-Item -LiteralPath $item.FullName -Destination $Destination -Recurse -Force
     }
 }
