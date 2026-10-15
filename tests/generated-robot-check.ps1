@@ -29,7 +29,8 @@ try {
     & $GradleExecutable --offline --no-daemon --console=plain -g (Join-Path $root 'build/validation-gradle-cache') -I (Join-Path $root 'install.gradle') robotLibraryInstall -PpowerlibInteractive=false -PpowerlibInstall=true -PpowerlibInstallLib=true -PpowerlibInstallTemplates=true -PpowerlibInstallVendordeps=false -PpowerlibInstallTools=false -PpowerlibInstallDashboard=false -PpowerlibInstallSkills=false -PpowerlibSkipBuild=true *> $installLog
     if ($LASTEXITCODE -ne 0) { throw (Get-Content $installLog -Tail 35 | Out-String) }
     foreach ($helper in @('health/HealthChecks.java', 'controls/ButtonBindings.java', 'auto/Auto.java',
-        'configs/LimelightHeadingConfig.java', 'vision/LimelightVision.java')) {
+        'configs/LimelightHeadingConfig.java', 'configs/VisionHeadingInitializationConfig.java',
+        'vision/LimelightVision.java', 'vision/VisionHeadingInitializer.java')) {
         if (-not (Test-Path -LiteralPath (Join-Path $fixture "src/main/java/frc/powerlib/$helper"))) {
             throw "Fresh install omitted library helper $helper."
         }
@@ -59,6 +60,7 @@ try {
     foreach ($type in @('velocity', 'velocityTorque', 'absolutePosition', 'relativePosition')) {
         $name = 'Check' + $type.Substring(0, 1).ToUpperInvariant() + $type.Substring(1)
         $subsystems += @{ id=$name; name=$name; type=$type; focEnabled=$false;
+            statorCurrentLimitAmps=$(if ($type -in @('velocity', 'velocityTorque')) { 35.0 } else { '' });
             motors=@(@{role='leader'; id=$id++; neutralMode='Brake'; reversed=$true});
             ratios=@{sensorToMechanism=1; rotorToSensor=1}; motionMagic=@{cruiseVelocity=2; acceleration=10};
             cancoder=@{id=$id++; magnetOffset=0; discontinuityPoint=0.5};
@@ -81,6 +83,12 @@ try {
     [IO.File]::WriteAllText($constantsBarrel, $source)
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'generate-subsystem.ps1') -UpdateSubsystems -SkipBuild *> (Join-Path $fixture 'generate.log')
     if ($LASTEXITCODE -ne 0) { throw (Get-Content (Join-Path $fixture 'generate.log') -Tail 40 | Out-String) }
+    foreach ($name in @('CheckVelocity', 'CheckVelocityTorque')) {
+        $velocityConstants = [IO.File]::ReadAllText((Join-Path $fixture "src/main/java/frc/robot/constants/${name}Constants.java"))
+        if ($velocityConstants -notmatch 'STATOR_CURRENT_LIMIT_AMPS\s*=\s*Optional.of\(35(?:\.0)?\)') {
+            throw "Generation lost the optional stator current limit for $name."
+        }
+    }
     $configurationPath = Join-Path $fixture 'power-tool/generated/powerlib-constants.json'
     $configuration = Get-Content -LiteralPath $configurationPath -Raw | ConvertFrom-Json
     $shooting = $configuration.files.PSObject.Properties['robot:Shooting']

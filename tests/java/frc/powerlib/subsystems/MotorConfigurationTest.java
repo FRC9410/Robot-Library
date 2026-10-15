@@ -44,6 +44,34 @@ public class MotorConfigurationTest {
     assertEquals(FeedbackSensorSourceValue.FusedCANcoder, config.Feedback.FeedbackSensorSource);
   }
 
+  @Test public void velocityCurrentLimitIsOptionalAndPreservesOtherMotorSettings() {
+    var legacy = new VelocitySubsystemConfig(List.of(motor), lead, motion, "Roller", 0);
+    assertTrue(legacy.statorCurrentLimitAmps().isEmpty());
+    assertTrue(new VelocitySubsystemConfig(List.of(motor), lead, motion, "Roller")
+        .statorCurrentLimitAmps().isEmpty());
+    var defaults = new TalonFXConfiguration().CurrentLimits;
+    var unchanged = MotorConfiguration.velocity(motor, legacy).CurrentLimits;
+    assertEquals(defaults.StatorCurrentLimitEnable, unchanged.StatorCurrentLimitEnable);
+    assertEquals(defaults.StatorCurrentLimit, unchanged.StatorCurrentLimit, 0);
+
+    var limited = new VelocitySubsystemConfig(List.of(motor), lead, motion, "Roller", 0, Optional.of(35.0));
+    var config = MotorConfiguration.velocity(motor, limited);
+    assertOutput(config);
+    assertTrue(config.CurrentLimits.StatorCurrentLimitEnable);
+    assertEquals(35, config.CurrentLimits.StatorCurrentLimit, 0);
+    assertEquals(lead.kP(), config.Slot0.kP, 0);
+    assertEquals(lead.sensorToMechanismRatio(), config.Feedback.SensorToMechanismRatio, 0);
+  }
+
+  @Test public void invalidVelocityCurrentLimitsFailBeforeHardwareConfiguration() {
+    for (double invalid : new double[] {0, -1, Double.NaN, Double.POSITIVE_INFINITY}) {
+      assertThrows(IllegalArgumentException.class, () -> new VelocitySubsystemConfig(
+          List.of(motor), lead, motion, "Roller", 0, Optional.of(invalid)));
+    }
+    assertThrows(NullPointerException.class, () -> new VelocitySubsystemConfig(
+        List.of(motor), lead, motion, "Roller", 0, null));
+  }
+
   @Test public void relativePreservesOutputAndSoftLimits() {
     var mechanism = new RelativePositionSubsystemConfig(List.of(motor), lead, motion, motion,
         "Wrist", "rotations", 0, 2, -1, 0.1, 0.01, 0);

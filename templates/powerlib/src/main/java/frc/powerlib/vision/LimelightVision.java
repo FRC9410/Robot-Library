@@ -67,6 +67,15 @@ public final class LimelightVision implements AutoCloseable {
       }
       return Optional.of(new Pose2d(historicalPose.getTranslation(), pose.getRotation()));
     }
+
+    /** Move the capture-time heading error forward without undoing newer position corrections. */
+    public Optional<Pose2d> correctionPose(Pose2d historicalPose, Pose2d fusionPose,
+        double maxErrorDegrees) {
+      if (!HealthChecks.finitePose(fusionPose)
+          || correctionPose(historicalPose, maxErrorDegrees).isEmpty()) return Optional.empty();
+      var error = pose.getRotation().minus(historicalPose.getRotation());
+      return Optional.of(new Pose2d(fusionPose.getTranslation(), fusionPose.getRotation().plus(error)));
+    }
   }
 
   private static final class Camera implements AutoCloseable {

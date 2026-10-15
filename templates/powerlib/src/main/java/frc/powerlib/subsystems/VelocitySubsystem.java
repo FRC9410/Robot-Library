@@ -51,7 +51,7 @@ public class VelocitySubsystem extends PowerSubsystem {
 
   public VelocitySubsystem(VelocitySubsystemConfig config, VelocitySubsystemIO io) {
     super(config.motorConfigs(), config.subsystemName(),
-        motor -> MotorConfiguration.closedLoop(motor, config.leadConfig(), config.motionMagicConfig()),
+        motor -> MotorConfiguration.velocity(motor, config),
         io == null && !RobotBase.isSimulation());
     TalonFX leader = getLeaderMotor();
     if (leader != null) {
@@ -238,7 +238,7 @@ public class VelocitySubsystem extends PowerSubsystem {
   public boolean isRunning () {
     return isConfigured() && isRunningVelocity(inputs.velocityRotationsPerSecond);
   }
-  
+
   public void brake () {
     io.brake();
   }

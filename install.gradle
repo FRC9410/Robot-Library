@@ -118,6 +118,16 @@ def templateFiles = [
         replacement: false
     ),
     new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/configs/VisionHeadingInitializationConfig.java',
+        destination: 'src/main/java/frc/powerlib/configs/VisionHeadingInitializationConfig.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/vision/VisionHeadingInitializer.java',
+        destination: 'src/main/java/frc/powerlib/vision/VisionHeadingInitializer.java',
+        replacement: false
+    ),
+    new TemplateFile(
         source: 'powerlib/src/main/java/frc/powerlib/vision/LimelightVision.java',
         destination: 'src/main/java/frc/powerlib/vision/LimelightVision.java',
         replacement: false

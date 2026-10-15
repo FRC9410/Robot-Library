@@ -689,6 +689,7 @@ function Normalize-SubsystemConfig {
     Ensure-ObjectProperty $Subsystem.motionMagic "acceleration" "0.0"
     Ensure-ObjectProperty $Subsystem "focEnabled" $true
     Ensure-ObjectProperty $Subsystem "torqueFF" "0.0"
+    Ensure-ObjectProperty $Subsystem "statorCurrentLimitAmps" ""
 
     $type = (Get-ObjectPropertyValue $Subsystem "type" "").ToString().ToLowerInvariant()
     if ($type -eq "position") {
@@ -919,6 +920,7 @@ $motorConstants
   public static final double ROTOR_TO_SENSOR_RATIO = $($Subsystem.ratios.rotorToSensor);
   public static final boolean FOC_ENABLED = $(Get-FocEnabledExpression $Subsystem);
   public static final double TORQUE_FF = $(Get-TorqueFeedForwardExpression $Subsystem);
+  public static final Optional<Double> STATOR_CURRENT_LIMIT_AMPS = $(Get-OptionalDoubleExpression $Subsystem.statorCurrentLimitAmps);
   public static final double MOTION_MAGIC_CRUISE_VELOCITY = $($Subsystem.motionMagic.cruiseVelocity);
   public static final double MOTION_MAGIC_ACCELERATION = $($Subsystem.motionMagic.acceleration);
   public static final String NAME = "$($Metadata.PascalName)";
@@ -940,7 +942,8 @@ $motorList),
               FOC_ENABLED),
           new MotionMagicConfig(MOTION_MAGIC_CRUISE_VELOCITY, MOTION_MAGIC_ACCELERATION),
           NAME,
-          TORQUE_FF);
+          TORQUE_FF,
+          STATOR_CURRENT_LIMIT_AMPS);
 
 $CustomConstantsStartMarker
 $CustomConstantsEndMarker

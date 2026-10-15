@@ -191,6 +191,18 @@ public class LimelightVisionTest {
     assertEquals(20, gyro.getDegrees(), 1e-9);
   }
 
+  @Test public void delayedHeadingPreservesNewerPositionAndInterveningRotation() {
+    var capture = new Pose2d(2, 3, Rotation2d.fromDegrees(179));
+    var newer = new Pose2d(4, 5, Rotation2d.fromDegrees(-160));
+    var heading = new LimelightVision.HeadingMeasurement("camera",
+        new Pose2d(20, 30, Rotation2d.fromDegrees(-179)), 1, Math.toRadians(20));
+    var corrected = heading.correctionPose(capture, newer, 15).orElseThrow();
+    assertEquals(newer.getTranslation(), corrected.getTranslation());
+    assertEquals(-158, corrected.getRotation().getDegrees(), 1e-9);
+    assertTrue(heading.correctionPose(new Pose2d(), newer, 15).isEmpty());
+    assertTrue(heading.correctionPose(capture, null, 15).isEmpty());
+  }
+
   @Test public void headingConfigurationRejectsInvalidLimits() {
     assertThrows(IllegalArgumentException.class, () -> new LimelightHeadingConfig(0, 4, 0.2, 45, 15, 0.2));
     assertThrows(IllegalArgumentException.class, () -> new LimelightHeadingConfig(0.3, Double.NaN, 0.2, 45, 15, 0.2));

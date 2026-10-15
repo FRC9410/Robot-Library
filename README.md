@@ -317,11 +317,28 @@ average and individual tag distances at most 4 meters, total age at most 0.2 sec
 drivetrain angular speed at most 45 degrees/second. The heading must be within 15 degrees of the
 historical drivetrain heading at capture time. Accepted observations use 20 degrees of heading
 standard deviation (stored in radians) for gradual correction, while ignoring MegaTag1 X/Y.
-The robot applies accepted measurements in timestamp order and discards late older measurements.
-Heading corrections are suppressed while disabled, during Test mode, or when pose updates are turned off;
+Position and heading track their accepted timestamps separately. When heading arrives after a newer
+position update, the robot checks its error at capture time and carries that error through intervening
+rotation to the newer fusion time, preserving the newer X/Y estimate.
+Ordinary heading corrections are suppressed while disabled, during Test mode, or when pose updates are turned off;
 camera frames are still consumed. `Vision/Heading/ErrorDegrees` and `Vision/Heading/Accepted` are
-logged through CTRE SignalLogger, outside the dashboard data map. Large heading offsets still
-require an intentional heading/pose reset; validate camera mounting and these limits on the robot.
+logged through CTRE SignalLogger, outside the dashboard data map. Large heading offsets require
+an intentional heading/pose reset or the optional disabled initialization described below;
+validate camera mounting and these limits on the robot.
+
+Automatic heading initialization is opt-in. In `VisionConstants.java`, configure it before startup:
+
+```java
+public static final VisionHeadingInitializationConfig HEADING_INITIALIZATION_CONFIG =
+    VisionHeadingInitializationConfig.DEFAULT.withEnabled(true);
+```
+
+The default policy requires at least five distinct independent heading frames spanning 0.25 seconds,
+within a two-degree spread, while disabled with vision updates enabled. Translation speed must be
+at most 0.05 m/s and yaw rate at most 5 degrees/s, with drivetrain feedback at most 0.5 seconds old.
+Camera frames must also meet `HEADING_CONFIG` quality and age limits. The configuration record
+allows these thresholds to be adjusted. Initialization sets estimator heading once per disabled period,
+preserves X/Y and raw gyro yaw, and logs its status without adding dashboard data fields.
 
 For another drivetrain, call the reader once per robot loop and feed its optional result to your
 own pose estimator:
@@ -349,10 +366,12 @@ ambiguity limits. In CTRE Swerve, `samplePoseAt()` needs `Utils.fpgaToCurrentTim
 Swerve wrapper already performs that conversion for `addVisionMeasurement()`.
 The starter enables corrections during both autonomous and teleop. Call
 `stateMachine.vision.setShouldUpdatePose(false)` to disable corrections, and `true` to restore them.
-It always suppresses corrections while the robot is disabled.
+While disabled, only the opt-in stationary heading initialization can apply automatically.
 
-`stateMachine.vision.seedFromFreshVision()` explicitly resets the drivetrain pose from
-the last accepted camera measurement while disabled. It returns `false` when enabled,
+`stateMachine.vision.seedFromFreshVision()` explicitly resets drivetrain translation from
+the last accepted MegaTag2 measurement while disabled. It uses a fresh independent MegaTag1
+heading when available; otherwise it preserves the drivetrain heading. Frames captured before
+the reset cannot subsequently undo it. It returns `false` when enabled,
 when no accepted frame is cached, or when the frame is stale, future-dated, or invalid.
 The freshness limit comes from `Constants.Vision.CONFIG.maxMeasurementAgeSeconds()`.
 Vision keeps reading and caching accepted frames while normal pose corrections are disabled.
@@ -378,6 +397,13 @@ vendordeps/Phoenix5-replay-<latest>.json
 Define controller button commands directly in `RobotContainer.configureBindings()`.
 Power Tool's Update Code action generates subsystem and Swerve code from
 `power-tool/generated/powerlib-subsystems.json`.
+
+Velocity and velocity-torque subsystem entries accept an optional `statorCurrentLimitAmps`
+number. Update Code generates `STATOR_CURRENT_LIMIT_AMPS` and passes it to
+`VelocitySubsystemConfig`; existing entries without the setting retain Phoenix defaults.
+The value must be positive and finite. Direct Java configurations can supply an
+`Optional<Double>` as the sixth constructor argument; existing constructors remain supported.
+This is startup motor configuration and requires rebuilding and deploying after changes.
 
 The Robot tab shows clickable subsystem cards with live data. Clicking a card
 opens its complete tunable list. Constants groups without subsystem data appear

@@ -35,6 +35,16 @@ final class MotorConfiguration {
     return config;
   }
 
+  static TalonFXConfiguration velocity(MotorConfig motor,
+      frc.powerlib.configs.VelocitySubsystemConfig mechanism) {
+    TalonFXConfiguration config = closedLoop(motor, mechanism.leadConfig(), mechanism.motionMagicConfig());
+    mechanism.statorCurrentLimitAmps().ifPresent(amps -> {
+      config.CurrentLimits.StatorCurrentLimit = amps;
+      config.CurrentLimits.StatorCurrentLimitEnable = true;
+    });
+    return config;
+  }
+
   /** Same gain mapping for startup and live tuning in every closed-loop mechanism. */
   static Slot0Configs slot0(double kP, double kI, double kD, double kG,
       double kS, double kV, double kA) {
