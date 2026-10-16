@@ -190,6 +190,35 @@ field, `configureAutos()` call/method, and `getAutonomousCommand()` implementati
 robot container. Move registrations into `RobotAutos.register()` and call it before
 publishing the chooser. Updating PowerLib alone preserves your existing robot container.
 
+## Autonomous motion constraints
+
+`MotionConstraints` defines positive, finite ceilings for translation speed (m/s), translation
+acceleration (m/s²), angular speed (rad/s), and angular acceleration (rad/s²). It has no
+robot-specific defaults. `ChassisMotionLimiter` applies these limits to chassis-speed requests;
+it limits the magnitude of the translation vector and its change, including changes of direction.
+Acceleration and deceleration use the same limit. Rotation is limited independently.
+
+Each active driving command owns its limiter. Call `reset(measuredSpeeds)` on initialization,
+then `calculate(desiredSpeeds, elapsedSeconds)` on each update. All speeds must use the same
+fixed coordinate frame. For field-relative commands, convert measured robot-relative speeds
+with `ChassisSpeeds.fromRobotRelativeSpeeds(measuredSpeeds, currentHeading)` before resetting.
+Reset clamps initially excessive speeds to the velocity ceilings; hard ceilings take precedence
+over acceleration limiting at that boundary. Zero elapsed time holds the previous request;
+negative/nonfinite elapsed time and nonfinite speeds throw without changing accepted state.
+The returned `ChassisSpeeds` is independent of the limiter's internal history.
+
+These are command limits, not measured-acceleration or module-speed guarantees. The limiter
+does not add waypoint handoffs, plan braking from remaining path distance, or change command
+completion criteria. The caller retains immediate cancellation/fault stops outside the limiter.
+Use robot measurements to choose limits and validate endpoint settling and timeouts.
+
+The Swerve template provides `resetAutonomousHeadingController()` and
+`calculateAutonomousHeadingRate(currentHeading, targetHeading)`. The separate 20 ms autonomous
+PID shares configured heading gains and angle wrapping while keeping manual facing-angle history
+separate. Apply its omega through the limiter before submitting the drive request; using the
+ordinary facing-angle request would calculate rotation after the limiter. These helpers do not
+automatically change existing driving commands or teleop behavior.
+
 ## Robot states
 
 The PowerLib `frc.powerlib.statemachine.State<R, M>` contract requires

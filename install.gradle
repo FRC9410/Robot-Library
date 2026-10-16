@@ -83,6 +83,16 @@ def templateFiles = [
         replacement: false
     ),
     new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/auto/ChassisMotionLimiter.java',
+        destination: 'src/main/java/frc/powerlib/auto/ChassisMotionLimiter.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/configs/MotionConstraints.java',
+        destination: 'src/main/java/frc/powerlib/configs/MotionConstraints.java',
+        replacement: false
+    ),
+    new TemplateFile(
         source: 'powerlib/src/main/java/frc/powerlib/tuning/TuningCadence.java',
         destination: 'src/main/java/frc/powerlib/tuning/TuningCadence.java',
         replacement: false

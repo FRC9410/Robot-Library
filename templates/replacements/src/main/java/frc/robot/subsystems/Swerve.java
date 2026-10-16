@@ -14,6 +14,7 @@ import com.pathplanner.lib.config.PIDConstants;
 import com.pathplanner.lib.config.RobotConfig;
 import com.pathplanner.lib.controllers.PPHolonomicDriveController;
 import edu.wpi.first.math.Matrix;
+import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
@@ -88,6 +89,8 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
 
   private final PhoenixPIDController HEADING_CONTROLLER =
       new PhoenixPIDController(kDefaultHeadingKP, kDefaultHeadingKI, kDefaultHeadingKD);
+  private final PIDController autonomousHeadingController =
+      new PIDController(kDefaultHeadingKP, kDefaultHeadingKI, kDefaultHeadingKD);
 
   public double MAX_SPEED = kDefaultMaxSpeedMetersPerSecond;
   public double MAX_ANGULAR_RATE = kDefaultRequestMaxAngularRateRadiansPerSecond;
@@ -257,6 +260,7 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
     applyTunableValues();
     DRIVE_AT_ANGLE.HeadingController = HEADING_CONTROLLER;
     DRIVE_AT_ANGLE.HeadingController.enableContinuousInput(-Math.PI, Math.PI);
+    autonomousHeadingController.enableContinuousInput(-Math.PI, Math.PI);
     configureAutoBuilder();
   }
 
@@ -369,6 +373,7 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
       headingKI = nextHeadingKI;
       headingKD = nextHeadingKD;
       HEADING_CONTROLLER.setPID(headingKP, headingKI, headingKD);
+      autonomousHeadingController.setPID(headingKP, headingKI, headingKD);
     }
   }
 
@@ -410,6 +415,17 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
 
   public double getDriverSkewCompensation() {
     return driverSkewCompensation;
+  }
+
+  /** Reset autonomous heading history without disturbing manual facing-angle requests. */
+  public void resetAutonomousHeadingController() {
+    autonomousHeadingController.reset();
+  }
+
+  /** Unconstrained omega for the motion limiter, calculated on the 20 ms command loop. */
+  public double calculateAutonomousHeadingRate(Rotation2d currentHeading, Rotation2d targetHeading) {
+    return autonomousHeadingController.calculate(
+        currentHeading.getRadians(), targetHeading.getRadians());
   }
 
   private Double headingSetpointDegrees;
