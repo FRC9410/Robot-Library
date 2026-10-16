@@ -25,6 +25,9 @@ public final class RobotAutos {
     // Continuous sections: buildDrivePathCommand must drive all section.points() in one command
     // and settle at its endpoint. section.firstPointIndex() identifies settings by ordered leg.
     // The action between the sections remains a stop boundary, even if it finishes immediately.
+    // For bounded intermediate crossings, configure PathProgress with WaypointHandoffConfig in
+    // your path command and call reset(measuredStartingPosition) when that command initializes.
+    // Endpoints must still use CompletionChecker; crossings never replace endpoint settling.
     // autoBuilder.addAuto("Blue continuous", edu.wpi.first.wpilibj.DriverStation.Alliance.Blue,
     //     () -> new frc.powerlib.auto.Auto("Blue continuous")
     //         .withPath(approachPoint, pickupPoint, shootingPoint)

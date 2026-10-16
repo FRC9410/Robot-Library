@@ -103,6 +103,11 @@ def templateFiles = [
         replacement: false
     ),
     new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/configs/WaypointHandoffConfig.java',
+        destination: 'src/main/java/frc/powerlib/configs/WaypointHandoffConfig.java',
+        replacement: false
+    ),
+    new TemplateFile(
         source: 'powerlib/src/main/java/frc/powerlib/auto/DistanceSpeedController.java',
         destination: 'src/main/java/frc/powerlib/auto/DistanceSpeedController.java',
         replacement: false

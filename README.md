@@ -290,18 +290,18 @@ drive-step ordinal across the whole routine. Map per-leg settings by that index 
 rather than searching for matching coordinates; repeated points can have different policies.
 
 `PathWaypoint` pairs each pose with its motion constraints, completion criteria, heading-lock
-flag and positive timeout. `PathProgress` owns ordered radius-based advancement and uses
-`PathDistance` for remaining travel to the section endpoint. Call `reset()` per run and
+flag and positive timeout. `PathProgress` owns ordered advancement and uses
+`PathDistance` for remaining travel to the section endpoint. Call `reset(measuredStartingPosition)` per run and
 `advance(position)` per update. Reached intermediate points, including duplicates, advance in
 order without waiting for heading or measured-speed settling. The endpoint never advances;
-use its `CompletionChecker` to finish. This first version requires entering intermediate position
-tolerances; it has no crossing detection, lookahead, corner smoothing or cross-track correction.
+use its `CompletionChecker` to finish. The default constructor requires entering intermediate
+position tolerances. Lookahead, corner smoothing and cross-track correction remain separate work.
 
 Keep one distance controller and chassis limiter alive across the section. Direct translation
 toward the active target, but calculate its magnitude from distance remaining to the endpoint.
 `PathProgress.maxTranslationSpeed(position)` caps desired speed for the active leg, lower future
 speed limits and the final stop. A backwards pass caches exit-speed bounds, subtracting adjoining
-position tolerances from available braking distance. Normal updates take constant work except
+handoff extents from available braking distance. Normal updates take constant work except
 when advancing across several reached points. The shared limiter uses the section's highest
 translation ceiling and most conservative acceleration/angular limits. Speed transitions retain
 limiter history; per-leg caps shape desired requests and are not instantaneous measured-speed
@@ -311,6 +311,31 @@ Check the active waypoint deadline before advancing; reset that timer only on pr
 controllers at section initialization, not waypoint changes. Settle and stop at the endpoint before
 the next action. Cancellation or invalid feedback stops immediately and skips later actions.
 Validate corners, speed transitions, settling and route deadlines on hardware before competition.
+
+## Bounded waypoint crossings
+
+Opt in with `new PathProgress(waypoints, new WaypointHandoffConfig(true, maxOvershootMeters,
+maxSampleTravelMeters))`. Existing constructors use `WaypointHandoffConfig.RADIUS_ONLY`.
+Bounds must be finite and positive when crossing is enabled. The waypoint's position tolerance
+also bounds lateral error; there is no separate lateral tuning parameter.
+
+For each intermediate target, consecutive positions must cross its arrival plane in the incoming
+leg's forward direction. Both the interpolated crossing and current position must be within the
+lateral tolerance, the current overshoot must be within its bound, and the sample displacement
+must be within its bound. Multiple crossings in one update must occur in path order. Duplicates
+inherit the last nonzero incoming direction and retain their own tolerance. Leading zero-length
+legs may use the seeded starting observation as arrival evidence.
+
+Seed history from measured position with `reset(position)`; the first leg uses that origin and
+later legs use preceding waypoints. With unseeded `reset()`, the first observation establishes
+history without proving a crossing. Invalid observations clear crossing evidence. Rejected jumps
+are consumed so they cannot be replayed; the ordinary current-position radius check still applies.
+Small pose corrections cannot be distinguished from movement using position samples alone.
+
+Cached braking bounds account for the larger intermediate handoff regions, while approach control
+still permits reaching tight intermediate radii. Endpoints keep their original stopping tolerance
+and never complete from a crossing. Check deadlines before advancement and keep controller history
+across accepted handoffs. This feature changes target selection, not steering toward the segment.
 
 ## Robot states
 
