@@ -3,9 +3,20 @@ package frc.powerlib.health;
 import static org.junit.Assert.*;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import org.junit.Test;
 
 public class HealthChecksTest {
+  @Test public void invalidMeasuredSpeedsAreUnhealthy() {
+    assertTrue(HealthChecks.finiteSpeeds(new ChassisSpeeds(1, -2, 3)));
+    assertFalse(HealthChecks.finiteSpeeds(null));
+    for (double invalid : new double[] {Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
+      assertFalse(HealthChecks.finiteSpeeds(new ChassisSpeeds(invalid, 0, 0)));
+      assertFalse(HealthChecks.finiteSpeeds(new ChassisSpeeds(0, invalid, 0)));
+      assertFalse(HealthChecks.finiteSpeeds(new ChassisSpeeds(0, 0, invalid)));
+    }
+  }
+
   @Test public void freshnessRejectsStaleFutureAndInvalidTimes() {
     assertTrue(HealthChecks.isFresh(0, 0.5));
     assertTrue(HealthChecks.isFresh(0.5, 0.5));

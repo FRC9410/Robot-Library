@@ -247,6 +247,36 @@ and its list must end at the next intended stop. Do not include travel after a s
 blocking action in a command that still ends at an intermediate point. The existing `Auto` API
 continues to build separate drive commands and does not become continuous through these helpers.
 
+## Stopping and settled arrival
+
+`CompletionCriteria` separates position/heading tolerances from measured translation/angular
+speed limits and a settle duration. All use meters, radians and seconds; tolerances and speed
+limits must be positive and finite, heading tolerance cannot exceed pi, and settle time may be
+zero. There are no robot-specific defaults.
+
+Each stopping command owns a `CompletionChecker`. Reset it on initialization and call
+`update(currentPose, goalPose, measuredRobotRelativeSpeeds, requireHeading, timestampSeconds)`
+once per control tick. Completion requires position, optional heading, and both measured speed
+limits to hold continuously for the settle duration. Angular speed must be low even when heading
+is unlocked. Heading error wraps across +/-pi. Invalid feedback, leaving tolerance, or backward
+time breaks the window; repeated timestamps cannot advance it. Gate stale feedback with
+`HealthChecks.driveHealthy()` before evaluating arrival. Cache the returned result so command
+`isFinished()` only reads state, without advancing a timer, controller, or checker.
+
+`DistanceSpeedController.calculateStopping(distance, feedforward, translationTolerance, constraints)`
+caps its ordinary PID/feedforward request at `sqrt(2 * maxAcceleration * distanceOutsideTolerance)`
+and the maximum translation speed. Inside position tolerance it resets PID history and requests
+zero translation. `MotionConstraints.maxAngularSpeedToStop(angleOutsideTolerance)` provides the
+equivalent angular ceiling. Request zero omega inside heading tolerance and reset the heading
+controller. Pass normal braking requests through `ChassisMotionLimiter`; fault and cancellation
+stops bypass it immediately. These request envelopes do not guarantee physical stopping distance.
+
+Check explicit command deadlines during execution and abort the sequence on failure. In particular,
+a timed-out final aiming turn must not fall through to shooting. Guard later state-request commands
+as well: a sequential group can initialize its next command in the same tick that a failed move ends.
+Validate speed thresholds, deceleration and settling on the robot without silently extending deadlines.
+Continuous motion and waypoint handoffs remain separate work.
+
 ## Robot states
 
 The PowerLib `frc.powerlib.statemachine.State<R, M>` contract requires

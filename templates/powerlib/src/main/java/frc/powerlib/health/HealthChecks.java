@@ -5,16 +5,22 @@ import com.ctre.phoenix6.hardware.CANcoder;
 import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.swerve.SwerveDrivetrain;
 import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.wpilibj.RobotBase;
 import frc.powerlib.subsystems.PowerSubsystem;
 
-/** Shared feedback checks. Simulation requires configured mechanisms and a finite pose. */
+/** Shared feedback checks. Simulation requires configured mechanisms and finite drivetrain feedback. */
 public final class HealthChecks {
   private HealthChecks() {}
 
   public static boolean finitePose(Pose2d pose) {
     return pose != null && Double.isFinite(pose.getX()) && Double.isFinite(pose.getY())
         && Double.isFinite(pose.getRotation().getRadians());
+  }
+
+  public static boolean finiteSpeeds(ChassisSpeeds speeds) {
+    return speeds != null && Double.isFinite(speeds.vxMetersPerSecond)
+        && Double.isFinite(speeds.vyMetersPerSecond) && Double.isFinite(speeds.omegaRadiansPerSecond);
   }
 
   public static boolean isFresh(double ageSeconds, double maxAgeSeconds) {
@@ -35,7 +41,9 @@ public final class HealthChecks {
 
   /** Phoenix drivetrain with CANcoder module feedback; does not wait for signals or configure devices. */
   public static boolean driveHealthy(SwerveDrivetrain<?, ?, ? extends CANcoder> drive, double maxAgeSeconds) {
-    if (drive == null || !finitePose(drive.getState().Pose)) return false;
+    if (drive == null) return false;
+    var state = drive.getState();
+    if (!finitePose(state.Pose) || !finiteSpeeds(state.Speeds)) return false;
     if (RobotBase.isSimulation()) return true;
     if (!signalHealthy(drive.getPigeon2().getYaw(), maxAgeSeconds)) return false;
     for (var module : drive.getModules()) {

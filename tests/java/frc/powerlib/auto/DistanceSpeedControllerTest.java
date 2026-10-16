@@ -3,10 +3,36 @@ package frc.powerlib.auto;
 import static org.junit.Assert.*;
 import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.geometry.Translation2d;
+import frc.powerlib.configs.MotionConstraints;
 import java.util.List;
 import org.junit.Test;
 
 public class DistanceSpeedControllerTest {
+  @Test public void stoppingRequestsRespectBrakingEnvelopeAndResetInsideTolerance() {
+    var constraints = new MotionConstraints(2, 1, 3, 2);
+    try (var controller = new DistanceSpeedController(new PIDController(10, 0, 0.2), 0.1)) {
+      assertEquals(2, controller.calculateStopping(10, 0.5, 0.1, constraints), 1e-9);
+      assertEquals(Math.sqrt(0.2), controller.calculateStopping(0.2, 0.5, 0.1, constraints), 1e-9);
+      assertEquals(0, controller.calculateStopping(0.1, 0.5, 0.1, constraints), 0);
+      assertEquals(0, controller.calculateStopping(0, 0.5, 0.1, constraints), 0);
+      controller.calculateStopping(1, 0, 0.1, constraints);
+      for (double invalid : new double[] {-1, Double.NaN, Double.POSITIVE_INFINITY}) {
+        assertThrows(IllegalArgumentException.class, () -> controller.calculateStopping(invalid, 0, 0.1, constraints));
+        assertThrows(IllegalArgumentException.class, () -> controller.calculateStopping(1, invalid, 0.1, constraints));
+        assertThrows(IllegalArgumentException.class, () -> controller.calculateStopping(1, 0, invalid, constraints));
+      }
+      assertThrows(NullPointerException.class, () -> controller.calculateStopping(1, 0, 0.1, null));
+    }
+    assertEquals(0, constraints.maxTranslationSpeedToStop(0), 0);
+    assertEquals(0, constraints.maxAngularSpeedToStop(0), 0);
+    assertEquals(1, constraints.maxAngularSpeedToStop(0.25), 1e-9);
+    assertEquals(3, constraints.maxAngularSpeedToStop(100), 1e-9);
+    for (double invalid : new double[] {-1, Double.NaN, Double.POSITIVE_INFINITY}) {
+      assertThrows(IllegalArgumentException.class, () -> constraints.maxTranslationSpeedToStop(invalid));
+      assertThrows(IllegalArgumentException.class, () -> constraints.maxAngularSpeedToStop(invalid));
+    }
+  }
+
   @Test public void singlePointRequestsMatchTheOriginalDistanceAndFeedforwardCalculation() {
     var destination = new Translation2d(3, 4);
     var path = new PathDistance(List.of(destination));

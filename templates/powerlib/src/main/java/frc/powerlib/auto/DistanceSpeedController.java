@@ -1,6 +1,7 @@
 package frc.powerlib.auto;
 
 import edu.wpi.first.math.controller.PIDController;
+import frc.powerlib.configs.MotionConstraints;
 import java.util.Objects;
 
 /**
@@ -30,6 +31,21 @@ public final class DistanceSpeedController implements AutoCloseable {
     if (remainingDistanceMeters >= feedforwardThresholdMeters) speed += staticFeedforwardMetersPerSecond;
     if (!Double.isFinite(speed)) throw new IllegalArgumentException("Distance controller produced nonfinite speed");
     return speed;
+  }
+
+  /** Zero inside tolerance; outside, cap the usual request by the stopping envelope. */
+  public double calculateStopping(double remainingDistanceMeters, double staticFeedforwardMetersPerSecond,
+      double translationToleranceMeters, MotionConstraints constraints) {
+    requireNonnegative(remainingDistanceMeters, "remainingDistanceMeters");
+    requireNonnegative(staticFeedforwardMetersPerSecond, "staticFeedforwardMetersPerSecond");
+    requireNonnegative(translationToleranceMeters, "translationToleranceMeters");
+    Objects.requireNonNull(constraints, "constraints");
+    if (remainingDistanceMeters <= translationToleranceMeters) {
+      reset();
+      return 0;
+    }
+    return Math.min(calculate(remainingDistanceMeters, staticFeedforwardMetersPerSecond),
+        constraints.maxTranslationSpeedToStop(remainingDistanceMeters - translationToleranceMeters));
   }
 
   private static void requireNonnegative(double value, String name) {

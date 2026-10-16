@@ -98,6 +98,16 @@ def templateFiles = [
         replacement: false
     ),
     new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/auto/CompletionChecker.java',
+        destination: 'src/main/java/frc/powerlib/auto/CompletionChecker.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/configs/CompletionCriteria.java',
+        destination: 'src/main/java/frc/powerlib/configs/CompletionCriteria.java',
+        replacement: false
+    ),
+    new TemplateFile(
         source: 'powerlib/src/main/java/frc/powerlib/configs/MotionConstraints.java',
         destination: 'src/main/java/frc/powerlib/configs/MotionConstraints.java',
         replacement: false
