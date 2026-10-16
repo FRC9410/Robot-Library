@@ -23,6 +23,7 @@ public class Vision extends SubsystemBase implements AutoCloseable {
   private LimelightVision.Measurement lastMeasurement;
   private LimelightVision.HeadingMeasurement lastHeadingMeasurement;
   private double lastAppliedTimestamp = Double.NEGATIVE_INFINITY;
+  private double lastFusedPositionTimestamp = Double.NEGATIVE_INFINITY;
   private double lastAppliedHeadingTimestamp = Double.NEGATIVE_INFINITY;
   private String headingStatus = "Waiting for independent heading";
   private final VisionHeadingInitializer headingInitializer =
@@ -40,6 +41,9 @@ public class Vision extends SubsystemBase implements AutoCloseable {
         && HealthChecks.isFresh(Timer.getFPGATimestamp() - lastMeasurement.timestampSeconds(),
             Constants.Vision.CONFIG.maxMeasurementAgeSeconds());
   }
+
+  /** Capture timestamp of the latest fused position frame, in FPGA seconds; -infinity before fusion. */
+  public double getLastAppliedPositionTimestampSeconds() { return lastFusedPositionTimestamp; }
 
   /** Seed the pose from the last accepted frame, only while disabled and still fresh. */
   public boolean seedFromFreshVision() {
@@ -149,6 +153,7 @@ public class Vision extends SubsystemBase implements AutoCloseable {
         measurement.pose(), measurement.timestampSeconds(),
         measurement.standardDeviations());
     lastAppliedTimestamp = measurement.timestampSeconds();
+    lastFusedPositionTimestamp = measurement.timestampSeconds();
   }
 
   private boolean applyHeadingCorrection(LimelightVision.HeadingMeasurement measurement) {

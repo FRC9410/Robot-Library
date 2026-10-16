@@ -44,6 +44,12 @@ public final class RobotAutos {
     //         .addCommand(() -> buildShootCommand(robot))
     //         .buildContinuous(section -> buildDrivePathCommand(robot, section)));
 
+    // A bump crossing can be an explicit action boundary after a level approach point:
+    // .addCommand(() -> new frc.robot.commands.CrossBumpCommand(
+    //     robot.drivetrain, robot.vision, bumpConfig, false, run::abort))
+    // Measure BumpCrossingConfig on hardware; do not select speed or clearance from wheel distance.
+    // The run's abort flag must guard following actions so timeout/cancellation cannot continue the auto.
+
     // Path cursor, with the same command order:
     // autoBuilder.addAuto(new frc.powerlib.auto.Auto("Blue path")
     //     .withAlliance(edu.wpi.first.wpilibj.DriverStation.Alliance.Blue)

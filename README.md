@@ -346,6 +346,63 @@ raise errors. Abort and stop immediately instead of reusing a stale heading. The
 on legacy unlocked waypoints; `withRotationTarget(NONE)` explicitly disables all waypoint headings.
 Configure overrides before scheduling. End or fault cleanup must clear the heading setpoint.
 
+## Bump crossing command
+
+`frc.robot.commands.CrossBumpCommand` adapts Phoenix/Pigeon feedback to the reusable
+`frc.powerlib.auto.BumpCrossingCommand`. Insert it after a level approach point, before resuming
+position-based driving. It holds the gyro yaw captured at initialization and drives in the initial
+forward direction (`reversed=false`) or backward (`true`). Estimated X/Y never controls crossing
+progress, braking or completion. The existing regional routes are not automatically modified.
+
+```java
+// Illustrative starting values only; measure speed, angles, timing and clearance on your robot.
+var bump = new BumpCrossingConfig(
+    new MotionConstraints(1.0, 1.0, 1.0, 2.0), // m/s, m/s², rad/s, rad/s²
+    0.6,       // crossing speed, m/s
+    8.0, 3.0,  // climb/descent threshold and level tolerance, degrees
+    0.06, 0.15,// sustained tilt detection and level/stopped settling, seconds
+    0.25, 6.0, // continued level-ground clearance drive and total deadline, seconds
+    0.1,       // maximum gyro/vision age, seconds
+    0.05, Math.toRadians(5), // maximum measured stopped translation/angular speeds
+    true);     // require a newly fused vision position after clearance
+var crossing = new CrossBumpCommand(robot.drivetrain, robot.vision, bump, false, run::abort);
+```
+
+The phase sequence is `APPROACH → CLIMBING → DESCENDING → CLEARING → RECOVERING → SUCCEEDED`.
+Climb and descent require opposite signed pitch thresholds held for the debounce duration.
+A level crest cannot substitute for descent. Both pitch and roll must settle inside the level
+tolerance before clearance begins. Renewed tilt during clearance restarts level settling and the
+entire clearance interval. Forward driving continues through these phases, independently of
+wheel travel. Clearance is a tested time margin, not proof of rear-wheel contact.
+
+Normal velocity changes, including braking after clearance, pass through `ChassisMotionLimiter`
+in the fixed starting frame before conversion to body-relative requests. Completion requires
+zero limited requests and measured translation/angular speeds below the stopped thresholds,
+continuously for the settle interval. With vision recovery enabled, it also requires a fresh
+position frame captured after clearance and actually fused by `Vision`. Cached, unfused,
+pre-clearance, future and stale frames cannot release the command. This uses normal estimator
+fusion; it does not reset odometry or guarantee all accumulated pose error disappears in one frame.
+
+`getLastAppliedPositionTimestampSeconds()` exposes the capture time of the latest fused position
+frame, separately from heading corrections and manual-reset timestamp barriers. Vision keeps
+running normally during crossing. Set `requireVisionRecovery=false` to complete after measured
+settling without a camera; otherwise missing vision uses the same total timeout and fails.
+
+Stale/invalid feedback, a tilted starting pose, bad control time or the total deadline stop
+immediately and call the supplied abort handler. Interruption also reports failure. `isFinished()`
+only reads state; success must be checked with `wasSuccessful()` or enforced by an abort flag
+that guards subsequent autonomous actions. Ending with a timeout must never request shooting
+or initialize the next motion as though the crossing succeeded. Phases are logged under
+`Robot/Auto/Bump/Phase`; the owning run should log the abort reason.
+
+The shared input contract uses nose-up-positive pitch. The Phoenix adapter negates Pigeon pitch
+and reverses detection for backward travel. This follows the Pigeon's nose-down-positive convention
+in the [CTRE user guide](https://ctre.download/files/user-manual/Pigeon2%20User%27s%20Guide.pdf).
+Verify mount calibration and signs on the robot. The adapter refreshes cached IMU signals without
+blocking, checks real signal freshness, clears dashboard heading targets on stop, and logs transitions
+without adding dashboard data. Simulation tests drive explicit pitch samples; flat-ground swerve
+simulation does not generate a physical bump by itself.
+
 ## Bounded waypoint crossings
 
 Opt in with `new PathProgress(waypoints, new WaypointHandoffConfig(true, maxOvershootMeters,

@@ -103,6 +103,16 @@ def templateFiles = [
         replacement: false
     ),
     new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/auto/BumpCrossingCommand.java',
+        destination: 'src/main/java/frc/powerlib/auto/BumpCrossingCommand.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/configs/BumpCrossingConfig.java',
+        destination: 'src/main/java/frc/powerlib/configs/BumpCrossingConfig.java',
+        replacement: false
+    ),
+    new TemplateFile(
         source: 'powerlib/src/main/java/frc/powerlib/configs/PathWaypoint.java',
         destination: 'src/main/java/frc/powerlib/configs/PathWaypoint.java',
         replacement: false
@@ -346,6 +356,12 @@ def templateFiles = [
         source: 'replacements/src/main/java/frc/robot/constants/OIConstants.java',
         destination: 'src/main/java/frc/robot/constants/OIConstants.java',
         replacement: true
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/commands/CrossBumpCommand.java',
+        destination: 'src/main/java/frc/robot/commands/CrossBumpCommand.java',
+        replacement: true,
+        createOnly: true
     ),
     new TemplateFile(
         source: 'powerlib/src/main/java/frc/powerlib/statemachine/State.java',

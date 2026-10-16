@@ -32,6 +32,7 @@ try {
         'auto/ChassisMotionLimiter.java', 'configs/MotionConstraints.java',
         'auto/PathDistance.java', 'auto/DistanceSpeedController.java',
         'auto/PathProgress.java', 'auto/RotationTarget.java', 'configs/PathWaypoint.java',
+        'auto/BumpCrossingCommand.java', 'configs/BumpCrossingConfig.java',
         'configs/WaypointHandoffConfig.java',
         'auto/CrossTrackController.java', 'configs/CrossTrackConfig.java',
         'auto/CompletionChecker.java', 'configs/CompletionCriteria.java',
