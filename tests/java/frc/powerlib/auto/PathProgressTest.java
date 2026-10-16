@@ -12,6 +12,38 @@ import java.util.List;
 import org.junit.Test;
 
 public class PathProgressTest {
+  @Test public void segmentGeometryStaysAnchoredAndChangesOnlyWithProgressOrReset() {
+    var path = new PathProgress(List.of(point(1, 2), point(3, 2)));
+    assertThrows(IllegalStateException.class, path::currentSegment);
+    path.reset(new Translation2d(-1, 0));
+    var first = path.currentSegment();
+    assertEquals(new Translation2d(-1, 0), first.start());
+    assertEquals(new Translation2d(1, 0), first.end());
+    assertEquals(2, first.lengthMeters(), 0);
+    assertEquals(1, first.unitX(), 0);
+    path.advance(new Translation2d(0, 0.5));
+    assertSame(first, path.currentSegment());
+    path.advance(new Translation2d(1.05, 0.04));
+    var next = path.currentSegment();
+    assertEquals(new Translation2d(1, 0), next.start()); // Planned waypoint, not the off-center handoff pose.
+    assertEquals(new Translation2d(3, 0), next.end());
+    path.advance(new Translation2d(2, 0.2));
+    assertSame(next, path.currentSegment());
+    path.reset();
+    assertThrows(IllegalStateException.class, path::currentSegment);
+    path.advance(new Translation2d(-2, 0.3));
+    assertEquals(new Translation2d(-2, 0.3), path.currentSegment().start());
+    assertEquals(new Translation2d(-1, 0), first.start()); // Previously exposed geometry remains immutable.
+  }
+
+  @Test public void zeroLengthGeometryDoesNotBorrowTheCrossingTangent() {
+    var path = new PathProgress(List.of(point(1, 2), point(3, 2)));
+    path.reset(new Translation2d(1, 0));
+    assertEquals(0, path.currentSegment().lengthMeters(), 0);
+    assertEquals(0, path.currentSegment().unitX(), 0);
+    assertEquals(0, path.currentSegment().unitY(), 0);
+  }
+
   private static final CompletionCriteria ARRIVAL = new CompletionCriteria(0.1, 0.1, 0.05, 0.1, 0.1);
   private static PathWaypoint point(double x, double speed) {
     return new PathWaypoint(new Pose2d(x, 0, Rotation2d.kZero), new MotionConstraints(speed, 1, 2, 3),

@@ -295,7 +295,7 @@ flag and positive timeout. `PathProgress` owns ordered advancement and uses
 `advance(position)` per update. Reached intermediate points, including duplicates, advance in
 order without waiting for heading or measured-speed settling. The endpoint never advances;
 use its `CompletionChecker` to finish. The default constructor requires entering intermediate
-position tolerances. Lookahead, corner smoothing and cross-track correction remain separate work.
+position tolerances. Lookahead and corner smoothing remain separate work; segment correction is described below.
 
 Keep one distance controller and chassis limiter alive across the section. Direct translation
 toward the active target, but calculate its magnitude from distance remaining to the endpoint.
@@ -336,6 +336,33 @@ Cached braking bounds account for the larger intermediate handoff regions, while
 still permits reaching tight intermediate radii. Endpoints keep their original stopping tolerance
 and never complete from a crossing. Check deadlines before advancement and keep controller history
 across accepted handoffs. This feature changes target selection, not steering toward the segment.
+
+## Cross-track correction
+
+`PathProgress.currentSegment()` exposes immutable start, end, unit tangent and length geometry
+cached during initialization. The first segment starts at the measured seed position; later
+segments start at their preceding waypoint, including after an off-center handoff. Geometry stays
+fixed until reset. Zero-length segments expose a zero tangent even when crossing detection inherits
+an earlier direction. Seed the tracker before requesting its segment.
+
+Create `CrossTrackController(new CrossTrackConfig(gainPerSecond, maxCorrectionSpeedMetersPerSecond))`
+once per command. Both settings must be finite and nonnegative. Either zero disables correction;
+`CrossTrackConfig.DISABLED` retains direct-to-waypoint steering. The controller has no accumulated
+or derivative state and needs no reset.
+
+Call `calculate(segment, position, speedBudgetMetersPerSecond, desiredSpeeds)` in the fixed field
+frame. It writes only VX/VY, leaving omega to the heading controller, and allocates no objects per
+update. Inside the segment, signed lateral error produces a bounded proportional correction.
+Forward speed eases near the arrival plane while lateral error remains. The combined translation
+vector is capped to the supplied remaining-distance/braking speed budget. Apply the chassis
+motion limiter afterward so correction changes and waypoint transitions respect acceleration limits.
+
+Before the segment start, at or beyond its end, and on zero-length segments, steering recovers
+directly toward the waypoint using the same total speed budget. The lateral P cap applies to
+segment tracking; direct recovery retains ordinary point steering. Zero budget or exact arrival
+requests zero translation. Invalid or unrepresentable inputs throw without modifying the request.
+Completion criteria, waypoint selection, heading control and deadlines remain with their owners.
+Choose the gain and correction cap on the robot and validate tracking, corners, stopping and timing.
 
 ## Robot states
 

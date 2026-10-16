@@ -33,6 +33,7 @@ try {
         'auto/PathDistance.java', 'auto/DistanceSpeedController.java',
         'auto/PathProgress.java', 'configs/PathWaypoint.java',
         'configs/WaypointHandoffConfig.java',
+        'auto/CrossTrackController.java', 'configs/CrossTrackConfig.java',
         'auto/CompletionChecker.java', 'configs/CompletionCriteria.java',
         'configs/LimelightHeadingConfig.java', 'configs/VisionHeadingInitializationConfig.java',
         'vision/LimelightVision.java', 'vision/VisionHeadingInitializer.java')) {

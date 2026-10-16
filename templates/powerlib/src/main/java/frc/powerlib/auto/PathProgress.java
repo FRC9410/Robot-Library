@@ -9,6 +9,34 @@ import java.util.Objects;
 
 /** Ordered waypoint handoffs and cached speed bounds for a path ending at one intended stop. */
 public final class PathProgress {
+  /** Fixed segment geometry cached at reset. Zero-length legs keep a zero tangent here. */
+  public static final class Segment {
+    private final Translation2d start;
+    private final Translation2d end;
+    private final double length;
+    private final double unitX;
+    private final double unitY;
+
+    public Segment(Translation2d start, Translation2d end) {
+      requireFinite(start);
+      requireFinite(end);
+      this.start = start;
+      this.end = end;
+      double dx = end.getX() - start.getX();
+      double dy = end.getY() - start.getY();
+      length = Math.hypot(dx, dy);
+      if (!Double.isFinite(length)) throw new IllegalArgumentException("Segment length exceeds finite range");
+      unitX = length > 0 ? dx / length : 0;
+      unitY = length > 0 ? dy / length : 0;
+    }
+
+    public Translation2d start() { return start; }
+    public Translation2d end() { return end; }
+    public double lengthMeters() { return length; }
+    public double unitX() { return unitX; }
+    public double unitY() { return unitY; }
+  }
+
   private final List<PathWaypoint> waypoints;
   private final PathDistance distance;
   private final MotionConstraints constraints;
@@ -16,6 +44,7 @@ public final class PathProgress {
   private final WaypointHandoffConfig handoff;
   private final double[] incomingX;
   private final double[] incomingY;
+  private final Segment[] segments;
   private Translation2d previousPosition;
   private boolean directionsSeeded;
   private int index;
@@ -45,6 +74,7 @@ public final class PathProgress {
     exitSpeeds = new double[this.waypoints.size()]; // The endpoint requires zero exit speed.
     incomingX = new double[exitSpeeds.length];
     incomingY = new double[exitSpeeds.length];
+    segments = new Segment[exitSpeeds.length];
     for (int i = exitSpeeds.length - 2; i >= 0; i--) {
       var current = this.waypoints.get(i);
       var next = this.waypoints.get(i + 1);
@@ -75,6 +105,12 @@ public final class PathProgress {
   public PathWaypoint endpoint() { return waypoints.get(waypoints.size() - 1); }
   public boolean atEndpoint() { return index == waypoints.size() - 1; }
   public MotionConstraints constraints() { return constraints; }
+
+  /** Available after reset(position) or the first valid observation; geometry stays fixed within the run. */
+  public Segment currentSegment() {
+    if (!directionsSeeded) throw new IllegalStateException("Seed path geometry before requesting a segment");
+    return segments[index];
+  }
 
   /** Radius arrival or bounded forward crossings advance intermediate points; endpoints never advance. */
   public boolean advance(Translation2d position) {
@@ -144,13 +180,12 @@ public final class PathProgress {
     double uy = 0;
     for (int i = 0; i < waypoints.size(); i++) {
       var target = waypoints.get(i).pose().getTranslation();
-      double dx = target.getX() - origin.getX();
-      double dy = target.getY() - origin.getY();
-      double length = Math.hypot(dx, dy);
+      var segment = new Segment(origin, target);
+      segments[i] = segment;
       // Duplicate destinations inherit the last nonzero incoming direction.
-      if (length > 0) {
-        ux = dx / length;
-        uy = dy / length;
+      if (segment.lengthMeters() > 0) {
+        ux = segment.unitX();
+        uy = segment.unitY();
       }
       incomingX[i] = ux;
       incomingY[i] = uy;

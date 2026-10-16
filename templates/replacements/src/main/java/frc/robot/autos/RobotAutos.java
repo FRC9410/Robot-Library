@@ -28,6 +28,8 @@ public final class RobotAutos {
     // For bounded intermediate crossings, configure PathProgress with WaypointHandoffConfig in
     // your path command and call reset(measuredStartingPosition) when that command initializes.
     // Endpoints must still use CompletionChecker; crossings never replace endpoint settling.
+    // Optional CrossTrackController can steer from PathProgress.currentSegment() and the existing
+    // braking speed budget. Apply ChassisMotionLimiter after correction; tune CrossTrackConfig on hardware.
     // autoBuilder.addAuto("Blue continuous", edu.wpi.first.wpilibj.DriverStation.Alliance.Blue,
     //     () -> new frc.powerlib.auto.Auto("Blue continuous")
     //         .withPath(approachPoint, pickupPoint, shootingPoint)
