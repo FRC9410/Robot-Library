@@ -11,7 +11,7 @@ public class VisionConstants {
   public static final String[] LIMELIGHT_NAMES = {LIMELIGHT_NAME};
   public static final LimelightVisionConfig CONFIG = LimelightVisionConfig.DEFAULT;
   public static final LimelightHeadingConfig HEADING_CONFIG = LimelightHeadingConfig.DEFAULT;
-  // Opt in with DEFAULT.withEnabled(true); configure this policy before robot startup.
+  // Enabled by default; use DEFAULT.withEnabled(false) to disable before robot startup.
   public static final VisionHeadingInitializationConfig HEADING_INITIALIZATION_CONFIG =
       VisionHeadingInitializationConfig.DEFAULT;
 

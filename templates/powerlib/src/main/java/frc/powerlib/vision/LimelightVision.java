@@ -180,6 +180,12 @@ public final class LimelightVision implements AutoCloseable {
   /** Rates are degrees/second. Read getHeadingMeasurement() after this update. */
   public Optional<Measurement> update(
       double yawDegrees, double pitchDegrees, double rollDegrees, double yawRateDegreesPerSecond) {
+    return update(yawDegrees, pitchDegrees, rollDegrees, yawRateDegreesPerSecond, false);
+  }
+
+  /** Allow single-tag heading for disabled initialization; valid multi-tag frames still win. */
+  public Optional<Measurement> update(double yawDegrees, double pitchDegrees, double rollDegrees,
+      double yawRateDegreesPerSecond, boolean allowSingleTagHeading) {
     ensureOpen();
     headingMeasurement = null;
     boolean validOrientation = Double.isFinite(yawDegrees) && Double.isFinite(pitchDegrees)
@@ -197,6 +203,7 @@ public final class LimelightVision implements AutoCloseable {
 
     double now = clockSeconds.getAsDouble();
     Measurement selected = null;
+    HeadingMeasurement singleTagHeading = null;
     for (Camera camera : cameras) {
       TimestampedDoubleArray frame = camera.pose.getAtomic();
       if (frame.timestamp > camera.lastSeenTimestamp) {
@@ -208,10 +215,15 @@ public final class LimelightVision implements AutoCloseable {
       if (headingFrame.timestamp > camera.lastHeadingTimestamp) {
         camera.lastHeadingTimestamp = headingFrame.timestamp;
         if (canUseHeading && headingMeasurement == null) {
-          headingMeasurement = parseHeadingMeasurement(camera.name, headingFrame, now);
+          var candidate = parseHeadingMeasurement(camera.name, headingFrame, now, allowSingleTagHeading);
+          if (candidate != null) {
+            if (headingFrame.value[7] >= 2) headingMeasurement = candidate;
+            else if (singleTagHeading == null) singleTagHeading = candidate;
+          }
         }
       }
     }
+    if (headingMeasurement == null) headingMeasurement = singleTagHeading;
     return Optional.ofNullable(selected);
   }
 
@@ -221,9 +233,11 @@ public final class LimelightVision implements AutoCloseable {
     return Optional.ofNullable(headingMeasurement);
   }
 
-  private HeadingMeasurement parseHeadingMeasurement(String name, TimestampedDoubleArray frame, double now) {
+  private HeadingMeasurement parseHeadingMeasurement(String name, TimestampedDoubleArray frame,
+      double now, boolean allowSingleTagHeading) {
     Measurement measurement = parseMeasurement(name, frame, now);
-    if (measurement == null || measurement.tagCount() < 2 || frame.value[8] <= 0
+    if (measurement == null || (!allowSingleTagHeading && measurement.tagCount() < 2)
+        || frame.value[8] < 0 || (measurement.tagCount() >= 2 && frame.value[8] == 0)
         || measurement.averageTagDistanceMeters() > headingConfig.maxTagDistanceMeters()
         || now - measurement.timestampSeconds() > headingConfig.maxMeasurementAgeSeconds()) return null;
     double[] values = frame.value;

@@ -62,7 +62,7 @@ public final class VisionHeadingInitializer {
     }
     if (measurement == null) {
       if (!HealthChecks.isFresh(now - lastTimestamp, maxFrameAgeSeconds)) clearSamples();
-      status = "Waiting for fresh multi-tag heading";
+      status = "Waiting for fresh independent heading";
       return Optional.empty();
     }
     if (!HealthChecks.finitePose(measurement.pose())

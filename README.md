@@ -312,7 +312,7 @@ corrects X/Y and ignores its supplied heading. No LimelightHelpers file or extra
 
 The starter separately reads `botpose_wpiblue` (MegaTag1) to correct slow heading drift in the
 pose estimator, without resetting the physical gyro. `VisionConstants.HEADING_CONFIG` uses
-conservative defaults: at least two distinct tags, positive tag span, ambiguity at most 0.2,
+conservative defaults for normal enabled correction: at least two distinct tags, positive tag span, ambiguity at most 0.2,
 average and individual tag distances at most 4 meters, total age at most 0.2 seconds, and
 drivetrain angular speed at most 45 degrees/second. The heading must be within 15 degrees of the
 historical drivetrain heading at capture time. Accepted observations use 20 degrees of heading
@@ -323,21 +323,25 @@ rotation to the newer fusion time, preserving the newer X/Y estimate.
 Ordinary heading corrections are suppressed while disabled, during Test mode, or when pose updates are turned off;
 camera frames are still consumed. `Vision/Heading/ErrorDegrees` and `Vision/Heading/Accepted` are
 logged through CTRE SignalLogger, outside the dashboard data map. Large heading offsets require
-an intentional heading/pose reset or the optional disabled initialization described below;
+an intentional heading/pose reset or the disabled initialization described below;
 validate camera mounting and these limits on the robot.
 
-Automatic heading initialization is opt-in. In `VisionConstants.java`, configure it before startup:
+Automatic heading initialization is enabled by default. To disable it, configure
+`VisionConstants.java` before startup:
 
 ```java
 public static final VisionHeadingInitializationConfig HEADING_INITIALIZATION_CONFIG =
-    VisionHeadingInitializationConfig.DEFAULT.withEnabled(true);
+    VisionHeadingInitializationConfig.DEFAULT.withEnabled(false);
 ```
 
 The default policy requires at least five distinct independent heading frames spanning 0.25 seconds,
 within a two-degree spread, while disabled with vision updates enabled. Translation speed must be
 at most 0.05 m/s and yaw rate at most 5 degrees/s, with drivetrain feedback at most 0.5 seconds old.
-Camera frames must also meet `HEADING_CONFIG` quality and age limits. The configuration record
-allows these thresholds to be adjusted. Initialization sets estimator heading once per disabled period,
+While disabled, valid two-or-more-tag heading frames are preferred across cameras, with a single-tag
+fallback when none is available. A single-tag frame can have zero tag span; ambiguity, distance,
+freshness, and stationary stability checks still apply. Enabled heading corrections continue to
+require at least two tags. Camera frames must also meet `HEADING_CONFIG` quality and age limits.
+The configuration record allows these thresholds to be adjusted. Initialization sets estimator heading once per disabled period,
 preserves X/Y and raw gyro yaw, and logs its status without adding dashboard data fields.
 
 For another drivetrain, call the reader once per robot loop and feed its optional result to your
@@ -361,16 +365,18 @@ The three-argument `update()` above remains position-only. For heading candidate
 `update(yawDegrees, pitchDegrees, rollDegrees, yawRateDegreesPerSecond)`, and then read
 `getHeadingMeasurement()`. Call its `correctionPose(historicalPose, maxHeadingErrorDegrees)` with
 the estimator pose at the measurement timestamp, then use its heading-only `standardDeviations()`.
+The five-argument `update(..., allowSingleTagHeading)` overload enables the single-tag fallback;
+the robot template passes `DriverStation.isDisabled()` so enabled corrections retain the two-tag requirement.
 `LimelightHeadingConfig` contains the uncertainty, distance, age, angular-rate, heading-error and
 ambiguity limits. In CTRE Swerve, `samplePoseAt()` needs `Utils.fpgaToCurrentTime()`; the installed
 Swerve wrapper already performs that conversion for `addVisionMeasurement()`.
 The starter enables corrections during both autonomous and teleop. Call
 `stateMachine.vision.setShouldUpdatePose(false)` to disable corrections, and `true` to restore them.
-While disabled, only the opt-in stationary heading initialization can apply automatically.
+While disabled, only stationary heading initialization can apply automatically, when configured on.
 
 `stateMachine.vision.seedFromFreshVision()` explicitly resets drivetrain translation from
 the last accepted MegaTag2 measurement while disabled. It uses a fresh independent MegaTag1
-heading when available; otherwise it preserves the drivetrain heading. Frames captured before
+heading when available (including the disabled single-tag fallback); otherwise it preserves the drivetrain heading. Frames captured before
 the reset cannot subsequently undo it. It returns `false` when enabled,
 when no accepted frame is cached, or when the frame is stale, future-dated, or invalid.
 The freshness limit comes from `Constants.Vision.CONFIG.maxMeasurementAgeSeconds()`.

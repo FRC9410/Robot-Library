@@ -13,6 +13,7 @@ import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.networktables.PubSubOption;
 import frc.powerlib.configs.LimelightHeadingConfig;
 import frc.powerlib.configs.LimelightVisionConfig;
+import frc.powerlib.configs.VisionHeadingInitializationConfig;
 import java.util.Arrays;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -80,6 +81,59 @@ public class LimelightVisionTest {
         fixture.heading(values); fixture.update(0);
         assertTrue(fixture.reader.getHeadingMeasurement().isEmpty());
       }
+    }
+  }
+
+  @Test public void disabledSingleTagFallbackStillRequiresReliableFramesAndCannotReplayWhenEnabled() {
+    try (var fixture = new Fixture()) {
+      var single = frame(1, 90);
+      single[8] = 0; // A single tag has no multi-tag span.
+      fixture.heading(single);
+      fixture.reader.update(0, 0, 0, 0, true);
+      assertEquals(90, fixture.reader.getHeadingMeasurement().orElseThrow().pose().getRotation().getDegrees(), 1e-9);
+      fixture.update(0);
+      assertTrue(fixture.reader.getHeadingMeasurement().isEmpty());
+      fixture.now += 0.02;
+      fixture.heading(single);
+      fixture.update(0);
+      assertTrue(fixture.reader.getHeadingMeasurement().isEmpty());
+      fixture.now += 0.02;
+      single[17] = 0.3;
+      fixture.heading(single);
+      fixture.reader.update(0, 0, 0, 0, true);
+      assertTrue(fixture.reader.getHeadingMeasurement().isEmpty());
+    }
+  }
+
+  @Test public void disabledHeadingPrefersMultipleTagsAcrossCamerasAndFallsBackAfterRejection() {
+    try (var fixture = new Fixture()) {
+      fixture.heading(frame(1, 80));
+      fixture.publish("second", "botpose_wpiblue", frame(2, 90), fixture.now);
+      fixture.reader.update(0, 0, 0, 0, true);
+      assertEquals("second", fixture.reader.getHeadingMeasurement().orElseThrow().cameraName());
+      fixture.now += 0.02;
+      fixture.heading(frame(1, 80));
+      var unreliable = frame(2, 90);
+      unreliable[24] = 0.3;
+      fixture.publish("second", "botpose_wpiblue", unreliable, fixture.now);
+      fixture.reader.update(0, 0, 0, 0, true);
+      assertEquals("first", fixture.reader.getHeadingMeasurement().orElseThrow().cameraName());
+    }
+  }
+
+  @Test public void stableSingleTagFramesCanInitializeDisabledHeading() {
+    try (var fixture = new Fixture()) {
+      var initializer = new VisionHeadingInitializer(VisionHeadingInitializationConfig.DEFAULT, 0.2);
+      var single = frame(1, 90);
+      single[8] = 0;
+      java.util.Optional<Rotation2d> result = java.util.Optional.empty();
+      for (int i = 0; i < 14; i++) {
+        fixture.now = 10 + i * 0.02;
+        fixture.heading(single);
+        fixture.reader.update(0, 0, 0, 0, true);
+        result = initializer.update(fixture.reader.getHeadingMeasurement().orElseThrow(), fixture.now, 0, 0);
+      }
+      assertEquals(90, result.orElseThrow().getDegrees(), 1e-9);
     }
   }
 

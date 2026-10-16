@@ -12,8 +12,8 @@ public class VisionHeadingInitializerTest {
     return new HeadingMeasurement("camera", new Pose2d(2, 3, Rotation2d.fromDegrees(yaw)), time, 0.1);
   }
 
-  @Test public void automaticInitializationIsDisabledByDefault() {
-    var config = VisionHeadingInitializationConfig.DEFAULT;
+  @Test public void automaticInitializationCanBeExplicitlyDisabled() {
+    var config = VisionHeadingInitializationConfig.DEFAULT.withEnabled(false);
     var initializer = new VisionHeadingInitializer(config, 0.2);
     for (int i = 0; i < 30; i++) {
       double time = 10 + i * 0.02;
@@ -51,7 +51,8 @@ public class VisionHeadingInitializerTest {
   }
 
   @Test public void stableFramesInitializeLargeErrorsAndAverageAcrossAngleWrap() {
-    var initializer = new VisionHeadingInitializer(VisionHeadingInitializationConfig.DEFAULT.withEnabled(true), 0.2);
+    assertTrue(VisionHeadingInitializationConfig.DEFAULT.enabled());
+    var initializer = new VisionHeadingInitializer(VisionHeadingInitializationConfig.DEFAULT, 0.2);
     for (int i = 0; i < 13; i++) {
       double time = 10 + i * 0.02;
       assertTrue(initializer.update(frame(time, i % 2 == 0 ? 179.5 : -179.5), time, 0, 0).isEmpty());
@@ -64,13 +65,13 @@ public class VisionHeadingInitializerTest {
   }
 
   @Test public void repeatedFramesNeverSatisfyTheStableWindow() {
-    var initializer = new VisionHeadingInitializer(VisionHeadingInitializationConfig.DEFAULT.withEnabled(true), 0.2);
+    var initializer = new VisionHeadingInitializer(VisionHeadingInitializationConfig.DEFAULT, 0.2);
     var same = frame(10, 90);
     for (int i = 0; i < 20; i++) assertTrue(initializer.update(same, 10.1, 0, 0).isEmpty());
   }
 
   @Test public void motionStaleFutureAndMissingFramesBreakTheWindow() {
-    var initializer = new VisionHeadingInitializer(VisionHeadingInitializationConfig.DEFAULT.withEnabled(true), 0.2);
+    var initializer = new VisionHeadingInitializer(VisionHeadingInitializationConfig.DEFAULT, 0.2);
     for (int i = 0; i < 10; i++) initializer.update(frame(10 + i * 0.02, 60), 10 + i * 0.02, 0, 0);
     assertTrue(initializer.update(frame(10.2, 60), 10.2, 0.1, 0).isEmpty());
     assertEquals("Waiting for stationary robot", initializer.status());
@@ -84,7 +85,7 @@ public class VisionHeadingInitializerTest {
   }
 
   @Test public void inconsistentHeadingsAndCameraSwitchesRestartTheWindow() {
-    var initializer = new VisionHeadingInitializer(VisionHeadingInitializationConfig.DEFAULT.withEnabled(true), 0.2);
+    var initializer = new VisionHeadingInitializer(VisionHeadingInitializationConfig.DEFAULT, 0.2);
     for (int i = 0; i < 30; i++) {
       double time = 10 + i * 0.02;
       assertTrue(initializer.update(frame(time, i % 2 == 0 ? 20 : 25), time, 0, 0).isEmpty());

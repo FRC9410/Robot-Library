@@ -74,7 +74,7 @@ public class Vision extends SubsystemBase implements AutoCloseable {
 
   @Override
   public void periodic() {
-    // Opt-in initialization needs fresh independent heading while disabled.
+    // Heading initialization needs fresh independent heading while disabled.
     limelights.setThrottle(DriverStation.isDisabled()
         && !(shouldUpdatePose && Constants.Vision.HEADING_INITIALIZATION_CONFIG.enabled()));
     var state = drivetrain.getState();
@@ -82,7 +82,7 @@ public class Vision extends SubsystemBase implements AutoCloseable {
         state.Pose.getRotation().getDegrees(),
         drivetrain.getPigeon2().getPitch().getValueAsDouble(),
         drivetrain.getPigeon2().getRoll().getValueAsDouble(),
-        Math.toDegrees(state.Speeds.omegaRadiansPerSecond));
+        Math.toDegrees(state.Speeds.omegaRadiansPerSecond), DriverStation.isDisabled());
     estimate.ifPresent(measurement -> lastMeasurement = measurement);
     limelights.getHeadingMeasurement().ifPresent(measurement -> lastHeadingMeasurement = measurement);
     // Continue reading while disabled so those cached frames are not applied after enabling.

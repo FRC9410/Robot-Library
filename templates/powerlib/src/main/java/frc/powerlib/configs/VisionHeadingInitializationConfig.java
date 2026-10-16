@@ -10,7 +10,7 @@ public record VisionHeadingInitializationConfig(
     double maxYawRateDegreesPerSecond,
     double maxSignalAgeSeconds) {
   public static final VisionHeadingInitializationConfig DEFAULT =
-      new VisionHeadingInitializationConfig(false, 0.25, 5, 2, 0.05, 5, 0.5);
+      new VisionHeadingInitializationConfig(true, 0.25, 5, 2, 0.05, 5, 0.5);
 
   public VisionHeadingInitializationConfig {
     ConfigValidation.positive(minStableSeconds, "minStableSeconds");
