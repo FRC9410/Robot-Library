@@ -219,6 +219,34 @@ separate. Apply its omega through the limiter before submitting the drive reques
 ordinary facing-angle request would calculate rotation after the limiter. These helpers do not
 automatically change existing driving commands or teleop behavior.
 
+## Remaining-path distance control
+
+`PathDistance` stores an immutable list of translation destinations ending at one intended stop.
+It caches the distance after each destination during construction. Call
+`remainingDistance(currentPosition, activeDestinationIndex)` for the distance from the current
+position to that target plus all subsequent segment lengths. Each update takes constant work
+and does not allocate a new path. Repeated points are allowed. Empty paths, invalid indices,
+nonfinite positions, and unrepresentable distances are rejected.
+
+The caller owns the active index. The calculator does not advance waypoints, choose the nearest
+segment, or force progress to increase. Movement away from the active target or a vision pose
+correction can increase the distance. It measures travel via that target, rather than projection
+onto the segment or a shortcut to the final point. Waypoint handoffs remain a separate behavior.
+
+`DistanceSpeedController` owns a supplied `PIDController` and a positive feedforward threshold in
+meters. `calculate(remainingDistanceMeters, staticFeedforwardMetersPerSecond)` retains the existing
+unsigned PID-magnitude response and adds feedforward at or above the threshold. Supply feedforward
+per update so changes to the robot's speed calibration are retained. Reset between runs; close
+the controller when its owner is disposed. Invalid negative/nonfinite inputs are rejected before
+advancing PID history. Apply the resulting speed toward the active target, then apply motion limits
+separately. This extraction preserves the previous response; it does not introduce a braking profile.
+
+A point-to-point command should use a one-destination `PathDistance`, preserving its current
+stopping boundary. Only a continuous driving segment should include subsequent destinations,
+and its list must end at the next intended stop. Do not include travel after a shooting stop or
+blocking action in a command that still ends at an intermediate point. The existing `Auto` API
+continues to build separate drive commands and does not become continuous through these helpers.
+
 ## Robot states
 
 The PowerLib `frc.powerlib.statemachine.State<R, M>` contract requires
