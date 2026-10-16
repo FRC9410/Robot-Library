@@ -98,6 +98,11 @@ def templateFiles = [
         replacement: false
     ),
     new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/auto/RotationTarget.java',
+        destination: 'src/main/java/frc/powerlib/auto/RotationTarget.java',
+        replacement: false
+    ),
+    new TemplateFile(
         source: 'powerlib/src/main/java/frc/powerlib/configs/PathWaypoint.java',
         destination: 'src/main/java/frc/powerlib/configs/PathWaypoint.java',
         replacement: false

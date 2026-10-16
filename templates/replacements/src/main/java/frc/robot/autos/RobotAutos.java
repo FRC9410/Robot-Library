@@ -30,6 +30,11 @@ public final class RobotAutos {
     // Endpoints must still use CompletionChecker; crossings never replace endpoint settling.
     // Optional CrossTrackController can steer from PathProgress.currentSegment() and the existing
     // braking speed budget. Apply ChassisMotionLimiter after correction; tune CrossTrackConfig on hardware.
+    // Each PathWaypoint may use RotationTarget.NONE, fixed(heading), facePoint(fieldPoint, offset),
+    // or live(pose -> heading). For example, drive toward pickupPoint while facing a separate hubPoint:
+    // new PathWaypoint(pickupPoint, limits, arrival, RotationTarget.facePoint(hubPoint), timeoutSeconds).
+    // Resolve enabled targets once per update; use that heading for PID, telemetry and endpoint settling.
+    // All points/headings use the same field frame. A 180-degree offset faces the robot's rear at the point.
     // autoBuilder.addAuto("Blue continuous", edu.wpi.first.wpilibj.DriverStation.Alliance.Blue,
     //     () -> new frc.powerlib.auto.Auto("Blue continuous")
     //         .withPath(approachPoint, pickupPoint, shootingPoint)

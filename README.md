@@ -289,8 +289,9 @@ through the chooser's command-factory overload so each run receives fresh comman
 drive-step ordinal across the whole routine. Map per-leg settings by that index and list offset,
 rather than searching for matching coordinates; repeated points can have different policies.
 
-`PathWaypoint` pairs each pose with its motion constraints, completion criteria, heading-lock
-flag and positive timeout. `PathProgress` owns ordered advancement and uses
+`PathWaypoint` pairs each pose with its motion constraints, completion criteria, rotation target
+and positive timeout. Its legacy boolean constructor retains the original heading-lock behavior.
+`PathProgress` owns ordered advancement and uses
 `PathDistance` for remaining travel to the section endpoint. Call `reset(measuredStartingPosition)` per run and
 `advance(position)` per update. Reached intermediate points, including duplicates, advance in
 order without waiting for heading or measured-speed settling. The endpoint never advances;
@@ -311,6 +312,39 @@ Check the active waypoint deadline before advancing; reset that timer only on pr
 controllers at section initialization, not waypoint changes. Settle and stop at the endpoint before
 the next action. Cancellation or invalid feedback stops immediately and skips later actions.
 Validate corners, speed transitions, settling and route deadlines on hardware before competition.
+
+## Independent rotation targets
+
+`RotationTarget` defines a field-relative heading independently of a waypoint's translation:
+
+```java
+new PathWaypoint(destination, limits, arrival, RotationTarget.NONE, timeoutSeconds);
+new PathWaypoint(destination, limits, arrival, RotationTarget.fixed(heading), timeoutSeconds);
+new PathWaypoint(destination, limits, arrival, RotationTarget.facePoint(hubPoint), timeoutSeconds);
+new PathWaypoint(destination, limits, arrival,
+    RotationTarget.facePoint(hubPoint, Rotation2d.fromDegrees(180)), timeoutSeconds);
+new PathWaypoint(destination, limits, arrival, RotationTarget.live(pose -> aimHeading(pose)), timeoutSeconds);
+```
+
+The boolean constructor maps `true` to the pose's fixed rotation and `false` to `NONE`.
+`lockHeading()` remains available and reports whether the waypoint's policy is enabled.
+Policies do not alter translation geometry, speed planning, handoffs, alliance coordinates or timeouts.
+Targets and poses use the same field frame; `facePoint` with a 180-degree offset aims the rear.
+Fixed and disabled policies allocate no objects when read. Live functions must be side-effect free.
+
+The robot's drive command selects its override, if configured, or the active waypoint policy.
+Call `enabled()` before `resolve(pose)`, and resolve only once per control update. Use that same
+heading for the existing PID, dashboard setpoint and endpoint completion. Disabled policies request
+zero omega through the motion limiter, clear the displayed setpoint, reset heading PID history and
+skip the heading-error completion check. Measured angular speed must still settle. Enabled targets
+keep wrapped angle errors, angular braking and acceleration limits through waypoint transitions;
+intermediate handoffs do not wait for heading alignment.
+
+Invalid pose/heading values, callback exceptions and facing a point at the robot's exact position
+raise errors. Abort and stop immediately instead of reusing a stale heading. The installed robot's
+`withHeadingTarget(function)` compatibility adapter explicitly enables a live override, including
+on legacy unlocked waypoints; `withRotationTarget(NONE)` explicitly disables all waypoint headings.
+Configure overrides before scheduling. End or fault cleanup must clear the heading setpoint.
 
 ## Bounded waypoint crossings
 
