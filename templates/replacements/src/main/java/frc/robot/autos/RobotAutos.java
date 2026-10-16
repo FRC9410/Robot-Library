@@ -22,6 +22,18 @@ public final class RobotAutos {
     //     .addDriveToPoint(shootingPoint)
     //     .addCommand(() -> buildShootCommand(robot)));
 
+    // Continuous sections: buildDrivePathCommand must drive all section.points() in one command
+    // and settle at its endpoint. section.firstPointIndex() identifies settings by ordered leg.
+    // The action between the sections remains a stop boundary, even if it finishes immediately.
+    // autoBuilder.addAuto("Blue continuous", edu.wpi.first.wpilibj.DriverStation.Alliance.Blue,
+    //     () -> new frc.powerlib.auto.Auto("Blue continuous")
+    //         .withPath(approachPoint, pickupPoint, shootingPoint)
+    //         .toNextPoint().toNextPoint()
+    //         .addCommand(() -> buildSpinUpCommand(robot))
+    //         .toNextPoint()
+    //         .addCommand(() -> buildShootCommand(robot))
+    //         .buildContinuous(section -> buildDrivePathCommand(robot, section)));
+
     // Path cursor, with the same command order:
     // autoBuilder.addAuto(new frc.powerlib.auto.Auto("Blue path")
     //     .withAlliance(edu.wpi.first.wpilibj.DriverStation.Alliance.Blue)

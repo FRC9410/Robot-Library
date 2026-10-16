@@ -245,7 +245,7 @@ A point-to-point command should use a one-destination `PathDistance`, preserving
 stopping boundary. Only a continuous driving segment should include subsequent destinations,
 and its list must end at the next intended stop. Do not include travel after a shooting stop or
 blocking action in a command that still ends at an intermediate point. The existing `Auto` API
-continues to build separate drive commands and does not become continuous through these helpers.
+continues to build separate drive commands with `build(...)`. Continuous execution is opt-in below.
 
 ## Stopping and settled arrival
 
@@ -275,7 +275,42 @@ Check explicit command deadlines during execution and abort the sequence on fail
 a timed-out final aiming turn must not fall through to shooting. Guard later state-request commands
 as well: a sequential group can initialize its next command in the same tick that a failed move ends.
 Validate speed thresholds, deceleration and settling on the robot without silently extending deadlines.
-Continuous motion and waypoint handoffs remain separate work.
+More advanced waypoint handoffs remain separate work.
+
+## Continuous path execution
+
+`Auto.buildContinuous(section -> buildDrivePathCommand(section))` groups consecutive drive steps
+into one command per section. Both `addDriveToPoint()` and `withPath().toNextPoint()` participate.
+Every `addCommand()` separates sections and remains a stop boundary, including instant state
+requests. Existing `build(...)` and chooser behavior remain unchanged. Register continuous autos
+through the chooser's command-factory overload so each run receives fresh commands.
+
+`Auto.DriveSection` contains an immutable destination list and `firstPointIndex`, the zero-based
+drive-step ordinal across the whole routine. Map per-leg settings by that index and list offset,
+rather than searching for matching coordinates; repeated points can have different policies.
+
+`PathWaypoint` pairs each pose with its motion constraints, completion criteria, heading-lock
+flag and positive timeout. `PathProgress` owns ordered radius-based advancement and uses
+`PathDistance` for remaining travel to the section endpoint. Call `reset()` per run and
+`advance(position)` per update. Reached intermediate points, including duplicates, advance in
+order without waiting for heading or measured-speed settling. The endpoint never advances;
+use its `CompletionChecker` to finish. This first version requires entering intermediate position
+tolerances; it has no crossing detection, lookahead, corner smoothing or cross-track correction.
+
+Keep one distance controller and chassis limiter alive across the section. Direct translation
+toward the active target, but calculate its magnitude from distance remaining to the endpoint.
+`PathProgress.maxTranslationSpeed(position)` caps desired speed for the active leg, lower future
+speed limits and the final stop. A backwards pass caches exit-speed bounds, subtracting adjoining
+position tolerances from available braking distance. Normal updates take constant work except
+when advancing across several reached points. The shared limiter uses the section's highest
+translation ceiling and most conservative acceleration/angular limits. Speed transitions retain
+limiter history; per-leg caps shape desired requests and are not instantaneous measured-speed
+guarantees, particularly after pose corrections or target changes.
+
+Check the active waypoint deadline before advancing; reset that timer only on progress. Reset
+controllers at section initialization, not waypoint changes. Settle and stop at the endpoint before
+the next action. Cancellation or invalid feedback stops immediately and skips later actions.
+Validate corners, speed transitions, settling and route deadlines on hardware before competition.
 
 ## Robot states
 

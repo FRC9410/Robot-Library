@@ -12,6 +12,14 @@ import java.util.function.Supplier;
 
 /** Defines an ordered auto; driving commands and mechanism commands are created for each run. */
 public final class Auto {
+  /** Consecutive drive steps; the index counts destinations across the entire routine. */
+  public record DriveSection(int firstPointIndex, List<Pose2d> points) {
+    public DriveSection {
+      points = List.copyOf(points);
+      if (firstPointIndex < 0 || points.isEmpty()) throw new IllegalArgumentException("Invalid drive section");
+    }
+  }
+
   private interface Step {
     Command build(Function<Pose2d, Command> driveToPoint);
   }
@@ -70,7 +78,7 @@ public final class Auto {
     return this;
   }
 
-  /** Appends the next path destination; the previous step must finish before driving starts. */
+  /** Appends the next path destination; build() selects separate moves, buildContinuous() groups them. */
   public Auto toNextPoint() {
     if (nextPoint >= path.size()) {
       throw new IllegalStateException(name + ": no path point at index " + nextPoint + ".");
@@ -94,13 +102,34 @@ public final class Auto {
     return commandFactory(driveToPoint).get();
   }
 
+  /** Groups adjacent destinations into one driving command. Every action remains a stop boundary. */
+  public Command buildContinuous(Function<DriveSection, Command> drivePath) {
+    Objects.requireNonNull(drivePath, "Path command factory must not be null.");
+    List<Step> definition = definition();
+    CommandBuilder sequence = new CommandBuilder();
+    int pointIndex = 0;
+    for (int i = 0; i < definition.size();) {
+      Step step = definition.get(i);
+      if (step instanceof DriveStep) {
+        List<Pose2d> points = new ArrayList<>();
+        while (i < definition.size() && definition.get(i) instanceof DriveStep drive) {
+          points.add(drive.point());
+          i++;
+        }
+        DriveSection section = new DriveSection(pointIndex, points);
+        pointIndex += points.size();
+        sequence.command(() -> drivePath.apply(section));
+      } else {
+        sequence.command(() -> step.build(null));
+        i++;
+      }
+    }
+    return sequence.build().withName(name);
+  }
+
   /** Capture the definition when it is registered, keeping later builder edits out of the chooser. */
   Supplier<Command> commandFactory(Function<Pose2d, Command> driveToPoint) {
-    if (nextPoint != path.size()) {
-      throw new IllegalStateException(name + ": " + (path.size() - nextPoint)
-          + " path points have no toNextPoint() step.");
-    }
-    List<Step> definition = List.copyOf(steps);
+    List<Step> definition = definition();
     if (driveToPoint == null && definition.stream().anyMatch(step -> step instanceof DriveStep)) {
       throw new IllegalStateException(name + ": configure a drive-to-point command factory before building.");
     }
@@ -109,6 +138,14 @@ public final class Auto {
       for (Step step : definition) sequence.command(() -> step.build(driveToPoint));
       return sequence.build().withName(name);
     };
+  }
+
+  private List<Step> definition() {
+    if (nextPoint != path.size()) {
+      throw new IllegalStateException(name + ": " + (path.size() - nextPoint)
+          + " path points have no toNextPoint() step.");
+    }
+    return List.copyOf(steps);
   }
 
   private Pose2d requirePoint(Pose2d point) {

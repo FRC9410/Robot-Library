@@ -37,6 +37,55 @@ public class AutoTest {
 
   @Before public void initialize() { assertTrue(HAL.initialize(500, 0)); }
 
+  @Test public void continuousModeGroupsBothPointStylesAndKeepsActionsAsBoundaries() {
+    List<String> events = new ArrayList<>();
+    List<Auto.DriveSection> sections = new ArrayList<>();
+    var auto = new Auto("Continuous").withPath(A, B, B).toNextPoint().addDriveToPoint(A).toNextPoint()
+        .addCommand(() -> new RecordingCommand("intake", events, 1))
+        .toNextPoint().addCommand(() -> new RecordingCommand("shoot", events, 1));
+    finish(auto.buildContinuous(section -> {
+      sections.add(section);
+      return new RecordingCommand("drive" + section.firstPointIndex(), events, 2);
+    }));
+    assertEquals(List.of("drive0", "intake", "drive3", "shoot"), events);
+    assertEquals(List.of(new Auto.DriveSection(0, List.of(A, A, B)), new Auto.DriveSection(3, List.of(B))), sections);
+    assertThrows(UnsupportedOperationException.class, () -> sections.get(0).points().clear());
+  }
+
+  @Test public void continuousBuildsAreFreshRetainRequirementsAndWaitForTheWholeSection() {
+    List<String> events = new ArrayList<>();
+    List<Command> paths = new ArrayList<>();
+    Subsystem drivetrain = new Subsystem() {};
+    var auto = new Auto("Fresh paths").addDriveToPoint(A).addDriveToPoint(B)
+        .addCommand(() -> new RecordingCommand("shoot", events, 1));
+    java.util.function.Function<Auto.DriveSection, Command> factory = section -> {
+      var command = new RecordingCommand("path", events, 2, drivetrain);
+      paths.add(command);
+      return command;
+    };
+    var first = auto.buildContinuous(factory);
+    var second = auto.buildContinuous(factory);
+    assertNotSame(paths.get(0), paths.get(1));
+    assertTrue(first.getRequirements().contains(drivetrain));
+    assertEquals("Fresh paths", first.getName());
+    first.initialize();
+    first.execute();
+    assertEquals(List.of("path"), events);
+    first.execute();
+    assertEquals(List.of("path", "shoot"), events);
+    first.end(true);
+    finish(second);
+  }
+
+  @Test public void continuousModeRejectsIncompleteDefinitionsAndNullFactories() {
+    assertThrows(IllegalStateException.class, () -> new Auto("Incomplete").withPath(A, B)
+        .toNextPoint().buildContinuous(section -> Commands.none()));
+    assertThrows(NullPointerException.class, () -> new Auto("Null").buildContinuous(null));
+    assertThrows(NullPointerException.class, () -> new Auto("Null result").addDriveToPoint(A)
+        .buildContinuous(section -> null));
+    finish(new Auto("Empty continuous").buildContinuous(section -> { throw new AssertionError(); }));
+  }
+
   private static void finish(Command command) {
     command.initialize();
     for (int i = 0; i < 30 && !command.isFinished(); i++) command.execute();

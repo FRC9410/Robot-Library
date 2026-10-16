@@ -93,6 +93,16 @@ def templateFiles = [
         replacement: false
     ),
     new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/auto/PathProgress.java',
+        destination: 'src/main/java/frc/powerlib/auto/PathProgress.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/configs/PathWaypoint.java',
+        destination: 'src/main/java/frc/powerlib/configs/PathWaypoint.java',
+        replacement: false
+    ),
+    new TemplateFile(
         source: 'powerlib/src/main/java/frc/powerlib/auto/DistanceSpeedController.java',
         destination: 'src/main/java/frc/powerlib/auto/DistanceSpeedController.java',
         replacement: false

@@ -31,6 +31,7 @@ try {
     foreach ($helper in @('health/HealthChecks.java', 'controls/ButtonBindings.java', 'auto/Auto.java',
         'auto/ChassisMotionLimiter.java', 'configs/MotionConstraints.java',
         'auto/PathDistance.java', 'auto/DistanceSpeedController.java',
+        'auto/PathProgress.java', 'configs/PathWaypoint.java',
         'auto/CompletionChecker.java', 'configs/CompletionCriteria.java',
         'configs/LimelightHeadingConfig.java', 'configs/VisionHeadingInitializationConfig.java',
         'vision/LimelightVision.java', 'vision/VisionHeadingInitializer.java')) {
