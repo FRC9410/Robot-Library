@@ -68,6 +68,17 @@ public class LimelightVisionTest {
     }
   }
 
+  @Test public void preservesHeightForPositionPlausibilityChecksAndKeepsPlanarCompatibility() {
+    try (var fixture = new Fixture()) {
+      var values = frame(1, 0);
+      values[2] = 1.5;
+      fixture.publish("first", "botpose_orb_wpiblue", values, fixture.now);
+      var measurement = fixture.reader.update(0, 0, 0, 0).orElseThrow();
+      assertEquals(1.5, measurement.heightMeters(), 0);
+      assertEquals(0, new LimelightVision.Measurement("test", new Pose2d(), 10, 1, 2, .28).heightMeters(), 0);
+    }
+  }
+
   @Test public void headingNeedsMultipleDistinctReliableTags() {
     double[][] invalid = { frame(0, 5), frame(1, 5), frame(2, 5), frame(2, 5), frame(2, 5), frame(2, 5), frame(2, 5), frame(2, 5) };
     invalid[2][24] = 0.3; // Second tag ambiguity, not just the first tag's quality.

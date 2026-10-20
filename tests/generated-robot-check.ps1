@@ -30,6 +30,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw (Get-Content $installLog -Tail 35 | Out-String) }
     foreach ($helper in @('health/HealthChecks.java', 'controls/ButtonBindings.java', 'auto/Auto.java',
         'configs/LimelightHeadingConfig.java', 'configs/VisionHeadingInitializationConfig.java',
+        'configs/VisionPoseFilterConfig.java', 'vision/VisionPoseFilter.java',
         'vision/LimelightVision.java', 'vision/VisionHeadingInitializer.java')) {
         if (-not (Test-Path -LiteralPath (Join-Path $fixture "src/main/java/frc/powerlib/$helper"))) {
             throw "Fresh install omitted library helper $helper."

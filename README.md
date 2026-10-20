@@ -357,6 +357,36 @@ cameras.update(yawDegrees, pitchDegrees, rollDegrees).ifPresent(measurement -> {
 // Close the reader when shutting down to release NetworkTables handles.
 ```
 
+The `Vision` template also applies `VisionPoseFilter`, configured through
+`VisionConstants.POSE_FILTER_CONFIG`. Its field bounds come from `LocationConstants`; set those
+to your season's blue-origin field dimensions. The robot-specific integration uses its own field bounds.
+Starting thresholds reject pitch/roll beyond 8 degrees, require 0.15 s of continuously observed
+level feedback, and restart that interval if gyro data becomes invalid/stale or loop observations
+are separated by more than 0.1 s. Only images captured after the complete level interval are
+eligible; delayed bump images remain rejected after landing. Heading candidates and disabled
+manual pose seeds use the same capture-time gate. Reading/consuming camera frames continues
+while corrections are blocked, preventing rejected frames from being replayed later.
+
+Position candidates must be within the configured field bounds plus a 0.25 m margin, with
+absolute robot-origin height no more than 0.5 m. `Measurement.heightMeters()` preserves the
+camera's Z coordinate; the existing six-argument planar constructor remains supported.
+For enabled fusion, the filter compares camera position with estimator history at image capture
+time. Missing history rejects the frame. Corrections exceeding 1 m require at least three distinct
+capture times spanning 0.1 s, with correction vectors agreeing within 0.25 m of their anchor.
+Comparing vectors rather than absolute positions allows recovery while the robot moves.
+Inconsistent/invalid samples, tilt, missing gyro observations and long camera gaps clear recovery
+evidence. A normal correction clears it too. Repeated observations can therefore recover genuine
+wheel-slip error without accepting a single large outlier or permanently rejecting large offsets.
+
+Fusion uses `measurement.standardDeviations()` so distance, tag count and uncertainty scaling
+reach the estimator; the MT2 heading remains ignored. `Vision/Position/Status` logs the gate/recovery
+state without adding dashboard fields. These settings are starting values to test on hardware.
+Agreement does not prove a camera's calibration or tag map is correct; check mounting pose, field
+map and gyro signs. Low-level `LimelightVision` readers expose measurements but do not apply
+robot-specific filtering automatically: call `observe()` every loop, `plausible()` for cached/manual
+seeds and `acceptPosition()` with capture-time estimator history before fusion. Adopt updated
+`Vision` and `VisionConstants` templates together in an existing robot project.
+
 `LimelightVisionConfig` exposes the base position uncertainty, maximum tag distance, and maximum
 measurement age. `setMeasurementStdDevScale()` accepts robot-specific uncertainty adjustments,
 such as trusting vision more during wheel slip; wheel-slip detection is left to the robot.

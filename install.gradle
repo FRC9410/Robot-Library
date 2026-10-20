@@ -113,6 +113,16 @@ def templateFiles = [
         replacement: false
     ),
     new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/configs/VisionPoseFilterConfig.java',
+        destination: 'src/main/java/frc/powerlib/configs/VisionPoseFilterConfig.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/vision/VisionPoseFilter.java',
+        destination: 'src/main/java/frc/powerlib/vision/VisionPoseFilter.java',
+        replacement: false
+    ),
+    new TemplateFile(
         source: 'powerlib/src/main/java/frc/powerlib/configs/LimelightHeadingConfig.java',
         destination: 'src/main/java/frc/powerlib/configs/LimelightHeadingConfig.java',
         replacement: false

@@ -43,7 +43,13 @@ public final class LimelightVision implements AutoCloseable {
       double timestampSeconds,
       int tagCount,
       double averageTagDistanceMeters,
-      double positionStdDev) {
+      double positionStdDev,
+      double heightMeters) {
+    /** Compatibility for callers that already hold a planar measurement. */
+    public Measurement(String cameraName, Pose2d pose, double timestampSeconds, int tagCount,
+        double averageTagDistanceMeters, double positionStdDev) {
+      this(cameraName, pose, timestampSeconds, tagCount, averageTagDistanceMeters, positionStdDev, 0);
+    }
     /** Vision corrects translation; the very large heading uncertainty preserves gyro heading. */
     public Matrix<N3, N1> standardDeviations() {
       return VecBuilder.fill(positionStdDev, positionStdDev, IGNORED_AXIS_STD_DEV);
@@ -280,7 +286,7 @@ public final class LimelightVision implements AutoCloseable {
     }
     return new Measurement(name,
         new Pose2d(values[0], values[1], Rotation2d.fromDegrees(values[5])),
-        timestamp, count, values[9], stdDev);
+        timestamp, count, values[9], stdDev, values[2]);
   }
 
   /** Optional robot-specific adjustment, e.g. a value below one to trust vision more during slip. */
