@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Alert, Box, Button, Card, CardContent, Chip, Stack, Tab, Tabs, Typography } from "@mui/material";
+import { Alert, Box, Button, Card, CardContent, Chip, Stack, Tab, Tabs, TextField, Typography } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import type { LimelightInfo } from "./limelightUtils";
+import { normalizeWebUiUrl, readWebUiOverride, saveWebUiOverride } from "./limelightUtils";
 
 type LimelightsPanelProps = {
   limelights: LimelightInfo[];
@@ -68,50 +69,71 @@ export function LimelightsPanel({ limelights }: LimelightsPanelProps) {
           ))}
         </Tabs>
 
-        <CardContent>
-          <Stack spacing={2}>
-            <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} sx={{ alignItems: { md: "center" } }}>
-              <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                <Typography sx={{ fontWeight: 800 }}>{activeLimelight.tableName}</Typography>
-                <Typography color="text.secondary" sx={{ overflowWrap: "anywhere" }}>
-                  {activeLimelight.webUiUrl}
-                </Typography>
-              </Box>
-              <Chip label={`${activeLimelight.topicCount} topics`} variant="outlined" />
-              <Button
-                component="a"
-                href={activeLimelight.webUiUrl}
-                target="_blank"
-                rel="noreferrer"
-                startIcon={<OpenInNewIcon />}
-                variant="outlined"
-              >
-                Open
-              </Button>
-            </Stack>
-
-            <Alert severity="info" variant="outlined">
-              If the frame stays blank, verify your computer can resolve {activeLimelight.tableName}.local and that
-              the Limelight web UI is reachable on port 5801.
-            </Alert>
-
-            <Box
-              component="iframe"
-              title={`${activeLimelight.tableName} Limelight web UI`}
-              src={activeLimelight.webUiUrl}
-              sx={{
-                width: "100%",
-                height: { xs: "65vh", md: "calc(100vh - 285px)" },
-                minHeight: 520,
-                border: 1,
-                borderColor: "divider",
-                borderRadius: 2,
-                bgcolor: "background.default"
-              }}
-            />
-          </Stack>
-        </CardContent>
+        <LimelightConfiguration key={activeLimelight.tableName} limelight={activeLimelight} />
       </Card>
     </Stack>
   );
+}
+
+function LimelightConfiguration({ limelight }: { limelight: LimelightInfo }) {
+  const [override, setOverride] = useState(() => readWebUiOverride(limelight.tableName) ?? "");
+  const [draft, setDraft] = useState(override);
+  const url = override || limelight.webUiUrl;
+  const invalid = !!draft.trim() && !normalizeWebUiUrl(draft);
+  function apply(value: string) {
+    const next = normalizeWebUiUrl(value) ?? "";
+    setOverride(next);
+    setDraft(next);
+    saveWebUiOverride(limelight.tableName, next || undefined);
+  }
+  return <CardContent>
+    <Stack spacing={2}>
+      <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} sx={{ alignItems: { md: "center" } }}>
+        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+          <Typography sx={{ fontWeight: 800 }}>{limelight.tableName}</Typography>
+          <Typography color="text.secondary" sx={{ overflowWrap: "anywhere" }}>
+            {url}
+          </Typography>
+        </Box>
+        <Chip label={`${limelight.topicCount} topics`} variant="outlined" />
+        <Button
+          component="a"
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          startIcon={<OpenInNewIcon />}
+          variant="outlined"
+        >
+          Open
+        </Button>
+      </Stack>
+
+      <Stack component="form" direction={{ xs: "column", md: "row" }} spacing={1}
+        onSubmit={event => { event.preventDefault(); if (!invalid) apply(draft); }}>
+        <TextField label="Configuration URL" size="small" value={draft} error={invalid} fullWidth
+          placeholder={limelight.webUiUrl} onChange={event => setDraft(event.target.value)}
+          helperText={invalid ? "Enter an HTTP or HTTPS URL without credentials." : "Saved on this laptop per camera. Leave blank for the automatic address."} />
+        <Button type="submit" variant="outlined" disabled={invalid} sx={{ alignSelf: "flex-start" }}>Apply</Button>
+        <Button onClick={() => apply("")} sx={{ alignSelf: "flex-start" }}>Reset</Button>
+      </Stack>
+      <Alert severity="info" variant="outlined">
+        If the frame stays blank, enter the camera's IP address, including http:// and port 5801, or use Open.
+      </Alert>
+
+      <Box
+        component="iframe"
+        title={`${limelight.tableName} Limelight web UI`}
+        src={url}
+        sx={{
+          width: "100%",
+          height: { xs: "65vh", md: "calc(100vh - 285px)" },
+          minHeight: 520,
+          border: 1,
+          borderColor: "divider",
+          borderRadius: 2,
+          bgcolor: "background.default"
+        }}
+      />
+    </Stack>
+  </CardContent>;
 }

@@ -8,6 +8,7 @@
   "scripts": {
     "check:telemetry": "node scripts/telemetry-buffer-check.mjs",
     "check:drive": "node scripts/drive-model-check.mjs",
+    "check:cameras": "node scripts/camera-check.mjs",
     "check:subscriptions": "node scripts/subscription-check.mjs",
     "check:tuning": "node scripts/tuning-check.mjs",
     "build:electron": "rimraf dist-electron && tsc -p tsconfig.electron.json",

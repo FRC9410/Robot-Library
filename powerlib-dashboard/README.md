@@ -43,6 +43,23 @@ folder only when it is missing and preserve an existing folder without merging
 or overwriting any files. The shared application and generic dashboard still
 update normally. See [the custom dashboard guide](dashboard/README.md).
 
+## Cameras and Limelight configuration
+
+Visible camera thumbnails and the selected camera share one live stream per
+camera. The selected camera's thumbnail pauses while its main view stays live;
+the thumbnail resumes when another view is selected.
+Published stream addresses are tried in order; a failed request or four
+seconds without a first frame advances to the next address. When all addresses
+fail, the list retries after four seconds. Healthy streams stay connected.
+An explicit stream URL in Crew tools overrides the published addresses; clear it
+to return to automatic discovery.
+
+The Limelights tab embeds each camera's configuration page. If its automatic
+`.local:5801` address is unreachable, enter a full Configuration URL such as
+`http://10.94.10.11:5801` and click Apply. The address is saved per camera on this
+laptop and used by both the frame and Open button. Reset restores the automatic
+address. This setting is separate from the camera's stream URL.
+
 ## Robot tuning
 
 The Robot tab shows clickable subsystem cards with their live readings. Click a card to open all of its tunables in the side panel; there is no variable selection or separate Tuning/Constants tab. Other constants groups appear after the subsystem cards, including groups discovered from the project's constants files or live NetworkTables variables. Commands with tunables also get their own cards.

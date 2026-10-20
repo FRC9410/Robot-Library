@@ -12,6 +12,8 @@ const cameras = discoverCameras([t("/CameraPublisher/front/streams", ["mjpg:http
   t("/CameraPublisher/front/connected", false), t("/limelight-left/hb", 10), t("/limelight-fake/name", "fake")]);
 assert.equal(cameras.length, 2); assert.equal(cameras[0].urls.length, 1); assert.equal(cameras[0].connected, false);
 assert.equal(discoverCameras([t("/CameraPublisher/broken/streams", [12, false, "file:///x"])]).length, 0);
+assert.deepEqual(discoverCameras([t("/CameraPublisher/front/streams", ["mjpg:http://camera.local:1181/stream", "mjpg:http://10.94.10.11:1181/stream"])])[0].urls,
+  ["http://camera.local:1181/stream", "http://10.94.10.11:1181/stream"], "Preserve published address preference for failover");
 const chooser = getPowerLibAutoChooser([t("/SmartDashboard/Auto Chooser/.type", "String Chooser"), t("/SmartDashboard/Auto Chooser/options", ["None", "Left", "Left"]),
   t("/SmartDashboard/Auto Chooser/active", "Left"), t("/SmartDashboard/Bad/.type", "String Chooser"), t("/SmartDashboard/Bad/options", [4])]);
 assert.deepEqual(chooser.options, ["None", "Left"]); assert.equal(chooser.active, "Left");

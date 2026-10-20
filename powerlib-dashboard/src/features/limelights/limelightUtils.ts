@@ -68,6 +68,29 @@ export function getLimelightWebUiUrl(tableName: string) {
   return `http://${toLimelightHostname(tableName)}.local:5801`;
 }
 
+export function normalizeWebUiUrl(value: string): string | undefined {
+  try {
+    const url = new URL(value.trim());
+    return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password ? url.href : undefined;
+  } catch { return undefined; }
+}
+
+function webUiStorageKey(tableName: string) {
+  return `powerlib.limelightWebUi.${encodeURIComponent(tableName)}`;
+}
+
+export function readWebUiOverride(tableName: string): string | undefined {
+  try { return normalizeWebUiUrl(localStorage.getItem(webUiStorageKey(tableName)) ?? ""); }
+  catch { return undefined; }
+}
+
+export function saveWebUiOverride(tableName: string, url?: string) {
+  try {
+    if (url) localStorage.setItem(webUiStorageKey(tableName), url);
+    else localStorage.removeItem(webUiStorageKey(tableName));
+  } catch { /* Keep the applied address for this session if storage is unavailable. */ }
+}
+
 export function detectLimelights(topics: NtTopicSnapshot[]) {
   const topicsByTable = new Map<string, NtTopicSnapshot[]>();
 

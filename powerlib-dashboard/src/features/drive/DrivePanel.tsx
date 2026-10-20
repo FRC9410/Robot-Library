@@ -1,9 +1,10 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField } from "@mui/material";
 import TuneIcon from "@mui/icons-material/Tune";
 import { useNetworkTables, useTopics } from "../networktables/NetworkTablesContext";
 import { discoverCameras, discoverMechanisms, getPowerLibAutoChooser, driveModel, formatTime, streamUrl, template } from "./driveModel";
 import type { DriveCamera } from "./driveModel";
+import { startCameraStream } from "./cameraStream";
 import type { GeneratedSubsystem } from "../subsystems/types";
 import type { ReactNode } from "react";
 import type { NtTopicSnapshot } from "../../networktables/nt4Client";
@@ -87,6 +88,21 @@ function CameraUrlSetting({ camera, url, onSave }: { camera: DriveCamera; url: s
     onBlur={() => { if (!invalid) onSave(streamUrl(draft.trim())); }} />;
 }
 
+function CameraStream({ camera, override, images, onFailed }: {
+  camera: DriveCamera;
+  override?: string;
+  images: React.MutableRefObject<Map<string, HTMLImageElement>>;
+  onFailed: (id: string, failed: boolean) => void;
+}) {
+  const container = useRef<HTMLDivElement>(null);
+  const sources = JSON.stringify(override ? [override] : camera.urls);
+  useEffect(() => startCameraStream(container.current!, JSON.parse(sources), image => {
+    if (image) images.current.set(camera.id, image);
+    else images.current.delete(camera.id);
+  }, failed => onFailed(camera.id, failed)), [camera.id, sources, images, onFailed]);
+  return <div ref={container} />;
+}
+
 export type DrivePanelData = { topics: NtTopicSnapshot[]; drive: ReturnType<typeof driveModel>; now: number };
 
 export function DrivePanel({ subsystems = [], renderTopCards, renderSidebar }: {
@@ -102,10 +118,12 @@ export function DrivePanel({ subsystems = [], renderTopCards, renderSidebar }: {
   const [selectedView, setSelectedView] = useState("field");
   const [visibleCameraIds, setVisibleCameraIds] = useState<string[]>([]);
   const [failed, setFailed] = useState<Record<string, boolean>>({});
-  const [retry, setRetry] = useState(0);
   const [pending, setPending] = useState<{ path: string; name: string; at: number } | null>(null);
   const [autoError, setAutoError] = useState("");
   const images = useRef(new Map<string, HTMLImageElement>());
+  const updateCameraFailure = useCallback((id: string, failed: boolean) => {
+    setFailed(current => current[id] === failed ? current : { ...current, [id]: failed });
+  }, []);
   const panel = useRef<HTMLDivElement>(null);
   const cameraList = useRef<HTMLDivElement>(null);
   const cameras = useMemo(() => discoverCameras(topics), [topics]);
@@ -123,10 +141,6 @@ export function DrivePanel({ subsystems = [], renderTopCards, renderSidebar }: {
   const metric = (value: number | undefined, places = 1) => value === undefined ? "—" : value.toFixed(places);
 
   useEffect(() => { const timer = setInterval(() => setNow(performance.now()), 100); return () => clearInterval(timer); }, []);
-  useEffect(() => {
-    const timer = setInterval(() => setRetry(v => v + 1), 4000);
-    return () => clearInterval(timer);
-  }, []);
   useEffect(() => { try { localStorage.setItem(settingsKey, JSON.stringify(settings)); } catch { /* Keep session settings if storage is unavailable. */ } }, [settings]);
   useEffect(() => { if (selectedView !== "field" && !selectedCamera) setSelectedView("field"); }, [selectedView, selectedCamera]);
   useEffect(() => {
@@ -202,7 +216,7 @@ export function DrivePanel({ subsystems = [], renderTopCards, renderSidebar }: {
         {cameras.length > 0 && <div className="drive-camera-list" ref={cameraList} role="region" aria-label="Camera views" tabIndex={0}>
         {cameras.map(camera => <button key={camera.id} data-camera-id={camera.id} className={`drive-thumb ${selectedView === camera.id ? "selected" : ""}`}
           onClick={() => setSelectedView(camera.id)} aria-label={`Show ${camera.name}`}>
-          <div className="drive-thumb-preview drive-camera-preview"><CameraCanvas camera={camera} images={images} active={visibleCameraIds.includes(camera.id) || camera.id === selectedView}
+          <div className="drive-thumb-preview drive-camera-preview"><CameraCanvas camera={camera} images={images} active={visibleCameraIds.includes(camera.id) && camera.id !== selectedView}
             failed={!!failed[camera.id] || camera.connected === false} /></div><b>{camera.name.replace(/^limelight-/, "").toUpperCase()} CAMERA</b>
         </button>)}
         </div>}
@@ -247,10 +261,8 @@ export function DrivePanel({ subsystems = [], renderTopCards, renderSidebar }: {
         <span>RIO CAN {number("can") === undefined ? "—" : `${metric(number("can")! * 100, 0)}%`}</span>
       </div>
     </div>
-    <div className="drive-stream-pool" aria-hidden="true">{streaming.map(camera => <img key={`${camera.id}-${settings.urls[camera.id] ?? camera.urls[0]}-${failed[camera.id] ? retry : 0}`}
-      ref={element => { if (element) images.current.set(camera.id, element); else images.current.delete(camera.id); }}
-      src={settings.urls[camera.id] ?? camera.urls[0]} alt="" onLoad={() => setFailed(v => v[camera.id] ? { ...v, [camera.id]: false } : v)}
-      onError={() => setFailed(v => v[camera.id] ? v : { ...v, [camera.id]: true })} />)}</div>
+    <div className="drive-stream-pool" aria-hidden="true">{streaming.map(camera => <CameraStream key={camera.id}
+      camera={camera} override={settings.urls[camera.id]} images={images} onFailed={updateCameraFailure} />)}</div>
     <Dialog open={tools} onClose={() => setTools(false)} maxWidth="sm" fullWidth><DialogTitle>Crew tools</DialogTitle><DialogContent className="drive-tool-fields">
       <p>Display settings stay on this laptop. Field coordinates use the blue origin.</p>
       <TextField label="Field length (m)" type="number" value={settings.length} onChange={e => { const length = Number(e.target.value); if (length > 0 && Number.isFinite(length)) setSettings(v => ({ ...v, length })); }} />
