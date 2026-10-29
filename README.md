@@ -303,7 +303,9 @@ MegaTag1 heading correction, disabled-mode throttling, and Swerve pose correctio
 camera's mounting pose, calibration, team number, and AprilTag pipeline in its own Limelight web UI;
 names alone cannot describe mounting geometry. All measurements use blue-origin field coordinates.
 
-The reusable `frc.powerlib.vision.LimelightVision` class selects the first acceptable camera,
+The reusable `frc.powerlib.vision.LimelightVision` class exposes fresh position candidates ordered by
+their calculated position uncertainty, then capture freshness; configured camera order breaks ties.
+The starter tries each candidate until its complete position filter accepts one,
 with position uncertainty `0.07 * distance^2 / tagCount` and
 average tag distance below 6.25 meters. It additionally rejects malformed, non-finite, repeated,
 future-dated, and stale measurements (over 0.5 seconds old, including latency). Every update consumes
@@ -314,16 +316,51 @@ The starter separately reads `botpose_wpiblue` (MegaTag1) to correct slow headin
 pose estimator, without resetting the physical gyro. `VisionConstants.HEADING_CONFIG` uses
 conservative defaults for normal enabled correction: at least two distinct tags, positive tag span, ambiguity at most 0.2,
 average and individual tag distances at most 4 meters, total age at most 0.2 seconds, and
-drivetrain angular speed at most 45 degrees/second. The heading must be within 15 degrees of the
-historical drivetrain heading at capture time. Accepted observations use 20 degrees of heading
+drivetrain angular speed at most 45 degrees/second. The default heading-error limits are 180 degrees
+while stationary and 45 degrees while moving. Stationary means measured translation speed at most
+0.05 m/s and yaw rate at most 5 degrees/s. `maxHeadingErrorDegrees` sets the stationary limit and
+`maxMovingHeadingErrorDegrees` sets the moving limit; the six-argument constructor retains its
+single limit for both conditions. Accepted observations use 20 degrees of heading
 standard deviation (stored in radians) for gradual correction, while ignoring MegaTag1 X/Y.
-Position and heading track their accepted timestamps separately. When heading arrives after a newer
-position update, the robot checks its error at capture time and carries that error through intervening
-rotation to the newer fusion time, preserving the newer X/Y estimate.
-Ordinary heading corrections are suppressed while disabled, during Test mode, or when pose updates are turned off;
-camera frames are still consumed. `Vision/Heading/ErrorDegrees` and `Vision/Heading/Accepted` are
-logged through CTRE SignalLogger, outside the dashboard data map. Large heading offsets require
-an intentional heading/pose reset or the disabled initialization described below;
+Moving heading correction uses this normal fusion path; stationary hard recovery is described below.
+Heading candidates prefer multi-tag over single-tag, then rank lower distance squared per tag,
+lower maximum tag ambiguity, greater tag span, and capture freshness. Configured camera order breaks
+remaining ties. This is a quality ranking, not agreement voting between cameras. If a candidate fails the
+capture-time gate, estimator-history lookup, or heading-error check, the starter tries the next camera
+and stops after one accepted correction. `getHeadingMeasurement()` remains a compatibility accessor
+for the first candidate before those downstream checks.
+After confirmation (or the first accepted moving correction), `VisionHeadingSelector` retains the selected heading camera through ordinary
+frame gaps. An equally ranked or poorer camera cannot replace it simply by publishing more often.
+A challenger must retain better tag geometry/quality for at least the initialization frame count
+and duration (five frames over 0.25 seconds by default). Stationary handoffs also require the
+camera's independent stable-heading window; single-tag recovery keeps its stricter policy.
+A stale selected camera releases selection after the existing heading freshness limit; downstream
+rejection or inconsistent stationary readings also release it. This preference survives automatic
+heading resets and mode changes, but explicit seeds and toggling corrections clear it.
+Aligned stable candidates can confirm selection without resetting heading or position history.
+While stationary, a camera flagged inconsistent must rebuild its stable window before heading
+corrections resume. Other eligible cameras and position updates continue during that collection.
+Moving heading confirmation tracks each camera separately, so disagreement from one camera cannot
+erase another camera's confirmation evidence. Stability windows restart after completion to bound
+ongoing work and avoid comparing slow real yaw against an anchor retained since startup.
+Heading freshness, capture-time error checks and error diagnostics are owned by `VisionMeasurementFusion`.
+Position cache selection and fusion selection share one pass through the camera candidates. Accepted
+positions reuse the capture-time pose sampled for filtering, and heading validation calculates the
+angular error without constructing a corrected pose. Cached frames are checked again when used for a manual seed.
+`VisionMeasurementFusion` tracks accepted position and heading timestamps separately for each camera,
+so a faster pipeline cannot starve a qualified slower camera during a handoff. Each observation
+keeps its capture timestamp and original uncertainty. When a delayed observation arrives, the helper
+reapplies only the newer accepted observations within the measurement-age window, so neither pipeline
+discards the other's corrections. Position observations preserve historical heading; heading observations
+preserve historical X/Y. Camera rejection and large-correction evidence are tracked per camera, so a
+rejected camera cannot consume another camera's frame or erase its recovery evidence.
+Once heading is established, ordinary corrections continue while disabled. Test mode suppresses
+automatic heading initialization, stationary heading recovery and weighted heading correction;
+valid position corrections continue using the established heading. Turning pose updates off
+suppresses both position and heading corrections. Camera frames are still consumed in either case.
+`Vision/Heading/ErrorDegrees` and `Vision/Heading/Accepted` are
+logged through CTRE SignalLogger, outside the dashboard data map. Disabled initialization below
+can establish heading directly rather than waiting for gradual fusion;
 validate camera mounting and these limits on the robot.
 
 Automatic heading initialization is enabled by default. To disable it, configure
@@ -334,15 +371,28 @@ public static final VisionHeadingInitializationConfig HEADING_INITIALIZATION_CON
     VisionHeadingInitializationConfig.DEFAULT.withEnabled(false);
 ```
 
-The default policy requires at least five distinct independent heading frames spanning 0.25 seconds,
-within a two-degree spread, while disabled with vision updates enabled. Translation speed must be
+The default multi-tag policy requires at least five distinct independent heading frames spanning 0.25 seconds,
+within a two-degree spread, with vision updates enabled. Translation speed must be
 at most 0.05 m/s and yaw rate at most 5 degrees/s, with drivetrain feedback at most 0.5 seconds old.
-While disabled, valid two-or-more-tag heading frames are preferred across cameras, with a single-tag
-fallback when none is available. A single-tag frame can have zero tag span; ambiguity, distance,
-freshness, and stationary stability checks still apply. Enabled heading corrections continue to
-require at least two tags. Camera frames must also meet `HEADING_CONFIG` quality and age limits.
-The configuration record allows these thresholds to be adjusted. Initialization sets estimator heading once per disabled period,
-preserves X/Y and raw gyro yaw, and logs its status without adding dashboard data fields.
+Two-or-more-tag heading frames are preferred across cameras. A stationary single-tag fallback requires
+distance at most 2 m, ambiguity at most 0.05, frame age at most 100 ms, and at least ten distinct frames
+spanning 0.5 seconds within a one-degree spread. Unknown single-tag quality is rejected. A single tag
+can have zero tag span. Existing `HEADING_CONFIG` limits still apply if stricter. Moving heading fusion
+requires at least two tags. Stationary recovery works while disabled or enabled and preserves X/Y and
+raw gyro yaw. Once heading is established, hard recovery only starts for errors over 5 degrees, avoiding
+repeated resets of an already-correct estimate. Each eligible camera contributes its own evidence;
+the highest-ranked camera with sufficient stable evidence is selected without cross-camera averaging.
+Qualified stationary single-tag observations also correct errors within the five-degree agreement
+tolerance through normal weighted fusion, without resetting heading or interrupting position updates.
+Qualification requires the same strict single-tag window and is cleared by motion, stale/invalid
+evidence, or inconsistent observations. Multi-tag evidence alone cannot qualify a single-tag solve.
+
+`HEADING_INITIALIZATION_CONFIG` owns the stationary speed/yaw limits and drivetrain-feedback age
+for recovery and camera arbitration. The same speed/yaw policy selects the configured stationary
+or moving correction limit. Setting `enabled` to false disables automatic startup initialization
+and hard resets; passive stability collection and qualified camera handoffs continue, as does
+normal weighted heading fusion. The robot uses the shared collector directly, without a separate
+robot-side forwarding helper.
 
 For another drivetrain, call the reader once per robot loop and feed its optional result to your
 own pose estimator:
@@ -385,7 +435,7 @@ Agreement does not prove a camera's calibration or tag map is correct; check mou
 map and gyro signs. Low-level `LimelightVision` readers expose measurements but do not apply
 robot-specific filtering automatically: call `observe()` every loop, `plausible()` for cached/manual
 seeds and `acceptPosition()` with capture-time estimator history before fusion. Adopt updated
-`Vision` and `VisionConstants` templates together in an existing robot project.
+`Vision`, `Swerve`, and `VisionConstants` templates together in an existing robot project.
 
 `LimelightVisionConfig` exposes the base position uncertainty, maximum tag distance, and maximum
 measurement age. `setMeasurementStdDevScale()` accepts robot-specific uncertainty adjustments,
@@ -393,24 +443,50 @@ such as trusting vision more during wheel slip; wheel-slip detection is left to 
 The three-argument `update()` above remains position-only. For heading candidates, construct with
 `new LimelightVision(positionConfig, headingConfig, cameraNames)`, call
 `update(yawDegrees, pitchDegrees, rollDegrees, yawRateDegreesPerSecond)`, and then read
-`getHeadingMeasurement()`. Call its `correctionPose(historicalPose, maxHeadingErrorDegrees)` with
-the estimator pose at the measurement timestamp, then use its heading-only `standardDeviations()`.
+`getHeadingMeasurements()`. Use `getPositionMeasurements()` for downstream position fallback; both read-only
+views are valid until the next update. The installed starter supplies accepted observations to
+`VisionMeasurementFusion`, using FPGA seconds for its history and estimator callbacks.
 The five-argument `update(..., allowSingleTagHeading)` overload enables the single-tag fallback;
-the robot template passes `DriverStation.isDisabled()` so enabled corrections retain the two-tag requirement.
+the robot template permits this while disabled or stationary, with the stricter quality and stability policy above.
 `LimelightHeadingConfig` contains the uncertainty, distance, age, angular-rate, heading-error and
 ambiguity limits. In CTRE Swerve, `samplePoseAt()` needs `Utils.fpgaToCurrentTime()`; the installed
 Swerve wrapper already performs that conversion for `addVisionMeasurement()`.
-The starter enables corrections during both autonomous and teleop. Call
+The starter enables corrections while disabled, during autonomous and during teleop. Call
 `stateMachine.vision.setShouldUpdatePose(false)` to disable corrections, and `true` to restore them.
-While disabled, only stationary heading initialization can apply automatically, when configured on.
+With heading initialization enabled, automatic position fusion initially waits for a trustworthy heading.
+Disabled MT1 initialization or an explicit pose/heading reset establishes it immediately. While enabled,
+normal multi-tag heading fusion can also release the guard after capture-time heading error stays within
+5 degrees for at least the configured frame count and
+duration (five distinct accepted frames spanning 0.25 seconds). The robot may move during this agreement
+check; moving heading correction remains gradual. Stationary recovery can reset heading directly after
+the stable evidence window completes. Rejected candidate batches, excessive error, stale
+frames and long gaps restart the agreement window. No timeout blindly trusts the current heading.
+`Swerve` tracks explicit `resetPose()` and `resetRotation()` calls, including autonomous pose seeds;
+`Vision` notices resets made during its lifetime on the next loop. Normal estimator corrections do not
+count as resets. `isHeadingEstablished()` exposes the processed readiness state. After heading becomes
+trusted, the starter discards MT2 frames captured before publishing the corrected orientation, including
+delayed frames received later. The corrections-off switch still blocks fusion. Turning heading
+initialization off explicitly trusts the configured drivetrain heading and skips this startup guard.
+The enabled-recovery agreement tolerance is independent of disabled initialization's 2-degree
+heading-spread limit; changing one does not change the other.
+Stationary initialization keeps separate sample windows for each camera. Selecting another camera
+does not erase evidence from a still-fresh camera or combine their headings into one average.
+Motion clears all windows; stale or inconsistent observations discard the affected camera's evidence.
+Normal position acceptance clears only that camera's large-correction window; fallback acceptance cannot
+erase another camera's consistent recovery evidence. Motion/tilt safety events and explicit resets still
+clear all relevant recovery windows.
 
 `stateMachine.vision.seedFromFreshVision()` explicitly resets drivetrain translation from
-the last accepted MegaTag2 measurement while disabled. It uses a fresh independent MegaTag1
+the last plausible MegaTag2 measurement while disabled, even if automatic fusion rejected its correction
+size or lacked estimator history. It uses a fresh independent MegaTag1
 heading when available (including the disabled single-tag fallback); otherwise it preserves the drivetrain heading. Frames captured before
 the reset cannot subsequently undo it. It returns `false` when enabled,
-when no accepted frame is cached, or when the frame is stale, future-dated, or invalid.
+when no plausible frame is cached, or when the frame is stale, future-dated, or invalid.
 The freshness limit comes from `Constants.Vision.CONFIG.maxMeasurementAgeSeconds()`.
-Vision keeps reading and caching accepted frames while normal pose corrections are disabled.
+Vision keeps reading and caching plausible frames while normal pose corrections are disabled.
+`hasFreshMeasurement()` reports this manual-seed freshness for compatibility. Use
+`hasFreshAcceptedMeasurement()` for dashboard accepted-vision status or shooting confidence: it checks
+the most recent position frame actually fused or explicitly seeded, and rejected frames cannot refresh it.
 
 On existing installations, the installer writes updated robot files beside the originals as
 `.template` files. Adopt the updated `Vision`, `VisionConstants`, and `StateMachine` files together;

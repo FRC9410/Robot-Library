@@ -70,6 +70,7 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
 
   private Notifier m_simNotifier = null;
   private double m_lastSimTime;
+  private long poseResetVersion;
 
   /* Blue alliance sees forward as 0 degrees (toward red alliance wall) */
   private static final Rotation2d kBlueAlliancePerspectiveRotation = Rotation2d.kZero;
@@ -524,6 +525,23 @@ public class Swerve extends TunerSwerveDrivetrain implements Subsystem {
               updateSimState(deltaTime, RobotController.getBatteryVoltage());
             });
     m_simNotifier.startPeriodic(kSimLoopPeriod);
+  }
+
+  /** Deliberate pose/heading resets on the robot thread, excluding normal estimator corrections. */
+  public long getPoseResetVersion() {
+    return poseResetVersion;
+  }
+
+  @Override
+  public void resetPose(Pose2d pose) {
+    super.resetPose(pose);
+    if (frc.powerlib.health.HealthChecks.finitePose(pose)) poseResetVersion++;
+  }
+
+  @Override
+  public void resetRotation(Rotation2d rotation) {
+    super.resetRotation(rotation);
+    if (Double.isFinite(rotation.getRadians())) poseResetVersion++;
   }
 
   /**

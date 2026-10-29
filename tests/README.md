@@ -61,8 +61,74 @@ The follow-up quality review adds these checks without changing the vision flush
 - State requests are stored per owner and arbitrated by handler registration order. The state-machine fixture covers independent requests, priority changes, guarded transitions, and skipping selection for an unchanged single request. ButtonBindingsTest verifies one action per press/release edge and stable, distinct owners for state bindings.
 - AutoTest checks equivalent direct-point and path-cursor sequences, drive completion before subsequent commands, copied destinations, mixed styles, fresh command instances, subsystem requirements, interrupted drive cleanup and invalid definitions. AutoBuilderTest checks chooser registration snapshots, repeated runs, alliance filtering, defaults and existing factory registration. The fresh-install check also verifies the Auto definition class and RobotAutos starter are installed and wired, and reinstalling preserves custom robot autos without a template copy.
 - HealthChecksTest covers freshness boundaries, invalid timestamps/poses, and missing feedback. ConfigurationValidationTest verifies that simulation health checks still reject failed startup configuration.
-- LimelightVisionTest uses real local NetworkTables and a pose estimator to verify independent MT1 heading, unchanged MT2 weights, gradual drift correction, delayed-heading fusion that preserves newer translation and intervening rotation, timestamp/latency handling, angle wrapping, malformed/poor tag rejection, fast-turn suppression, camera priority, and consuming skipped/repeated frames. Disabled single-tag fallback tests cover quality checks, preference for multi-tag frames across cameras, stable heading initialization, and single-tag rejection after enabling. VisionHeadingInitializerTest verifies default-enabled initialization, explicit disabling, configurable stationary limits, distinct stable frames, angle wrapping, and resets after motion or inconsistent observations. Fresh-install compilation verifies the heading configuration and robot integration are installed together. Camera calibration and correction strength still need real-robot validation.
+- LimelightVisionTest uses real local NetworkTables and a pose estimator to verify independent MT1 heading, unchanged MT2 weights, gradual drift correction, delayed-heading fusion that preserves newer translation and intervening rotation, timestamp/latency handling, angle wrapping, malformed/poor tag rejection, fast-turn suppression, camera priority, and consuming skipped/repeated frames. Disabled single-tag fallback tests cover quality checks, preference for multi-tag frames across cameras, stable heading initialization, and single-tag rejection during motion, with strict stationary fallback after enabling. VisionHeadingInitializerTest verifies default-enabled initialization, explicit disabling, configurable stationary limits, distinct stable frames, angle wrapping, and resets after motion or inconsistent observations. Fresh-install compilation verifies the heading configuration and robot integration are installed together. Camera calibration and correction strength still need real-robot validation.
 - MotorConfigurationTest verifies optional stator limits preserve other velocity settings and reject invalid limits. The generated-robot check carries a configured limit through both velocity mechanism types, repeated generation, and compilation.
 - Mechanism simulation is a deterministic control/readiness model with acceleration and soft limits. It is not a calibrated model of mechanism inertia or loads. Swerve/MapleSim integration remains separate.
 
+VisionMeasurementFusionTest covers both latency orderings, long-delayed position updates, independent
+per-axis replay checks, heading/pose resets, convergence without position overshoot, and preserving
+intervening robot travel and rotation. Camera fallback tests cover simultaneous frames and preventing
+invalid cameras from erasing another camera's large-correction evidence. The default heading-error
+limits are 180 degrees stationary and 45 degrees moving. Tests cover translation/rotation thresholds,
+the 45-degree acceptance boundary, opposite-heading stationary correction, invalid motion feedback,
+custom limits and the legacy constructor. Tag quality, freshness, tilt, field bounds and height checks still apply.
+Heading diagnostics also cover rejected large errors and clearing the error when history is unavailable
+or a frame is repeated, so the subsystem can log the fusion result without a second history lookup.
+Position fusion tests cover a supplied capture-time pose without resampling, invalid/missing history,
+stale/future frames, duplicate timestamps, and both latency orderings with the supplied-pose overload.
+Heading-candidate tests retain all fresh cameras in multi-tag-first order, expose a read-only view,
+consume candidates once, and preserve fallback after capture-time, error-limit, or history rejection.
+The SOTM robot's native Vision simulations additionally check downstream camera fallback, expiration
+of accepted-vision freshness despite new rejected frames, heading-first startup at 90 degrees error,
+delayed pre-seed MT2 rejection, and retaining the startup guard across an early enable transition.
+VisionHeadingReadinessTest checks the configured error tolerance, distinct-frame count and elapsed
+agreement window, rejection of stale/future/nonfinite observations, gaps, and resets. Native SOTM
+regressions check gradual heading recovery in auto/teleop, releasing position fusion after convergence,
+recognizing direct drivetrain pose/heading seeds without MT1 tags, discarding delayed pre-recovery
+images, and preserving the corrections-off switch and single-tag initialization policy.
+Confirmation through gradual fusion accepts the 5-degree agreement boundary; heading correction
+retains the separate 180-degree stationary and 45-degree moving limits. Stationary initialization
+retains its separate 2-degree multi-tag spread limit.
+Camera-quality tests verify distance/tag-count ranking, ambiguity/span/freshness tie-breakers,
+unchanged estimator weights, and fallback after downstream rejection. Stationary initializer tests
+cover asynchronous camera cadences, independent angle averages, and preserving a stable camera's
+evidence when another camera is inconsistent. The SOTM robot additionally tests stable two-tag
+stationary hard recovery, preserving X/Y, avoiding repeated resets when heading is already correct,
+and prohibiting hard resets during measured motion, Test mode, or corrections-off operation.
+
+Strict single-tag regressions cover the 2 m / 0.05 ambiguity / 100 ms quality limits and the longer
+ten-frame, half-second, one-degree stability window. Native regressions reproduce an unstable
+top-ranked heading camera with a stable backup and a thirteen-meter correction that previously
+starved because an accepted fallback cleared every camera's history. Both were verified failing
+before the fixes. Continuous disabled and enabled-stationary single-tag recovery also works after
+earlier initialization, without repeatedly resetting an already-correct heading.
+
+Heading confirmation tests isolate each camera's frame history, including conflicting alternating
+readings and insufficient windows that must not combine across cameras. `VisionHeadingSelectorTest`
+covers unequal cadences and latency, equal-quality freshness ties, sustained better-camera handoffs,
+dropout and downstream rejection, frozen publications, fluctuating quality, and strict single-tag
+freshness. Ongoing stationary collection does not latch on an unselected ready camera or confuse
+slow measured yaw with inconsistent solves. Native SOTM regressions reproduce competing resets,
+verify large-position recovery alongside heading disagreement, and exercise camera loss, return,
+and a previously selected camera becoming unstable.
+
 These checks provide desktop correctness and structural performance evidence. RoboRIO loop timing, CAN traffic, CPU use and radio disconnect behavior require measurement on the robot; they are not established by desktop builds.
+
+Position fusion tracks accepted timestamps per camera, so a fresh slower pipeline is not permanently excluded by a faster fallback. The replay retains original capture times and weights, while rejecting repeated/out-of-order frames from the same camera and all pre-reset captures.
+
+The vision cleanup adds qualification tests for small stationary single-tag corrections, invalidation
+after motion/stale/inconsistent frames, and preventing multi-tag evidence from authorizing single-tag
+fusion. Passive camera stability remains available when automatic initialization is disabled, and
+stationary classification and correction limits use one configuration. Native SOTM regressions check
+three-degree single-tag convergence without hard resets or position interruption, stronger-camera
+handoff with initialization disabled, and separate disabled/enabled recovery evidence using actual
+pose/reset outcomes. The robot's `tests/competition-checks.init.gradle` exposes `verifyRobot` to run
+every regression without changing the ordinary deploy workflow.
+
+The native Test-mode transition regression starts with established heading and verifies continued
+position fusion without heading corrections or hard resets. It also verifies that turning pose
+updates off blocks both corrections and that position updates resume when the switch is restored.
+
+Native stationary-outlier regressions check every frame during an inconsistent camera's rejection,
+backup-camera fallback, and stable requalification in disabled and enabled modes. The flagged camera
+cannot alter heading through ordinary weighted fusion while its stability window is incomplete.

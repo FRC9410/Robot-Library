@@ -17,6 +17,8 @@ import frc.powerlib.configs.LimelightVisionConfig;
 import frc.powerlib.configs.LimelightHeadingConfig;
 import frc.powerlib.health.HealthChecks;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -24,10 +26,10 @@ import java.util.Optional;
 import java.util.function.DoubleSupplier;
 
 /**
- * MegaTag2 position and independent MegaTag1 heading readers, in camera priority order.
+ * MegaTag2 position and independent MegaTag1 heading readers, ranked by measurement quality.
  *
- * <p>Names are NetworkTables table names, in priority order. Each update publishes robot orientation
- * to every camera and selects at most one fresh position and one heading measurement per loop.
+ * <p>Names are NetworkTables table names; their order breaks quality ties. Each update publishes robot orientation
+ * to every camera and exposes fresh candidates for downstream validation and camera fallback.
  * Call update once per robot loop, even when pose corrections are disabled, to consume old frames.
  * Configure each camera's mounting pose and AprilTag pipeline in its own Limelight web UI.
  * This class owns its publishers/subscribers, but not the NetworkTableInstance. Use on one thread.
@@ -35,6 +37,20 @@ import java.util.function.DoubleSupplier;
 public final class LimelightVision implements AutoCloseable {
   private static final double IGNORED_AXIS_STD_DEV = 99999999.0;
   private static final double MIN_POSITION_STD_DEV = 0.001;
+  private static final double SINGLE_TAG_MAX_DISTANCE_METERS = 2;
+  private static final double SINGLE_TAG_MAX_AMBIGUITY = .05;
+  private static final double SINGLE_TAG_MAX_AGE_SECONDS = .1;
+  private static final Comparator<Measurement> POSITION_QUALITY =
+      Comparator.comparingDouble(Measurement::positionStdDev)
+          .thenComparing(Comparator.comparingDouble(Measurement::timestampSeconds).reversed());
+  private static final Comparator<HeadingMeasurement> HEADING_GEOMETRY =
+      Comparator.comparingInt((HeadingMeasurement measurement) -> measurement.tagCount() >= 2 ? 0 : 1)
+          .thenComparingDouble(measurement -> measurement.averageTagDistanceMeters()
+              * measurement.averageTagDistanceMeters() / measurement.tagCount())
+          .thenComparingDouble(HeadingMeasurement::maxTagAmbiguity)
+          .thenComparing(Comparator.comparingDouble(HeadingMeasurement::tagSpan).reversed());
+  private static final Comparator<HeadingMeasurement> HEADING_QUALITY = HEADING_GEOMETRY
+      .thenComparing(Comparator.comparingDouble(HeadingMeasurement::timestampSeconds).reversed());
 
   /** Timestamp is latency-corrected, in the FPGA/NetworkTables local clock domain (seconds). */
   public record Measurement(
@@ -58,19 +74,51 @@ public final class LimelightVision implements AutoCloseable {
 
   /** Independent camera heading. Timestamp uses the same FPGA clock domain as Measurement. */
   public record HeadingMeasurement(
-      String cameraName, Pose2d pose, double timestampSeconds, double headingStdDevRadians) {
+      String cameraName, Pose2d pose, double timestampSeconds, double headingStdDevRadians, int tagCount,
+      double averageTagDistanceMeters, double maxTagAmbiguity, double tagSpan) {
+    public HeadingMeasurement(String cameraName, Pose2d pose, double timestampSeconds,
+        double headingStdDevRadians, int tagCount) {
+      this(cameraName, pose, timestampSeconds, headingStdDevRadians, tagCount,
+          Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, 0);
+    }
+    public HeadingMeasurement(String cameraName, Pose2d pose, double timestampSeconds, double headingStdDevRadians) {
+      this(cameraName, pose, timestampSeconds, headingStdDevRadians, 1);
+    }
     /** Ignore MegaTag1 X/Y: only its heading should influence the estimator. */
     public Matrix<N3, N1> standardDeviations() {
       return VecBuilder.fill(IGNORED_AXIS_STD_DEV, IGNORED_AXIS_STD_DEV, headingStdDevRadians);
     }
 
+    /** Single-tag recovery needs explicit, close, low-ambiguity evidence; unknown quality is insufficient. */
+    public boolean reliableSingleTag(double now) {
+      return tagCount == 1 && averageTagDistanceMeters > 0
+          && averageTagDistanceMeters <= SINGLE_TAG_MAX_DISTANCE_METERS
+          && Double.isFinite(maxTagAmbiguity) && maxTagAmbiguity >= 0
+          && maxTagAmbiguity <= SINGLE_TAG_MAX_AMBIGUITY
+          && HealthChecks.isFresh(now - timestampSeconds, SINGLE_TAG_MAX_AGE_SECONDS + 1e-9);
+    }
+
+    /** Freshness breaks frame ties, but is not stronger evidence for changing cameras. */
+    public boolean higherQualityThan(HeadingMeasurement other) {
+      return HEADING_GEOMETRY.compare(this, other) < 0;
+    }
+
+    /** Capture-time heading difference, or NaN if either pose is invalid. */
+    public double errorDegrees(Pose2d historicalPose) {
+      return HealthChecks.finitePose(pose) && HealthChecks.finitePose(historicalPose)
+          ? pose.getRotation().minus(historicalPose.getRotation()).getDegrees() : Double.NaN;
+    }
+
+    public static boolean isErrorAllowed(double errorDegrees, double maxErrorDegrees) {
+      // Allow floating-point roundoff at the configured boundary.
+      return Double.isFinite(errorDegrees) && Double.isFinite(maxErrorDegrees)
+          && maxErrorDegrees > 0 && maxErrorDegrees <= 180
+          && Math.abs(errorDegrees) <= maxErrorDegrees + 1e-9;
+    }
+
     /** Compare at capture time; reuse historical X/Y to avoid translation/rotation coupling. */
     public Optional<Pose2d> correctionPose(Pose2d historicalPose, double maxErrorDegrees) {
-      if (!HealthChecks.finitePose(pose) || !HealthChecks.finitePose(historicalPose)
-          || !Double.isFinite(maxErrorDegrees) || maxErrorDegrees <= 0 || maxErrorDegrees > 180
-          || Math.abs(pose.getRotation().minus(historicalPose.getRotation()).getDegrees()) > maxErrorDegrees) {
-        return Optional.empty();
-      }
+      if (!isErrorAllowed(errorDegrees(historicalPose), maxErrorDegrees)) return Optional.empty();
       return Optional.of(new Pose2d(historicalPose.getTranslation(), pose.getRotation()));
     }
 
@@ -78,7 +126,7 @@ public final class LimelightVision implements AutoCloseable {
     public Optional<Pose2d> correctionPose(Pose2d historicalPose, Pose2d fusionPose,
         double maxErrorDegrees) {
       if (!HealthChecks.finitePose(fusionPose)
-          || correctionPose(historicalPose, maxErrorDegrees).isEmpty()) return Optional.empty();
+          || !isErrorAllowed(errorDegrees(historicalPose), maxErrorDegrees)) return Optional.empty();
       var error = pose.getRotation().minus(historicalPose.getRotation());
       return Optional.of(new Pose2d(fusionPose.getTranslation(), fusionPose.getRotation().plus(error)));
     }
@@ -128,7 +176,10 @@ public final class LimelightVision implements AutoCloseable {
   private double measurementStdDevScale = 1.0;
   private Boolean throttled;
   private boolean closed;
-  private HeadingMeasurement headingMeasurement;
+  private final List<HeadingMeasurement> headingMeasurements = new ArrayList<>();
+  private final List<HeadingMeasurement> headingView = Collections.unmodifiableList(headingMeasurements);
+  private final List<Measurement> positionMeasurements = new ArrayList<>();
+  private final List<Measurement> positionView = Collections.unmodifiableList(positionMeasurements);
 
   public LimelightVision(String... cameraNames) {
     this(LimelightVisionConfig.DEFAULT, cameraNames);
@@ -189,11 +240,12 @@ public final class LimelightVision implements AutoCloseable {
     return update(yawDegrees, pitchDegrees, rollDegrees, yawRateDegreesPerSecond, false);
   }
 
-  /** Allow single-tag heading for disabled initialization; valid multi-tag frames still win. */
+  /** Permit single-tag candidates for stationary initialization/recovery; multi-tag frames still win. */
   public Optional<Measurement> update(double yawDegrees, double pitchDegrees, double rollDegrees,
       double yawRateDegreesPerSecond, boolean allowSingleTagHeading) {
     ensureOpen();
-    headingMeasurement = null;
+    headingMeasurements.clear();
+    positionMeasurements.clear();
     boolean validOrientation = Double.isFinite(yawDegrees) && Double.isFinite(pitchDegrees)
         && Double.isFinite(rollDegrees);
     boolean canUseHeading = validOrientation && Double.isFinite(yawRateDegreesPerSecond)
@@ -208,35 +260,49 @@ public final class LimelightVision implements AutoCloseable {
     }
 
     double now = clockSeconds.getAsDouble();
-    Measurement selected = null;
-    HeadingMeasurement singleTagHeading = null;
     for (Camera camera : cameras) {
       TimestampedDoubleArray frame = camera.pose.getAtomic();
       if (frame.timestamp > camera.lastSeenTimestamp) {
         // Consume skipped/rejected frames too; never replay them after enabling or slowing down.
         camera.lastSeenTimestamp = frame.timestamp;
-        if (validOrientation && selected == null) selected = parseMeasurement(camera.name, frame, now);
+        if (validOrientation) {
+          var candidate = parseMeasurement(camera.name, frame, now);
+          if (candidate != null) positionMeasurements.add(candidate);
+        }
       }
       TimestampedDoubleArray headingFrame = camera.headingPose.getAtomic();
       if (headingFrame.timestamp > camera.lastHeadingTimestamp) {
         camera.lastHeadingTimestamp = headingFrame.timestamp;
-        if (canUseHeading && headingMeasurement == null) {
+        if (canUseHeading) {
           var candidate = parseHeadingMeasurement(camera.name, headingFrame, now, allowSingleTagHeading);
           if (candidate != null) {
-            if (headingFrame.value[7] >= 2) headingMeasurement = candidate;
-            else if (singleTagHeading == null) singleTagHeading = candidate;
+            headingMeasurements.add(candidate);
           }
         }
       }
     }
-    if (headingMeasurement == null) headingMeasurement = singleTagHeading;
-    return Optional.ofNullable(selected);
+    // Stable sorting keeps configured camera order as the final tie-breaker.
+    positionMeasurements.sort(POSITION_QUALITY);
+    headingMeasurements.sort(HEADING_QUALITY);
+    return positionMeasurements.stream().findFirst();
   }
 
-  /** Only the current update's candidate; repeated, rejected and missing frames clear it. */
+  /** Fresh positions, lowest uncertainty first; this view changes on the next update. */
+  public List<Measurement> getPositionMeasurements() {
+    ensureOpen();
+    return positionView;
+  }
+
+  /** Fresh headings ranked by tag count/distance, ambiguity, span and age; multi-tag beats single-tag. */
+  public List<HeadingMeasurement> getHeadingMeasurements() {
+    ensureOpen();
+    return headingView;
+  }
+
+  /** Compatibility accessor for the first candidate, before downstream validation. */
   public Optional<HeadingMeasurement> getHeadingMeasurement() {
     ensureOpen();
-    return Optional.ofNullable(headingMeasurement);
+    return headingMeasurements.stream().findFirst();
   }
 
   private HeadingMeasurement parseHeadingMeasurement(String name, TimestampedDoubleArray frame,
@@ -247,15 +313,22 @@ public final class LimelightVision implements AutoCloseable {
         || measurement.averageTagDistanceMeters() > headingConfig.maxTagDistanceMeters()
         || now - measurement.timestampSeconds() > headingConfig.maxMeasurementAgeSeconds()) return null;
     double[] values = frame.value;
+    double maxDistance = measurement.tagCount() == 1
+        ? Math.min(headingConfig.maxTagDistanceMeters(), SINGLE_TAG_MAX_DISTANCE_METERS)
+        : headingConfig.maxTagDistanceMeters();
+    double maxAmbiguity = 0;
     for (int i = 11; i < values.length; i += 7) {
       double id = values[i], ambiguity = values[i + 6];
       if (id <= 0 || id != Math.rint(id) || values[i + 4] < 0
-          || values[i + 4] > headingConfig.maxTagDistanceMeters()
+          || values[i + 4] > maxDistance
           || ambiguity < 0 || ambiguity > headingConfig.maxTagAmbiguity()) return null;
+      maxAmbiguity = Math.max(maxAmbiguity, ambiguity);
       for (int previous = 11; previous < i; previous += 7) if (values[previous] == id) return null;
     }
-    return new HeadingMeasurement(name, measurement.pose(), measurement.timestampSeconds(),
-        headingConfig.headingStdDevRadians());
+    var heading = new HeadingMeasurement(name, measurement.pose(), measurement.timestampSeconds(),
+        headingConfig.headingStdDevRadians(), measurement.tagCount(), measurement.averageTagDistanceMeters(),
+        maxAmbiguity, values[8]);
+    return measurement.tagCount() > 1 || heading.reliableSingleTag(now) ? heading : null;
   }
 
   private Measurement parseMeasurement(String name, TimestampedDoubleArray frame, double now) {

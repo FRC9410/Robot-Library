@@ -5,6 +5,8 @@ import frc.powerlib.configs.VisionPoseFilterConfig;
 import frc.powerlib.health.HealthChecks;
 import frc.powerlib.vision.LimelightVision.Measurement;
 import java.util.Objects;
+import java.util.HashMap;
+import java.util.Map;
 
 /** Capture-time tilt gate and temporal agreement check for large position corrections. */
 public final class VisionPoseFilter {
@@ -12,12 +14,17 @@ public final class VisionPoseFilter {
   private final double maxFrameAgeSeconds;
   private double observedAt = Double.NaN;
   private double levelSince = Double.NaN;
-  private double lastFrame = Double.NEGATIVE_INFINITY;
-  private double recoveryFirst;
-  private double recoveryLast = Double.NEGATIVE_INFINITY;
-  private double anchorX;
-  private double anchorY;
-  private int count;
+  private static final class CameraHistory {
+    double lastFrame = Double.NEGATIVE_INFINITY;
+    double recoveryFirst;
+    double recoveryLast = Double.NEGATIVE_INFINITY;
+    double anchorX;
+    double anchorY;
+    int count;
+
+    void resetRecovery() { count = 0; recoveryLast = Double.NEGATIVE_INFINITY; }
+  }
+  private final Map<String, CameraHistory> cameras = new HashMap<>();
   private String status = "Waiting for level gyro feedback";
 
   public VisionPoseFilter(VisionPoseFilterConfig config, double maxFrameAgeSeconds) {
@@ -78,35 +85,37 @@ public final class VisionPoseFilter {
   public boolean acceptPosition(Measurement measurement, Pose2d historicalPose, double now) {
     if (measurement == null) return false;
     double timestamp = measurement.timestampSeconds();
+    var recovery = cameras.computeIfAbsent(measurement.cameraName(), name -> new CameraHistory());
     if (!HealthChecks.isFresh(now - timestamp, maxFrameAgeSeconds)) {
-      resetRecovery(); status = "Rejected stale or future position"; return false;
+      recovery.resetRecovery(); status = "Rejected stale or future position"; return false;
     }
-    if (timestamp <= lastFrame) return false;
-    lastFrame = timestamp; // Consume rejected samples too; a second call cannot supply extra evidence.
+    if (timestamp <= recovery.lastFrame) return false;
+    // A rejected camera must not consume another camera's frame from the same instant.
+    recovery.lastFrame = timestamp;
     if (!plausible(measurement, now) || !HealthChecks.finitePose(historicalPose)) {
-      resetRecovery();
+      recovery.resetRecovery();
       status = "Rejected capture, position bounds or missing pose history";
       return false;
     }
     double dx = measurement.pose().getX() - historicalPose.getX();
     double dy = measurement.pose().getY() - historicalPose.getY();
     if (!Double.isFinite(dx) || !Double.isFinite(dy)) {
-      resetRecovery(); status = "Rejected invalid position difference"; return false;
+      recovery.resetRecovery(); status = "Rejected invalid position difference"; return false;
     }
     if (Math.hypot(dx, dy) <= config.maxSingleCorrectionMeters()) {
-      resetRecovery(); status = "Accepted position"; return true;
+      recovery.resetRecovery(); status = "Accepted position"; return true;
     }
     // Compare correction vectors so legitimate robot travel does not look like camera disagreement.
-    if (count == 0 || timestamp - recoveryLast > maxFrameAgeSeconds
-        || Math.hypot(dx - anchorX, dy - anchorY) > config.recoverySpreadMeters()) {
-      resetRecovery();
-      anchorX = dx;
-      anchorY = dy;
-      recoveryFirst = timestamp;
+    if (recovery.count == 0 || timestamp - recovery.recoveryLast > maxFrameAgeSeconds
+        || Math.hypot(dx - recovery.anchorX, dy - recovery.anchorY) > config.recoverySpreadMeters()) {
+      recovery.resetRecovery();
+      recovery.anchorX = dx;
+      recovery.anchorY = dy;
+      recovery.recoveryFirst = timestamp;
     }
-    recoveryLast = timestamp;
-    count++;
-    if (count < config.recoveryFrames() || timestamp - recoveryFirst < config.recoverySeconds()) {
+    recovery.recoveryLast = timestamp;
+    recovery.count++;
+    if (recovery.count < config.recoveryFrames() || timestamp - recovery.recoveryFirst < config.recoverySeconds()) {
       status = "Waiting for consistent large position correction";
       return false;
     }
@@ -114,5 +123,5 @@ public final class VisionPoseFilter {
     return true;
   }
 
-  public void resetRecovery() { count = 0; recoveryLast = Double.NEGATIVE_INFINITY; }
+  public void resetRecovery() { for (var camera : cameras.values()) camera.resetRecovery(); }
 }

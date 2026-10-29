@@ -138,10 +138,25 @@ def templateFiles = [
         replacement: false
     ),
     new TemplateFile(
-        source: 'powerlib/src/main/java/frc/powerlib/vision/LimelightVision.java',
-        destination: 'src/main/java/frc/powerlib/vision/LimelightVision.java',
+        source: 'powerlib/src/main/java/frc/powerlib/vision/VisionHeadingReadiness.java',
+        destination: 'src/main/java/frc/powerlib/vision/VisionHeadingReadiness.java',
         replacement: false
     ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/vision/VisionHeadingSelector.java',
+        destination: 'src/main/java/frc/powerlib/vision/VisionHeadingSelector.java',
+        replacement: false
+    ),
+      new TemplateFile(
+          source: 'powerlib/src/main/java/frc/powerlib/vision/LimelightVision.java',
+          destination: 'src/main/java/frc/powerlib/vision/LimelightVision.java',
+          replacement: false
+      ),
+      new TemplateFile(
+          source: 'powerlib/src/main/java/frc/powerlib/vision/VisionMeasurementFusion.java',
+          destination: 'src/main/java/frc/powerlib/vision/VisionMeasurementFusion.java',
+          replacement: false
+      ),
     new TemplateFile(
         source: 'powerlib/src/main/java/frc/powerlib/configs/RelativePositionSubsystemConfig.java',
         destination: 'src/main/java/frc/powerlib/configs/RelativePositionSubsystemConfig.java',

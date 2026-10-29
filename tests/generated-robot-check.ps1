@@ -31,7 +31,8 @@ try {
     foreach ($helper in @('health/HealthChecks.java', 'controls/ButtonBindings.java', 'auto/Auto.java',
         'configs/LimelightHeadingConfig.java', 'configs/VisionHeadingInitializationConfig.java',
         'configs/VisionPoseFilterConfig.java', 'vision/VisionPoseFilter.java',
-        'vision/LimelightVision.java', 'vision/VisionHeadingInitializer.java')) {
+        'vision/LimelightVision.java', 'vision/VisionHeadingInitializer.java', 'vision/VisionHeadingReadiness.java',
+        'vision/VisionMeasurementFusion.java', 'vision/VisionHeadingSelector.java')) {
         if (-not (Test-Path -LiteralPath (Join-Path $fixture "src/main/java/frc/powerlib/$helper"))) {
             throw "Fresh install omitted library helper $helper."
         }

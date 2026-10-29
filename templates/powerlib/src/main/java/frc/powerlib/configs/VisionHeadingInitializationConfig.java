@@ -1,6 +1,6 @@
 package frc.powerlib.configs;
 
-/** Startup policy for independent heading initialization while disabled and stationary. */
+/** Heading stability and stationary policy; enabled controls automatic initialization and hard resets. */
 public record VisionHeadingInitializationConfig(
     boolean enabled,
     double minStableSeconds,
@@ -25,5 +25,11 @@ public record VisionHeadingInitializationConfig(
   public VisionHeadingInitializationConfig withEnabled(boolean enabled) {
     return new VisionHeadingInitializationConfig(enabled, minStableSeconds, minFrames,
         maxSpreadDegrees, maxSpeedMetersPerSecond, maxYawRateDegreesPerSecond, maxSignalAgeSeconds);
+  }
+
+  public boolean isStationary(double speedMetersPerSecond, double yawRateDegreesPerSecond) {
+    return Double.isFinite(speedMetersPerSecond) && Double.isFinite(yawRateDegreesPerSecond)
+        && Math.abs(speedMetersPerSecond) <= maxSpeedMetersPerSecond
+        && Math.abs(yawRateDegreesPerSecond) <= maxYawRateDegreesPerSecond;
   }
 }

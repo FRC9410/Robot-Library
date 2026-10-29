@@ -157,6 +157,24 @@ public class VisionPoseFilterTest {
     assertFalse(filter.acceptPosition(frame(6, 3, 9.99), HISTORY, 10));
   }
 
+  @Test public void rejectedCameraCannotConsumeAnotherCamerasSimultaneousGoodFrame() {
+    var filter = ready();
+    assertFalse(filter.acceptPosition(frame(99, 3, 9.95), HISTORY, 10));
+    var good = new Measurement("other", pose(2.1, 3), 9.95, 1, 2, .28);
+    assertTrue(filter.acceptPosition(good, HISTORY, 10));
+    assertFalse(filter.acceptPosition(good, HISTORY, 10));
+  }
+
+  @Test public void invalidCameraCannotClearAnotherCamerasLargeCorrectionEvidence() {
+    var filter = ready();
+    for (double capture : new double[] { 9.94, 9.99 }) {
+      assertFalse(filter.acceptPosition(frame(6, 3, capture), HISTORY, 10));
+      assertFalse(filter.acceptPosition(new Measurement("bad", pose(99, 3), capture, 1, 2, .28), HISTORY, 10));
+    }
+    observeLevel(filter, 10.02, 10.08);
+    assertTrue(filter.acceptPosition(frame(6, 3, 10.06), HISTORY, 10.08));
+  }
+
   @Test public void configurationRejectsInvalidLimits() {
     assertThrows(IllegalArgumentException.class, () -> VisionPoseFilterConfig.forField(1, 0, 0, 8));
     assertThrows(IllegalArgumentException.class, () -> VisionPoseFilterConfig.forField(0, 16, Double.NaN, 8));
@@ -164,5 +182,16 @@ public class VisionPoseFilterTest {
     assertThrows(IllegalArgumentException.class, () -> new VisionPoseFilterConfig(0, 16, 0, 8, .25, .5, 91, .15, .1, 1, 3, .1, .25));
     assertThrows(IllegalArgumentException.class, () -> new VisionPoseFilter(CONFIG, Double.NaN));
     assertThrows(IllegalArgumentException.class, () -> new VisionPoseFilter(CONFIG, 0));
+  }
+
+  @Test public void acceptedFallbackCannotEraseAnotherCamerasLargeCorrectionEvidence() {
+    var filter = ready();
+    for (double capture : new double[] {9.94, 9.99}) {
+      assertFalse(filter.acceptPosition(frame(6, 3, capture), HISTORY, 10));
+      assertTrue(filter.acceptPosition(new Measurement("fallback", pose(2.1, 3), capture, 1, 2, .28), HISTORY, 10));
+    }
+    observeLevel(filter, 10.02, 10.08);
+    assertTrue("Fallback must not starve a consistent better camera",
+        filter.acceptPosition(frame(6, 3, 10.06), HISTORY, 10.08));
   }
 }
