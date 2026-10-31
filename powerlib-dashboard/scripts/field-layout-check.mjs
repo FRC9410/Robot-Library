@@ -48,8 +48,26 @@ for (const [alliance, hubTags, trenchTags, towerTag, outpostTags] of [["blue", [
   near(hub.y, (tag[hubTags[0]].y + tag[hubTags[1]].y) / 2, `${alliance} hub y`);
   // Face tags stand slightly proud of the 47 in hub.
   near(shapes("hub", alliance)[0].length, Math.abs(tag[hubTags[2]].x - tag[hubTags[3]].x), `${alliance} hub size from face tags`, 0.02);
-  for (const trench of shapes("trench", alliance)) near(center(trench).x, (tag[trenchTags[0]].x + tag[trenchTags[1]].x) / 2, `${alliance} trench x`);
-  near(center(shapes("tower", alliance)[0]).y, tag[towerTag].y, `${alliance} tower center`);
+  for (const trench of shapes("trench", alliance)) {
+    near(center(trench).x, (tag[trenchTags[0]].x + tag[trenchTags[1]].x) / 2, `${alliance} trench x`);
+    // Manual 5.6 gives the open space under each trench arm independently of the drawing's post width.
+    near(trench.width, 50.34 * 0.0254, `${alliance} trench lane width`, 0.001);
+  }
+  assert.ok(shapes("trench", alliance).some(lane => trenchTags.every(id => tag[id].y > lane.y && tag[id].y < lane.y + lane.width)), `${alliance} trench arm tags sit over a lane`);
+  const trenchFaces = trenchTags.map(id => tag[id].x).sort((a, b) => a - b);
+  for (const bar of shapes("trenchBar", alliance)) {
+    near(bar.x, trenchFaces[0], `${alliance} trench bar near face`, 0.001);
+    near(bar.x + bar.length, trenchFaces[1], `${alliance} trench bar far face`, 0.001);
+  }
+  const opening = center(shapes("hubOpening", alliance)[0]);
+  near(opening.x, hub.x, `${alliance} hub opening x`, 0.001);
+  near(opening.y, hub.y, `${alliance} hub opening y`, 0.001);
+  const tower = shapes("tower", alliance)[0];
+  near(center(tower).y, tag[towerTag].y, `${alliance} tower center`);
+  near(center(shapes("towerRung", alliance)[0]).y, tag[towerTag].y, `${alliance} tower rung center`);
+  for (const part of [...shapes("towerRung", alliance), ...shapes("towerUpright", alliance)]) {
+    assert.ok(part.x >= tower.x - 1e-9 && part.x + part.length <= tower.x + tower.length + 1e-9, `${alliance} ${part.element} within the tower's depth`);
+  }
   const outpost = shapes("outpost", alliance)[0];
   for (const id of outpostTags) assert.ok(tag[id].y > outpost.y && tag[id].y < outpost.y + outpost.width, `${alliance} outpost holds tag ${id}`);
 }

@@ -109,7 +109,7 @@ export function AutoField({ auto, field, layout, robot, stateColor, selectedStep
           if (!auto || !point) return;
           begin(event, { kind: "add", clientX: event.clientX, clientY: event.clientY, x: point.x, y: point.y });
         }} />
-      {layout ? <FieldBackdrop layout={layout} width={viewWidth} height={viewHeight} showTags /> : <>
+      {layout ? <FieldBackdrop layout={layout} width={viewWidth} height={viewHeight} labels /> : <>
         <rect width={viewWidth} height={viewHeight} fill="url(#auto-field-grid)" pointerEvents="none" />
         <rect width="16" height={viewHeight} fill="#307de0" opacity=".55" pointerEvents="none" />
         <rect x={viewWidth - 16} width="16" height={viewHeight} fill="#ec4d5d" opacity=".55" pointerEvents="none" />
