@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Button,
@@ -23,19 +23,22 @@ import AddIcon from "@mui/icons-material/Add";
 import CodeIcon from "@mui/icons-material/Code";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import DeleteIcon from "@mui/icons-material/DeleteOutlined";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
+import KeyboardIcon from "@mui/icons-material/Keyboard";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
+import RedoIcon from "@mui/icons-material/Redo";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SaveIcon from "@mui/icons-material/Save";
 import StarIcon from "@mui/icons-material/Star";
 import StarBorderIcon from "@mui/icons-material/StarBorder";
 import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import SwapVertIcon from "@mui/icons-material/SwapVert";
+import UndoIcon from "@mui/icons-material/Undo";
 import { useNetworkTables, useTopics } from "../networktables/NetworkTablesContext";
 import { driveModel, template } from "../drive/driveModel";
 import { useFieldLayout } from "../field/fieldLayouts";
 import { AutoField } from "./AutoField";
 import { AutoReplayBar } from "./AutoReplayBar";
+import { ShortcutsDialog } from "./AutoShortcuts";
 import { StepInspector, StepList, stepDescriptions, stepIcons } from "./AutoSteps";
 import type { LegReplayInfo } from "./AutoSteps";
 import {
@@ -49,12 +52,15 @@ import {
   hasErrors,
   legConstraints,
   mirroredAuto,
+  normalizeHeading,
   parseAutoDocument,
+  round,
   stepLabels,
   validateAutos
 } from "./autoModel";
-import type { AutoDocument, AutoProject, AutoRoutine, AutoStep, AutoStepType, DriveStep, LegConstraints, Symmetry } from "./autoModel";
+import type { AutoProject, AutoRoutine, AutoStep, AutoStepType, DriveStep, LegConstraints, Symmetry } from "./autoModel";
 import { frameAt, replayAuto, segmentAt, stateAt } from "./autoReplay";
+import { useAutoHistory } from "./useAutoHistory";
 import "./autos.css";
 import "./autoBuilder.css";
 
@@ -95,7 +101,7 @@ export function AutoBuilderPanel() {
   const [now, setNow] = useState(() => performance.now());
   const [files, setFiles] = useState<FilesState>({ loading: true, path: "", states: [], driveCommandInstalled: null,
     robotAutosHooked: null, robotAutosStrings: [], robot: { width: 0.914, length: 0.914 }, error: null });
-  const [document, setDocument] = useState<AutoDocument>(emptyDocument);
+  const { document, change, reset, undo, redo, canUndo, canRedo } = useAutoHistory();
   const [savedJson, setSavedJson] = useState(JSON.stringify(emptyDocument()));
   const [selectedAutoId, setSelectedAutoId] = useState<string | null>(null);
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
@@ -107,7 +113,10 @@ export function AutoBuilderPanel() {
   const [playing, setPlaying] = useState(false);
   const [replaySpeed, setReplaySpeed] = useState(1);
   const [addMenu, setAddMenu] = useState<HTMLElement | null>(null);
-  const [autoMenu, setAutoMenu] = useState<HTMLElement | null>(null);
+  /** Right-click menu for an auto in the list, at the pointer. */
+  const [autoMenu, setAutoMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const clipboard = useRef<AutoStep | null>(null);
   const layout = useFieldLayout();
   const field = useMemo(() => layout ? { length: layout.length, width: layout.width } : readFieldSize(), [layout]);
 
@@ -167,6 +176,7 @@ export function AutoBuilderPanel() {
   }, [replay.duration]);
 
   const stopReplay = () => { setPlaying(false); setReplayTime(null); };
+  const startReplay = () => { if (replayTime === null || replayTime >= replay.duration) setReplayTime(0); setPlaying(true); };
 
   const applyFiles = (state: Awaited<ReturnType<NonNullable<typeof api>["readAutos"]>>) => {
     setFiles({ loading: false, path: state.path, states: state.states, driveCommandInstalled: state.driveCommandInstalled,
@@ -183,22 +193,33 @@ export function AutoBuilderPanel() {
       const state = await api.readAutos();
       applyFiles(state);
       const next = parseAutoDocument(state.document);
-      setDocument(next);
+      reset(next);
       setSavedJson(JSON.stringify(next));
       setSelectedAutoId(current => next.autos.some(candidate => candidate.id === current) ? current : next.autos[0]?.id ?? null);
       setSelectedStepId(null);
     } catch (error) {
       setFiles(current => ({ ...current, loading: false, error: error instanceof Error ? error.message : "Could not read autos." }));
     }
-  }, [api]);
+  }, [api, reset]);
   useEffect(() => { void load(); }, [load]);
 
-  const updateAuto = (id: string, update: (auto: AutoRoutine) => AutoRoutine) => {
-    setDocument(current => ({ ...current, autos: current.autos.map(candidate => candidate.id === id ? update(candidate) : candidate) }));
+  // Undo and redo can remove the selected auto or step; fall back to something that exists.
+  useEffect(() => {
+    if (selectedAutoId !== null && !document.autos.some(candidate => candidate.id === selectedAutoId)) {
+      setSelectedAutoId(document.autos[0]?.id ?? null);
+      setSelectedStepId(null);
+    } else if (selectedStepId !== null && !auto?.steps.some(step => step.id === selectedStepId)) {
+      setSelectedStepId(null);
+    }
+  }, [document, selectedAutoId, selectedStepId, auto]);
+
+  // `key` merges rapid edits of the same thing (a drag, typing in one field) into one undo step.
+  const updateAuto = (id: string, update: (auto: AutoRoutine) => AutoRoutine, key?: string) => {
+    change(current => ({ ...current, autos: current.autos.map(candidate => candidate.id === id ? update(candidate) : candidate) }), key);
   };
-  const updateSelected = (update: (auto: AutoRoutine) => AutoRoutine) => { if (auto) updateAuto(auto.id, update); };
-  const updateStep = (stepId: string, patch: Partial<AutoStep>) => {
-    updateSelected(current => ({ ...current, steps: current.steps.map(step => step.id === stepId ? { ...step, ...patch } as AutoStep : step) }));
+  const updateSelected = (update: (auto: AutoRoutine) => AutoRoutine, key?: string) => { if (auto) updateAuto(auto.id, update, key); };
+  const updateStep = (stepId: string, patch: Partial<AutoStep>, key = `step:${stepId}:${Object.keys(patch).sort().join(",")}`) => {
+    updateSelected(current => ({ ...current, steps: current.steps.map(step => step.id === stepId ? { ...step, ...patch } as AutoStep : step) }), key);
   };
 
   /** New steps go after the selected step so an auto is built in order. */
@@ -231,19 +252,31 @@ export function AutoBuilderPanel() {
     const point = viewingMirror ? flipPoint({ x, y, heading: 0 }, auto.symmetry, field) : { x, y };
     insertStep(newDriveStep(point.x, point.y));
   };
-  const fieldChangePoint = (stepId: string, patch: Partial<Pick<DriveStep, "x" | "y" | "heading">>) => {
-    if (!viewingMirror || !auto || !mirror) { updateStep(stepId, patch); return; }
+  const fieldChangePoint = (stepId: string, patch: Partial<Pick<DriveStep, "x" | "y" | "heading">>, key = `point:${stepId}:${Object.keys(patch).sort().join(",")}`) => {
+    if (!viewingMirror || !auto || !mirror) { updateStep(stepId, patch, key); return; }
     const shown = mirror.steps.find((step): step is DriveStep => step.id === stepId && step.type === "drive");
     if (!shown) return;
     const original = flipPoint({ ...shown, ...patch }, auto.symmetry, field);
-    updateStep(stepId, { x: original.x, y: original.y, heading: original.heading });
+    updateStep(stepId, { x: original.x, y: original.y, heading: original.heading }, key);
   };
   // Subpoint progress is a fraction of the leg, so it is the same in the mirrored view.
   const changeSubpoint = (stepId: string, subpointId: string, progress: number) => {
     updateSelected(current => ({ ...current, steps: current.steps.map(step => step.id === stepId && step.type === "drive"
       ? { ...step, subpoints: step.subpoints.map(subpoint => subpoint.id === subpointId ? { ...subpoint, progress } : subpoint) }
-      : step) }));
+      : step) }), `subpoint:${subpointId}`);
   };
+  /** Moves or turns the selected drive point in the frame shown on the field. */
+  const nudgeSelected = (dx: number, dy: number, turn: number) => {
+    const shown = shownAuto?.steps.find((step): step is DriveStep => step.id === selectedStepId && step.type === "drive");
+    if (!shown) return;
+    const clamp = (value: number, max: number) => round(Math.min(Math.max(value, 0), max));
+    fieldChangePoint(shown.id, turn !== 0 ? { heading: normalizeHeading(Math.round(shown.heading + turn)) }
+      : { x: clamp(shown.x + dx, field.length), y: clamp(shown.y + dy, field.width) }, `nudge:${shown.id}:${turn !== 0 ? "turn" : "move"}`);
+  };
+  /** A copy with new ids, so pasted and duplicated steps never share subpoints with the original. */
+  const cloneStep = (step: AutoStep): AutoStep => step.type === "drive"
+    ? { ...step, id: createId(), subpoints: step.subpoints.map(subpoint => ({ ...subpoint, id: createId() })) }
+    : { ...step, id: createId() };
 
   const moveStep = (stepId: string, offset: number) => {
     updateSelected(current => {
@@ -264,15 +297,64 @@ export function AutoBuilderPanel() {
     setMessage({ severity: "success", text: "Applied these limits to every drive step in this auto." });
   };
 
+  // Building shortcuts; AutoShortcuts.tsx lists them for the help dialog.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (!selectedStepId || target?.closest("input, textarea, [contenteditable='true'], [role='combobox'], [role='listbox']")) return;
-      if (event.key === "Delete" || event.key === "Backspace") {
-        event.preventDefault();
-        deleteStep(selectedStepId);
+      const target = event.target instanceof Element ? event.target : null;
+      const typing = Boolean(target?.closest("input, textarea, select, [contenteditable='true']"));
+      const control = event.ctrlKey || event.metaKey;
+      const key = event.key.toLowerCase();
+      // Open menus and dialogs own the keyboard.
+      if (shortcutsOpen || autoMenu || addMenu || target?.closest("[role='menu'], [role='listbox'], [role='dialog']")) return;
+      const handled = () => { event.preventDefault(); event.stopPropagation(); };
+
+      if (control && key === "s") { handled(); if (api && dirty && busy === null) void save(); return; }
+      // Inside a text field, undo and redo edit the text instead.
+      if (typing) return;
+      if (control && key === "z" && !event.shiftKey) { handled(); undo(); return; }
+      if (control && (key === "y" || (key === "z" && event.shiftKey))) { handled(); redo(); return; }
+      if (event.key === "?") { handled(); setShortcutsOpen(true); return; }
+      if (event.key === " " && !control) { handled(); if (playing) setPlaying(false); else if (replay.frames.length) startReplay(); return; }
+      if (!auto || event.altKey && !["arrowup", "arrowdown"].includes(key)) return;
+
+      const index = auto.steps.findIndex(step => step.id === selectedStepId);
+      if (!control && !event.altKey && ["1", "2", "3", "4"].includes(event.key)) {
+        handled();
+        addStep((["drive", "requestState", "waitForState", "wait"] as const)[Number(event.key) - 1]);
+      } else if (!control && (event.key === "[" || event.key === "]") && auto.steps.length) {
+        handled();
+        const next = index < 0 ? (event.key === "]" ? 0 : auto.steps.length - 1)
+          : Math.min(auto.steps.length - 1, Math.max(0, index + (event.key === "]" ? 1 : -1)));
+        setSelectedStepId(auto.steps[next].id);
+      } else if (control && key === "v" && clipboard.current) {
+        handled();
+        insertStep(cloneStep(clipboard.current));
+      } else if (index < 0) {
+        return;
+      } else if (control && key === "c") {
+        handled();
+        clipboard.current = auto.steps[index];
+        setMessage({ severity: "info", text: "Copied the step. Press Ctrl+V to paste it after the selected step." });
+      } else if (control && key === "d") {
+        handled();
+        insertStep(cloneStep(auto.steps[index]));
+      } else if (event.key === "Delete" || event.key === "Backspace") {
+        handled();
+        deleteStep(auto.steps[index].id);
       } else if (event.key === "Escape") {
+        handled();
         setSelectedStepId(null);
+      } else if (event.altKey && (key === "arrowup" || key === "arrowdown")) {
+        handled();
+        moveStep(auto.steps[index].id, key === "arrowup" ? -1 : 1);
+      } else if (!control && key.startsWith("arrow") && auto.steps[index].type === "drive") {
+        handled();
+        const distance = event.shiftKey ? 0.25 : 0.05;
+        nudgeSelected(key === "arrowleft" ? -distance : key === "arrowright" ? distance : 0,
+          key === "arrowdown" ? -distance : key === "arrowup" ? distance : 0, 0);
+      } else if (!control && (key === "q" || key === "e") && auto.steps[index].type === "drive") {
+        handled();
+        nudgeSelected(0, 0, (event.shiftKey ? 1 : 15) * (key === "q" ? 1 : -1));
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -290,32 +372,35 @@ export function AutoBuilderPanel() {
     let number = document.autos.length + 1;
     while (names.has(`Auto ${number}`)) number++;
     const next = createAuto(`Auto ${number}`);
-    setDocument(current => ({ ...current, autos: [...current.autos, next] }));
+    change(current => ({ ...current, autos: [...current.autos, next] }));
     selectAuto(next.id);
   };
-  const duplicateAuto = () => {
-    if (!auto) return;
-    const copy: AutoRoutine = { ...auto, id: createId(), name: `${auto.name} copy`, isDefault: false,
-      steps: auto.steps.map(step => step.type === "drive"
-        ? { ...step, id: createId(), subpoints: step.subpoints.map(subpoint => ({ ...subpoint, id: createId() })) }
-        : { ...step, id: createId() }) };
-    setDocument(current => ({ ...current, autos: [...current.autos, copy] }));
+  // These take an auto id so the list's right-click menu can act on any auto.
+  const duplicateAuto = (id: string) => {
+    const source = document.autos.find(candidate => candidate.id === id);
+    if (!source) return;
+    const copy: AutoRoutine = { ...source, id: createId(), name: `${source.name} copy`, isDefault: false, steps: source.steps.map(cloneStep) };
+    change(current => {
+      const autos = [...current.autos];
+      autos.splice(autos.findIndex(candidate => candidate.id === id) + 1, 0, copy);
+      return { ...current, autos };
+    });
     selectAuto(copy.id);
   };
-  const deleteAuto = () => {
-    if (!auto || !window.confirm(`Delete "${auto.name}"? It is removed from robot code on the next Update code.`)) return;
-    const remaining = document.autos.filter(candidate => candidate.id !== auto.id);
-    setDocument(current => ({ ...current, autos: remaining }));
-    selectAuto(remaining[0]?.id ?? null);
+  const deleteAuto = (id: string) => {
+    const source = document.autos.find(candidate => candidate.id === id);
+    if (!source) return;
+    const remaining = document.autos.filter(candidate => candidate.id !== id);
+    change(current => ({ ...current, autos: current.autos.filter(candidate => candidate.id !== id) }));
+    if (id === selectedAutoId) selectAuto(remaining[0]?.id ?? null);
+    setMessage({ severity: "info", text: `Deleted "${source.name || "(unnamed)"}". Press Ctrl+Z to undo.` });
   };
-  const setDefault = (checked: boolean) => {
-    if (!auto) return;
-    setDocument(current => ({ ...current, autos: current.autos.map(candidate => ({ ...candidate,
-      isDefault: candidate.id === auto.id ? checked : checked ? false : candidate.isDefault })) }));
+  const setDefault = (id: string, checked: boolean) => {
+    change(current => ({ ...current, autos: current.autos.map(candidate => ({ ...candidate,
+      isDefault: candidate.id === id ? checked : checked ? false : candidate.isDefault })) }));
   };
-  const flipInPlace = (flips: Symmetry) => {
-    updateSelected(current => ({ ...current, steps: flipSteps(current.steps, flips, field) }));
-    setAutoMenu(null);
+  const flipInPlace = (id: string, flips: Symmetry) => {
+    updateAuto(id, current => ({ ...current, steps: flipSteps(current.steps, flips, field) }));
   };
 
   const save = async () => {
@@ -385,7 +470,13 @@ export function AutoBuilderPanel() {
               const count = issues.filter(issue => issue.autoId === candidate.id && issue.severity === "error").length;
               const seconds = allReplays.get(candidate.id) ?? 0;
               const mirrored = candidate.symmetry.flipX || candidate.symmetry.flipY;
-              return <li key={candidate.id} className={`ab-auto${candidate.id === selectedAutoId ? " selected" : ""}`} onClick={() => selectAuto(candidate.id)}>
+              return <li key={candidate.id} className={`ab-auto${candidate.id === selectedAutoId ? " selected" : ""}`} onClick={() => selectAuto(candidate.id)}
+                title="Right-click to duplicate, flip or delete"
+                onContextMenu={event => {
+                  event.preventDefault();
+                  if (candidate.id !== selectedAutoId) selectAuto(candidate.id);
+                  setAutoMenu({ id: candidate.id, x: event.clientX, y: event.clientY });
+                }}>
                 <span className={`ab-alliance-dot ${candidate.alliance ?? ""}`} title={candidate.alliance ?? "Any alliance"} />
                 <span style={{ minWidth: 0 }}>
                   <span className="ab-auto-name" style={{ display: "block" }}>{candidate.name || "(unnamed)"}</span>
@@ -398,6 +489,9 @@ export function AutoBuilderPanel() {
               </li>;
             })}
           </ul>
+          <AutoContextMenu menu={autoMenu} auto={document.autos.find(candidate => candidate.id === autoMenu?.id) ?? null} onClose={() => setAutoMenu(null)}
+            onDuplicate={duplicateAuto} onFlip={flipInPlace} onDelete={deleteAuto} onDefault={setDefault}
+            onToggleClear={id => updateAuto(id, current => ({ ...current, clearRequestsAtEnd: !current.clearRequestsAtEnd }))} />
         </div>
         <Stack spacing={1} sx={{ p: 1.5, borderTop: "1px solid rgba(250, 204, 21, 0.12)" }}>
           {dirty && <Typography variant="caption" color="warning.main">Unsaved changes</Typography>}
@@ -408,6 +502,12 @@ export function AutoBuilderPanel() {
           <Stack direction="row" spacing={1}>
             <Button fullWidth size="small" variant="outlined" startIcon={busy === "save" ? <CircularProgress size={14} /> : <SaveIcon />}
               disabled={!api || busy !== null || !dirty} onClick={() => void save()}>Save</Button>
+            <Tooltip title="Undo (Ctrl+Z)">
+              <span><IconButton size="small" aria-label="Undo" disabled={!canUndo} onClick={undo}><UndoIcon fontSize="small" /></IconButton></span>
+            </Tooltip>
+            <Tooltip title="Redo (Ctrl+Y)">
+              <span><IconButton size="small" aria-label="Redo" disabled={!canRedo} onClick={redo}><RedoIcon fontSize="small" /></IconButton></span>
+            </Tooltip>
             <Tooltip title="Reload autos from the robot project">
               <IconButton size="small" aria-label="Reload autos" onClick={() => {
                 if (!dirty || window.confirm("Discard unsaved auto changes and reload?")) void load();
@@ -423,7 +523,7 @@ export function AutoBuilderPanel() {
         {auto ? <div className="ab-toolbar">
           <TextField size="small" label="Auto name" value={auto.name} sx={{ flex: 1, minWidth: 160 }}
             error={autoIssues.some(issue => !issue.stepId && /name|None/.test(issue.message))}
-            onChange={event => updateSelected(current => ({ ...current, name: event.target.value }))} />
+            onChange={event => updateSelected(current => ({ ...current, name: event.target.value }), `name:${auto.id}`)} />
           <Tooltip title="Which alliance's chooser shows this auto. Coordinates are never flipped automatically.">
             <ToggleButtonGroup size="small" exclusive value={auto.alliance ?? "Any"}
               onChange={(_, value) => value && updateSelected(current => ({ ...current, alliance: value === "Any" ? null : value }))}>
@@ -443,30 +543,10 @@ export function AutoBuilderPanel() {
             </ToggleButtonGroup>
           </Tooltip>
           <Tooltip title={auto.isDefault ? "Default auto (selected when the robot starts)" : "Make this the default auto"}>
-            <IconButton aria-label="Default auto" color={auto.isDefault ? "primary" : "default"} onClick={() => setDefault(!auto.isDefault)}>
+            <IconButton aria-label="Default auto" color={auto.isDefault ? "primary" : "default"} onClick={() => setDefault(auto.id, !auto.isDefault)}>
               {auto.isDefault ? <StarIcon /> : <StarBorderIcon />}
             </IconButton>
           </Tooltip>
-          <IconButton aria-label="More auto actions" onClick={event => setAutoMenu(event.currentTarget)}><MoreVertIcon /></IconButton>
-          <Menu anchorEl={autoMenu} open={autoMenu !== null} onClose={() => setAutoMenu(null)}>
-            <MenuItem onClick={() => { duplicateAuto(); setAutoMenu(null); }}>
-              <ListItemIcon><ContentCopyIcon fontSize="small" /></ListItemIcon><ListItemText>Duplicate</ListItemText>
-            </MenuItem>
-            <MenuItem onClick={() => flipInPlace({ flipX: true, flipY: false })}>
-              <ListItemIcon><SwapHorizIcon fontSize="small" /></ListItemIcon><ListItemText primary="Flip points across center line" secondary="Changes this auto" />
-            </MenuItem>
-            <MenuItem onClick={() => flipInPlace({ flipX: false, flipY: true })}>
-              <ListItemIcon><SwapVertIcon fontSize="small" /></ListItemIcon><ListItemText primary="Flip points top to bottom" secondary="Changes this auto" />
-            </MenuItem>
-            <MenuItem onClick={() => updateSelected(current => ({ ...current, clearRequestsAtEnd: !current.clearRequestsAtEnd }))}>
-              <ListItemIcon><Checkbox size="small" checked={auto.clearRequestsAtEnd} sx={{ p: 0 }} /></ListItemIcon>
-              <ListItemText primary="Clear state requests at the end" />
-            </MenuItem>
-            <Divider />
-            <MenuItem onClick={() => { setAutoMenu(null); deleteAuto(); }} sx={{ color: "error.main" }}>
-              <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon><ListItemText>Delete auto</ListItemText>
-            </MenuItem>
-          </Menu>
         </div> : !files.error && <Typography color="text.secondary">Create or pick an auto on the left.</Typography>}
 
         <div className="ab-pane" style={{ flex: 1 }}>
@@ -487,6 +567,9 @@ export function AutoBuilderPanel() {
                 Point at robot
               </Button></span>
             </Tooltip>}
+            <Tooltip title="Keyboard shortcuts (?)">
+              <IconButton size="small" aria-label="Keyboard shortcuts" onClick={() => setShortcutsOpen(true)}><KeyboardIcon fontSize="small" /></IconButton>
+            </Tooltip>
           </div>
           <div className="ab-stage">
             {view === "code"
@@ -498,7 +581,7 @@ export function AutoBuilderPanel() {
           </div>
           <Divider />
           <AutoReplayBar replay={replay} time={replayTime} playing={playing} speed={replaySpeed} stateColor={stateColor} activeStepId={activeStepId}
-            onPlay={() => { if (replayTime === null || replayTime >= replay.duration) setReplayTime(0); setPlaying(true); }}
+            onPlay={startReplay}
             onPause={() => setPlaying(false)} onStop={stopReplay}
             onSeek={time => { setPlaying(false); setReplayTime(time); }} onSpeed={setReplaySpeed} onSelectStep={setSelectedStepId} />
         </div>
@@ -535,6 +618,7 @@ export function AutoBuilderPanel() {
         </>}
       </section>
 
+      <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <Snackbar open={message !== null} autoHideDuration={message?.severity === "error" ? 9000 : 4000} onClose={() => setMessage(null)}
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }}>
         {message ? <Alert severity={message.severity} variant="filled" onClose={() => setMessage(null)}>{message.text}</Alert> : undefined}
@@ -567,11 +651,51 @@ function AutoOverview({ auto, legCount, duration, issues, onSelectStep }: {
         "Click the field to add a drive point after the selected step.",
         "Drag a point to move it; drag its ring to aim it (Shift snaps to 15°).",
         "Each drive step has its own speed, acceleration and finish tolerances.",
-        "Press play to watch the ideal motion. Delete removes the selected step; Esc deselects."
+        "Ctrl+Z undoes, arrow keys nudge the selected point, Q/E turn it, and Space plays the replay. Press ? for all shortcuts.",
+        "Right-click an auto in the list to duplicate, flip or delete it."
       ].map(line => <Typography key={line} variant="body2" color="text.secondary">{line}</Typography>)}
     </Stack>
     {!auto.steps.length && <Typography variant="body2">Start by clicking where the robot begins the auto. The replay starts from point 1.</Typography>}
   </Stack>;
+}
+
+/** Right-click menu for an auto in the list. */
+function AutoContextMenu({ menu, auto, onClose, onDuplicate, onFlip, onDelete, onDefault, onToggleClear }: {
+  menu: { id: string; x: number; y: number } | null;
+  auto: AutoRoutine | null;
+  onClose: () => void;
+  onDuplicate: (id: string) => void;
+  onFlip: (id: string, flips: Symmetry) => void;
+  onDelete: (id: string) => void;
+  onDefault: (id: string, checked: boolean) => void;
+  onToggleClear: (id: string) => void;
+}) {
+  const run = (action: (id: string) => void) => () => { if (menu) action(menu.id); onClose(); };
+  return <Menu open={menu !== null && auto !== null} onClose={onClose} anchorReference="anchorPosition"
+    anchorPosition={menu ? { top: menu.y, left: menu.x } : undefined} slotProps={{ list: { dense: true } }}>
+    <MenuItem onClick={run(onDuplicate)}>
+      <ListItemIcon><ContentCopyIcon fontSize="small" /></ListItemIcon><ListItemText>Duplicate</ListItemText>
+    </MenuItem>
+    <MenuItem onClick={run(id => onFlip(id, { flipX: true, flipY: false }))}>
+      <ListItemIcon><SwapHorizIcon fontSize="small" /></ListItemIcon><ListItemText>Flip points across center line</ListItemText>
+    </MenuItem>
+    <MenuItem onClick={run(id => onFlip(id, { flipX: false, flipY: true }))}>
+      <ListItemIcon><SwapVertIcon fontSize="small" /></ListItemIcon><ListItemText>Flip points top to bottom</ListItemText>
+    </MenuItem>
+    <Divider />
+    <MenuItem onClick={run(id => onDefault(id, !auto?.isDefault))}>
+      <ListItemIcon>{auto?.isDefault ? <StarIcon fontSize="small" color="primary" /> : <StarBorderIcon fontSize="small" />}</ListItemIcon>
+      <ListItemText>{auto?.isDefault ? "Remove as default" : "Make default"}</ListItemText>
+    </MenuItem>
+    <MenuItem onClick={run(onToggleClear)}>
+      <ListItemIcon><Checkbox size="small" checked={auto?.clearRequestsAtEnd ?? false} sx={{ p: 0 }} /></ListItemIcon>
+      <ListItemText>Clear state requests at the end</ListItemText>
+    </MenuItem>
+    <Divider />
+    <MenuItem onClick={run(onDelete)} sx={{ color: "error.main" }}>
+      <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon><ListItemText>Delete</ListItemText>
+    </MenuItem>
+  </Menu>;
 }
 
 function Stat({ label, value, warn = false }: { label: string; value: string; warn?: boolean }) {

@@ -276,3 +276,30 @@
 .ab-inspector {
   border-top: 1px solid rgba(250, 204, 21, 0.12);
 }
+
+/* Keyboard shortcuts dialog */
+.ab-shortcut-group + .ab-shortcut-group { margin-top: 12px; }
+
+.ab-shortcut {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.ab-shortcut-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ab-shortcut kbd {
+  padding: 1px 6px;
+  border: 1px solid #52525b;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: #27272a;
+  color: #f8fafc;
+  font: 12px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace;
+}

@@ -82,7 +82,9 @@ Click the field to add a drive point after the selected step, drag a point to mo
 
 Path segments are colored by the state requested at that point. Robot states come from `RobotState` in `StateMachine.java`. Point at robot uses the live pose.
 
-Symmetry (↔ and ↕ beside the alliance) also generates a mirrored copy for the other side: flipped across the center line, top to bottom, or both, with the opposite alliance (or "(mirrored)" when the auto is for any alliance). The field can show either version, and edits on the mirrored view are flipped back onto the original. The ⋯ menu can also flip an auto's points in place.
+Ctrl+Z and Ctrl+Y (or Ctrl+Shift+Z) undo and redo edits; a drag, or typing in one field, is one undo step. Other shortcuts: Ctrl+S saves, 1–4 add a step, Ctrl+C/Ctrl+V copy and paste a step (also into another auto), Ctrl+D duplicates it, Delete removes it, `[` and `]` select the previous or next step, Alt+↑/↓ move it, arrow keys nudge the selected point 5 cm (Shift: 25 cm), Q/E turn it 15° (Shift: 1°), Space plays the replay, and `?` lists them all. Right-click an auto in the list to duplicate, flip, delete or make it the default.
+
+Symmetry (↔ and ↕ beside the alliance) also generates a mirrored copy for the other side: flipped across the center line, top to bottom, or both, with the opposite alliance (or "(mirrored)" when the auto is for any alliance). The field can show either version, and edits on the mirrored view are flipped back onto the original. The right-click menu can also flip an auto's points in place.
 
 Replay plays the ideal motion from point 1 using the same math as the robot's `DriveToPoseController`, assuming the robot tracks its commands exactly and turns at 180°/s. Consecutive drive legs carry their speed into the next leg; any other step leaves the robot stopped. The timeline marks the 15 s autonomous period and flags legs that never reach their finish tolerances.
 
