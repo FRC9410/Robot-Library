@@ -27,7 +27,7 @@ re-exports `DrivePanel` (see [Custom Dashboard](Custom%20Dashboard.md)).
   - The field size only affects **drawing**. Each viewer can change it in Crew tools; it's saved in that machine's localStorage.
   - It does **not** match the robot's vision bounds in `LocationConstants` (17.548 × 8.052 m). See "Field dimensions" in [Units and Coordinates](../10-Guides/Units%20and%20Coordinates.md).
 - `cameraStream.ts`: MJPEG `<img>` with ordered URL failover, a 4 s first-frame timeout and retry.
-- **Crew tools → "Export telemetry snapshot"** downloads a one-off `powerlib-drive-snapshot.json`. It's the closest thing to logging that exists today, and it isn't a recording.
+- **Crew tools → "Export telemetry snapshot"** downloads a one-off `powerlib-drive-snapshot.json`. It isn't a recording; for recordings use the [Logs](#logs-featureslogs) tab.
 - Setup and topic table: `powerlib-dashboard/DRIVE-DASHBOARD.md`.
 
 ## Robot (`features/robot/`)
@@ -50,6 +50,36 @@ A form editor for `power-tool/generated/powerlib-subsystems.json`.
 - Save writes JSON only. **File → Update Code** runs the generator. See [Code Generation Flow](../06-Data-Flows/Code%20Generation%20Flow.md).
 - `CharacterizationDialog` (velocity types only) lists robot commands under `/PowerLib/Characterization/<Name>/…/.type == "PowerLibCommand"` and starts one by publishing `<base>/request = true`. It shows no results.
 
+## Logs (`features/logs/`)
+Replays a robot log file. Works offline; it doesn't use NetworkTables.
+- **Opening:** the Open log button (`window.powerlib.openLog`), or drag a file onto the tab. A dropped `.wpilog` is read in the renderer; a dropped `.hoot` goes through `openLogPath` so the main process can run Owlet. See [Power Tool Architecture](Power%20Tool%20Architecture.md).
+- `wpilog.ts`: `.wpilog` v1.0 reader.
+  - Decodes boolean, int64, float, double, string/json, the array types and `struct:Pose2d`. Schemas and raw types are skipped.
+  - An entry finished and restarted under a new ID stays one signal.
+  - A cut-off last record sets `truncated`, and the tab shows a warning instead of failing.
+- `logModel.ts` (`buildLogModel`) turns signals into what the tab shows:
+  - **Signal names:** `metricKey` matches `…/Subsystems/<owner>/Data/<key>` anywhere in a name, so SignalLogger (`PowerLib/…`), DataLogManager (`NT:/PowerLib/…`) and Owlet exports all work. Also legacy `/PowerLib/Drive/<key>`, `…/RobotStatus/<key>` and `DS:enabled|autonomous|test`.
+  - **`/PowerLib/Data` JSON frames** are expanded per key, but only fill keys that have no per-key signal (`usedFrames`).
+  - **Fallbacks for logs without PowerLib keys:**
+    - Owlet's built-in `Voltage`, `CAN Utilization` (%), `RobotMode` (`Disabled`/`Autonomous`/`Teleop`/`Test`) and `RobotEnable` stand in for `Drive/BatteryVolts`, `RioCanUtilization`, `Mode` and `Enabled`.
+    - `plainMechanismKey` reads plain names like `Shooter Velocity`, `Intake Wrist Position` and `Shooter Velocity Setpoint` as mechanisms, so pre-PowerLib logs still graph.
+  - **Times** are seconds from the first sample.
+  - **Mechanisms:** any owner except Drive/Swerve with `Velocity` or `Position`. Setpoint is `VelocitySetpoint`/`Setpoint` or `PositionSetpoint`/`SetpointRotations`/`Setpoint`; on-target is `AtTarget`/`AtSetpoint`. Units come from the signal's JSON metadata (`units`), else `powerlib-subsystems.json`, else `rps`/`rot`.
+  - **Periods** (match list) come from `Drive/Mode`, else `Drive/Enabled` or `DS:*`.
+  - **Problem markers:**
+    - `RobotStatus/BrownedOut` (else battery under 7 V);
+    - CAN over 90%;
+    - setpoint misses: off by more than `toleranceFor` (5% of setpoint or 2% of range) for 0.5 s, at least 1 s after the setpoint changed, while enabled.
+  - `stepStats`: overshoot and settle time (0.5 s inside tolerance) for the step in effect.
+  - `busiestMechanism`: the mechanism the tab opens on. Prefers the one with the most setpoint changes; with no setpoints, the one whose value moved most often.
+- `LogsPanel.tsx` + `LogWidgets.tsx`: fixed layout.
+  - Top: mechanism graph with a dropdown (20 s window, value vs setpoint), and the field with a 3 s trail. The field uses the Drive tab's field size and flip settings.
+  - Middle: at-setpoint box (estimated when not logged), battery, setpoint error/overshoot/settle.
+  - Below: `Drive/ActualState` strip.
+  - Timeline: play/pause, 0.5–4x speed, match-period chips, problem-marker chips (clicking one jumps there and picks its mechanism), click-to-seek, slider. Space plays/pauses; arrows step 1 s (Shift 5 s).
+- The panel stays mounted (hidden) when you switch tabs, so the open log is kept. Playback pauses while hidden.
+- Ideas and plans: [Log Viewer Project](../11-Ideas/Log%20Viewer%20Project.md).
+
 ## Limelights (`features/limelights/`)
 Only shown when a Limelight table is detected (`limelightUtils.detectLimelights`). One sub-tab per
 camera embeds its web UI (`http://<name>.local:5801`), with a per-camera URL override.
@@ -63,7 +93,7 @@ camera embeds its web UI (`http://<name>.local:5801`), with a per-camera URL ove
 ## Constants (`features/constants/types.ts`)
 Types and Java literal formatting only. Constants are edited in the Robot tab drawer.
 
-## Adding a tab (e.g. a log viewer)
+## Adding a tab
 1. Add the value to `AppView` in `src/types/app.ts`.
 2. Add a `<Tab>` and a panel branch in `App.tsx`.
 3. Put the code in `src/features/<name>/`.

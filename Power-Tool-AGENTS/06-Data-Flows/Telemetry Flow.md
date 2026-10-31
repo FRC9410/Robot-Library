@@ -24,18 +24,21 @@ flowchart LR
   NTC --> BUF[TopicSnapshotBuffer<br/>decode → /PowerLib/Subsystems/X/Data/key]
   BUF -->|100 ms flush| UI[Drive & Robot tabs]
   P --> AS[AdvantageScope]
-  SL -.->|pull from robot, export via Owlet| LV[Log viewer — planned]
+  SL -.->|copy .hoot off robot; Owlet → .wpilog| LV[Power Tool Logs tab]
 ```
 
 ## What goes where
-| Data | SignalLogger (.hoot) | NT `/PowerLib/Data` | Power Tool |
-|---|---|---|---|
-| Every shared-map metric (all owners) | ✅ 50 Hz, typed, with units | ✅ 10 Hz, no units | ✅ latest value only |
-| `Drive/Pose` | ✅ struct (valid only) | ✅ `{xMeters,yMeters,headingRadians}` or null | ✅ field view |
-| `PowerLib/RobotStatus/*` (DS/FMS/brownout…) | ✅ | ❌ | ❌ |
-| `Vision/*` status, `Robot/Control/Action` | ✅ | ❌ | ❌ |
-| Phoenix device signals (auto-logged) | ✅ | ❌ | ❌ |
-| Tuning variables, auto chooser, cameras | ❌ | separate NT topics | ✅ |
+| Data | SignalLogger (.hoot) | NT `/PowerLib/Data` | Power Tool (live) | Logs tab |
+|---|---|---|---|---|
+| Every shared-map metric (all owners) | ✅ 50 Hz, typed, with units | ✅ 10 Hz, no units | ✅ latest value only | ✅ mechanisms, battery, CAN, state |
+| `Drive/Pose` | ✅ struct (valid only) | ✅ `{xMeters,yMeters,headingRadians}` or null | ✅ field view | ✅ field + trail |
+| `PowerLib/RobotStatus/*` (DS/FMS/brownout…) | ✅ | ❌ | ❌ | `BrownedOut` → markers |
+| `Vision/*` status, `Robot/Control/Action` | ✅ | ❌ | ❌ | ❌ not shown yet |
+| Phoenix device signals (auto-logged) | ✅ | ❌ | ❌ | ❌ not shown yet |
+| Tuning variables, auto chooser, cameras | ❌ | separate NT topics | ✅ | ❌ |
+
+The Logs tab reads the same keys from a `.wpilog` (or a `.hoot` converted by Owlet). It also
+reads `/PowerLib/Data` frames if a log only has those, e.g. a WPILib `DataLogManager` log.
 
 ## Steps
 1. Subsystems and `DriveTelemetry` write their latest values into the [Shared Data Store](../03-PowerLib/Shared%20Data%20Store.md).

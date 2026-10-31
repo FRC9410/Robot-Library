@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 contextBridge.exposeInMainWorld("powerlib", {
   platform: process.platform,
@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld("powerlib", {
   updateSubsystemCode: () => ipcRenderer.invoke("powerlib:update-subsystem-code"),
   updateInstallSection: (section: string) => ipcRenderer.invoke("powerlib:update-install-section", section),
   updatePowerTool: () => ipcRenderer.invoke("powerlib:update-power-tool"),
+  openLog: () => ipcRenderer.invoke("powerlib:open-log"),
+  openLogPath: (filePath: string) => ipcRenderer.invoke("powerlib:open-log-path", filePath),
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
   onMenuConnectionSettings: (callback: () => void) => {
     ipcRenderer.on("powerlib:menu-connection-settings", callback);
     return () => ipcRenderer.removeListener("powerlib:menu-connection-settings", callback);

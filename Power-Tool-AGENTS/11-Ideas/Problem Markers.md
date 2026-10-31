@@ -1,13 +1,13 @@
 ---
 title: Problem Markers
-date: 2026-10-30
+date: 2026-10-31
 tags: [idea, log-viewer]
-status: proposed
+status: decided
 ---
 
 # Problem Markers
 
-**Status:** Proposed, 2026-10-30.
+**Status:** Decided. Partly built in v1 (2026-10-31): brownouts, CAN spikes and setpoint misses. Vision rejects and `Robot/Control/Action` events aren't built.
 
 ## Idea
 Flag likely problems on the timeline so you can jump to them:

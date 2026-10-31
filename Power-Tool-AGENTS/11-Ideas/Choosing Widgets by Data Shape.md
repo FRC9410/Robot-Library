@@ -1,13 +1,13 @@
 ---
 title: Choosing Widgets by Data Shape
-date: 2026-10-30
+date: 2026-10-31
 tags: [idea, log-viewer]
 status: decided
 ---
 
 # Choosing Widgets by Data Shape
 
-**Status:** Decided, 2026-10-30.
+**Status:** Decided. Partly built in v1 (2026-10-31): rule 2 (PowerLib conventions) finds mechanisms and pairs setpoints. Rule 1 for arbitrary signals and saved layouts aren't built.
 
 ## Idea
 The tool is used every season, so **it never decides what to show based on the game**. It picks

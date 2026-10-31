@@ -27,6 +27,7 @@ node scripts/telemetry-buffer-check.mjs --java-fixture
 node scripts/drive-model-check.mjs
 node scripts/subscription-check.mjs
 node scripts/tuning-check.mjs
+node scripts/log-check.mjs
 npm run build
 Pop-Location
 pwsh -File ./tests/dashboard-update-check.ps1   # separate process
@@ -64,6 +65,11 @@ These bundle TypeScript with esbuild and assert with `node:assert`. They also ru
 - `drive-model-check.mjs`: drive state, cameras, chooser, pose sources.
 - `subscription-check.mjs`: view stability, subscription periods.
 - `tuning-check.mjs`: tuning handshake, cards, value parsing, publish after reconnect.
+- `log-check.mjs`: the Logs tab's `.wpilog` reader and log model.
+  - It writes its own logs with a small writer that uses the shortest field widths, so the record bitfield is exercised.
+  - Main fixture: a fake 150 s match with four mechanisms (all three setpoint key spellings), a brownout, a CAN spike and an intake jam.
+  - Also covers: every value type, entry restart, a truncated file, bad files, signal-name variants, periods, markers, step stats, the default mechanism, and a frames-only (DataLogManager-style) log.
+  - `node scripts/log-check.mjs --write-sample build/log-sample.wpilog` saves the fake match so you can open it in the Logs tab.
 - `camera-check.mjs` and `camera-electron-check.cjs` (run with Electron itself): camera failover and the Limelight iframe under the real CSP. **Not listed in `tests/README.md`.**
 
 ## Gaps

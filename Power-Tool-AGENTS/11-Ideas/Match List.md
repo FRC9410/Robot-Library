@@ -1,13 +1,13 @@
 ---
 title: Match List
-date: 2026-10-30
+date: 2026-10-31
 tags: [idea, log-viewer]
-status: proposed
+status: decided
 ---
 
 # Match List
 
-**Status:** Proposed, 2026-10-30.
+**Status:** Decided. Built in v1 (2026-10-31): period chips in the Logs tab top bar, from `Drive/Mode`.
 
 ## Idea
 When a log opens, split it into enable periods using `Drive/Mode` and `Drive/Enabled`. List them

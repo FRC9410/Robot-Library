@@ -25,7 +25,8 @@ and what it needs: [Tests and Checks](Tests%20and%20Checks.md).
 | Drive tab / `driveModel` / `drive-template.json` | — | `node scripts/drive-model-check.mjs` |
 | **Cameras / Limelights tab / CSP in `index.html`** | — | `npm run check:cameras` and, from `powerlib-dashboard/`: `node_modules/electron/dist/electron.exe scripts/camera-electron-check.cjs` |
 | Any Power Tool TypeScript | — | `npm run build` (type-check + bundle) |
-| **New log viewer code** | a new `scripts/<name>-check.mjs` + list it in `tests/README.md` | its check + `npm run build` |
+| **Logs tab** (`features/logs/`, `open-log` IPC) | extend `scripts/log-check.mjs` | `npm run check:logs` + `npm run build`. The Open dialog and `.hoot`/Owlet path need a manual test in the Electron app |
+| **Telemetry key names** (`setSubsystemData` keys, `Drive/*`) | — | also `npm run check:logs`: the Logs tab finds mechanisms and setpoints by key name |
 
 ## Local checks vs. another project's regressions
 - Everything above runs **in this repo**.

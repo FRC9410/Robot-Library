@@ -1,13 +1,13 @@
 ---
 title: Setpoint Error Widget
-date: 2026-10-30
+date: 2026-10-31
 tags: [idea, log-viewer, tuning]
-status: proposed
+status: decided
 ---
 
 # Setpoint Error Widget
 
-**Status:** Proposed, 2026-10-30.
+**Status:** Decided. Built in v1 (2026-10-31). Settled means 0.5 s inside tolerance (5% of setpoint or 2% of range); it shows "settling…" while inside but not yet held.
 
 ## Idea
 For a velocity or position subsystem, a widget that graphs setpoint error. For each setpoint

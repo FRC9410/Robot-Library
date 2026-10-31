@@ -21,12 +21,13 @@ flowchart LR
   subgraph Renderer React
     A[App.tsx] --> NTC[NetworkTablesContext]
     NTC --> NT[nt4Client.ts<br/>ntcore-ts-client]
-    A --> Tabs[Drive / Robot / Subsystems / Limelights / NetworkTables]
+    A --> Tabs[Drive / Robot / Subsystems / Logs / Limelights / NetworkTables]
   end
   M <-- IPC --> P <--> A
   NT <-- NT4 websocket :5810 --> Robot[(Robot / sim)]
   M -- runs --> PS[PowerShell scripts<br/>generate-subsystem.ps1, install.ps1, update-power-tool.ps1]
   M -- reads/writes --> J[(power-tool/generated/*.json<br/>constants *.java read-only)]
+  M -- reads, runs Owlet for .hoot --> L[(.wpilog / .hoot log files)]
 ```
 
 ## Build and run
@@ -40,8 +41,8 @@ flowchart LR
 | `npm run check:*` | Node check scripts; see [Tests and Checks](../07-Testing/Tests%20and%20Checks.md) |
 
 - Key dependencies: `ntcore-ts-client` 3.1.3 (pinned NT4 client), `@mui/material` 9, `electron` 39, `electron-builder`, `zod` (patches the NT library's schemas).
-- **No charting library** is installed yet.
-- `index.html` sets a strict CSP: `script-src 'self'`; `connect-src 'self' ws: wss:` plus localhost http. A log viewer that uses workers or blobs may need CSP changes.
+- **No charting library.** The Logs tab draws its graphs as plain SVG.
+- `index.html` sets a strict CSP: `script-src 'self'`; `connect-src 'self' ws: wss:` plus localhost http. The Logs tab parses on the main renderer thread, so it needs no CSP changes. Moving parsing to a worker or blob may.
 - electron-builder: appId `org.team9410.powerlib.powertool`. Every platform builds an unpacked `dir` target (no installer).
 
 ## Main process (`electron/main.ts`)
@@ -59,10 +60,25 @@ flowchart LR
 | `powerlib:update-subsystem-code` | Runs `generate-subsystem.ps1 -UpdateSubsystems -SubsystemsJson …` ("Update Code") |
 | `powerlib:update-install-section` | Runs `install.ps1` non-interactively for `lib` or `vendordeps`, using the ref in `.powerlib-repo-ref` |
 | `powerlib:update-power-tool` | Launches `update-power-tool.ps1` detached in a console, then quits the app |
+| `powerlib:open-log` | File dialog for `.wpilog`/`.hoot`; returns the file bytes (`.hoot` converted first, see below) |
+| `powerlib:open-log-path` | Same, for a dropped file's path. Only accepts `.wpilog`/`.hoot` paths |
 | `powerlib:menu-*` (main → renderer) | Menu clicks forwarded to React |
 
-`preload.cts` exposes these as `window.powerlib` (types in `src/types/electron.d.ts`).
-**There is no file-dialog or arbitrary file-read API yet.**
+`preload.cts` exposes these as `window.powerlib` (types in `src/types/electron.d.ts`), plus
+`getPathForFile` (Electron `webUtils`) so a dropped `.hoot` can be handed to the main process.
+
+**`.hoot` conversion** (`readLogFile` in `main.ts`, `convertHoot` in `electron/owlet.ts`) runs CTRE's
+Owlet (`owlet <in> <out> -f wpilog`) into a temp folder that is deleted afterwards.
+- **Version matching:** each Owlet reads one `.hoot` format version ("compliancy"), and CTRE changes the format between Phoenix releases.
+  1. `convertHoot` asks an Owlet for the log's version with `owlet <hoot> --compliancy`, which prints `owlet: N` / `hoot log: N`.
+  2. It then runs the Owlet with the same number. AdvantageScope names its copies `owlet-<ver>-C<N>.exe`; other copies are asked.
+- **Where Owlets are found:**
+  1. the `POWERLIB_OWLET` environment variable;
+  2. `owlet*` executables in `<robot>/power-tool/tools/`, `<robot>/tools/`, a Power Tool root's `tools/`, and **AdvantageScope's cache** (`%APPDATA%/AdvantageScope/owlet`, i.e. `app.getPath("appData")`);
+  3. `where owlet` / `which owlet` (PATH).
+
+  AdvantageScope downloads the matching Owlet the first time it opens a `.hoot`, so a laptop that has used AdvantageScope usually needs nothing else.
+- If no Owlet or no matching version is found, the error says so and points to AdvantageScope or CTRE's download page. `.wpilog` files never need Owlet.
 
 ### Helper modules
 - `projectPaths.ts`: `generatedJsonPath()` always resolves to `<robot>/power-tool/generated/<file>`. Old root-level copies are migrated there, and conflicting duplicates go to `generated/legacy/`.
@@ -72,7 +88,7 @@ flowchart LR
 
 - `src/main.tsx`: MUI dark theme (primary `#facc15`) → `<App/>`.
 - `src/App.tsx`: `NetworkTablesProvider` → `AppContent`, which holds the app bar (tuning switch, connect, host chip), the tabs, the global dialogs and the toast. It also owns the connection, prefix watches, the subsystem document and Update Code calls. See [Tabs and Features](Tabs%20and%20Features.md).
-- `src/types/app.ts`: `AppView = "drive" | "robot" | "subsystems" | "limelights" | "networktables"`. Add a new value here to add a tab, e.g. `"logs"`.
+- `src/types/app.ts`: `AppView = "drive" | "robot" | "subsystems" | "limelights" | "networktables" | "logs"`. Add a new value here to add a tab.
 - NetworkTables plumbing: [NetworkTables Layer](NetworkTables%20Layer.md).
 
 Related: [NetworkTables Layer](NetworkTables%20Layer.md), [Tabs and Features](Tabs%20and%20Features.md), [Custom Dashboard](Custom%20Dashboard.md), [Telemetry Flow](../06-Data-Flows/Telemetry%20Flow.md), [Log Viewer Project](../11-Ideas/Log%20Viewer%20Project.md)

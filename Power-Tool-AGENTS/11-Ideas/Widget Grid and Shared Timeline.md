@@ -1,13 +1,13 @@
 ---
 title: Widget Grid and Shared Timeline
-date: 2026-10-30
+date: 2026-10-31
 tags: [idea, log-viewer]
 status: decided
 ---
 
 # Widget Grid and Shared Timeline
 
-**Status:** Decided, 2026-10-30.
+**Status:** Decided. Partly built in v1 (2026-10-31): the shared timeline drives every widget. Drag-and-drop isn't built; v1 uses the fixed [Mechanism Picker](Mechanism%20Picker.md) layout.
 
 ## Idea
 The log viewer looks like Elastic:

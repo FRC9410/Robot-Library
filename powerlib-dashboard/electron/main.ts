@@ -2,11 +2,13 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import { execFile, spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { readConstantsFiles, saveConstantsFile } from "./constantsFiles.js";
 import { generatedJsonPath } from "./projectPaths.js";
+import { convertHoot } from "./owlet.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -446,6 +448,54 @@ ipcMain.handle("powerlib:update-power-tool", async () => {
 
   app.quit();
   return { started: true };
+});
+
+/** Folders that may hold CTRE's Owlet; AdvantageScope keeps every version it has downloaded. */
+function owletDirectories() {
+  return Array.from(new Set([
+    path.join(getDetectedRobotRoot(), "power-tool", "tools"),
+    path.join(getDetectedRobotRoot(), "tools"),
+    ...getPowerToolRootCandidates().map((candidate) => path.join(candidate, "tools")),
+    path.join(app.getPath("appData"), "AdvantageScope", "owlet")
+  ]));
+}
+
+async function readLogFile(filePath: string) {
+  const name = path.basename(filePath);
+  if (path.extname(filePath).toLowerCase() !== ".hoot") {
+    return { canceled: false as const, name, path: filePath, converted: false, bytes: await fs.readFile(filePath) };
+  }
+
+  const outputDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "power-tool-log-"));
+  const outputPath = path.join(outputDirectory, `${path.basename(filePath, path.extname(filePath))}.wpilog`);
+  try {
+    await convertHoot(filePath, outputPath, owletDirectories(), process.env.POWERLIB_OWLET);
+    return { canceled: false as const, name, path: filePath, converted: true, bytes: await fs.readFile(outputPath) };
+  } finally {
+    await fs.rm(outputDirectory, { recursive: true, force: true });
+  }
+}
+
+ipcMain.handle("powerlib:open-log", async (event) => {
+  const owner = BrowserWindow.fromWebContents(event.sender);
+  const options: Electron.OpenDialogOptions = {
+    title: "Open robot log",
+    properties: ["openFile"],
+    filters: [
+      { name: "Robot logs", extensions: ["wpilog", "hoot"] },
+      { name: "All files", extensions: ["*"] }
+    ]
+  };
+  const result = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options);
+  if (result.canceled || !result.filePaths[0]) return { canceled: true as const };
+  return readLogFile(result.filePaths[0]);
+});
+
+ipcMain.handle("powerlib:open-log-path", async (_event, filePath: string) => {
+  if (typeof filePath !== "string" || !/\.(wpilog|hoot)$/i.test(filePath)) {
+    throw new Error("Only .wpilog and .hoot files can be opened.");
+  }
+  return readLogFile(filePath);
 });
 
 function createWindow() {

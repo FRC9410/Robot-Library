@@ -25,6 +25,31 @@ Entry format:
 
 ---
 
+## 2026-10-31: Power Tool Logs tab (log viewer v1)
+- **What:**
+  - New **Logs** tab that replays a robot log. It opens `.wpilog` directly and `.hoot` through CTRE's Owlet, from a file dialog or by drag-and-drop.
+  - Fixed layout:
+    - a mechanism graph with a dropdown (value vs setpoint);
+    - the field with a pose trail;
+    - an at-setpoint box, battery, and setpoint error / overshoot / settle time;
+    - the `ActualState` strip;
+    - a timeline with match periods, problem markers (brownout, CAN, setpoint miss), playback and keyboard controls.
+  - Hand-written `.wpilog` reader. Graphs are plain SVG; no new dependencies.
+  - **Owlet:** finds AdvantageScope's cached Owlets and runs the one matching the log's `.hoot` format version, via `owlet <hoot> --compliancy`.
+  - **Older logs:** reads Owlet's built-in signals (`Voltage`, `CAN Utilization`, `RobotMode`, `RobotEnable`) and plain `<Name> Velocity`/`Position` names, so pre-PowerLib logs still show mechanisms, battery and match periods.
+- **Why:** Review matches and practice runs inside Power Tool, built from the ideas in [Log Viewer Project](../11-Ideas/Log%20Viewer%20Project.md).
+- **Files:**
+  - new: `powerlib-dashboard/src/features/logs/` (`wpilog.ts`, `logModel.ts`, `LogsPanel.tsx`, `LogWidgets.tsx`), `powerlib-dashboard/electron/owlet.ts`, `powerlib-dashboard/scripts/log-check.mjs`;
+  - changed: `powerlib-dashboard/electron/main.ts` (`powerlib:open-log`, `powerlib:open-log-path`, Owlet folders), `electron/preload.cts`, `src/types/electron.d.ts`, `src/types/app.ts`, `src/App.tsx`, `package.json` (`check:logs`), `tests/README.md`.
+- **Checks:**
+  - `node scripts/log-check.mjs`, the four existing dashboard checks, and `npm run build`.
+  - Browser tests: dropped the synthetic match and a real converted 2026 competition log on the tab.
+  - `owlet.ts` converted two real `.hoot` logs (format version 19).
+  - Opening a real `.hoot` from the Open log dialog works end to end in the Electron app.
+  - Not yet tested: a log from a PowerLib robot.
+- **Notes updated:** [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [Power Tool Architecture](../05-Power-Tool/Power%20Tool%20Architecture.md), [Telemetry Flow](../06-Data-Flows/Telemetry%20Flow.md), [Tests and Checks](../07-Testing/Tests%20and%20Checks.md), [Change to Tests Map](../07-Testing/Change%20to%20Tests%20Map.md), [Telemetry and Logging](../03-PowerLib/Telemetry%20and%20Logging.md), [Log Viewer Project](../11-Ideas/Log%20Viewer%20Project.md) and its idea notes
+- **Branch / commit:** feature/Log-Viewer (uncommitted)
+
 ## History before the vault (from git log)
 
 ### 2026-10-13 → 2026-10-29: Vision hardening

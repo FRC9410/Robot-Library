@@ -1,13 +1,13 @@
 ---
 title: Mechanism Picker
-date: 2026-10-30
+date: 2026-10-31
 tags: [idea, log-viewer]
-status: proposed
+status: decided
 ---
 
 # Mechanism Picker
 
-**Status:** Proposed, 2026-10-30.
+**Status:** Decided. Built in v1 (2026-10-31) as the default (and only) layout. A log opens on the mechanism with the most setpoint changes.
 
 ## Idea
 Open a log and everything is already in place, with no dragging. The layout stays fixed, and the

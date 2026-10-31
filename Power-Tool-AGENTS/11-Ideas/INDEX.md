@@ -14,18 +14,18 @@ frontmatter has a `status`: `proposed` (talked about, not chosen), `decided` (we
 ## Log viewer
 [Log Viewer Project](Log%20Viewer%20Project.md): status, open questions and where it plugs into Power Tool.
 
-**Decided**
-- [Widget Grid and Shared Timeline](Widget%20Grid%20and%20Shared%20Timeline.md): Elastic-style grid, one timeline drives every widget.
-- [Choosing Widgets by Data Shape](Choosing%20Widgets%20by%20Data%20Shape.md): type → widget, PowerLib conventions, saved per robot; never game-specific.
+**Decided** (built in v1, 2026-10-31, unless marked partly)
 - [Reading wpilog and hoot](Reading%20wpilog%20and%20hoot.md): one `.wpilog` reader, `.hoot` converted through Owlet.
+- [Mechanism Picker](Mechanism%20Picker.md): fixed layout; a dropdown on the graph picks which mechanism every mechanism widget shows.
+- [Match List](Match%20List.md): split a log into enable periods you can click.
+- [Setpoint Error Widget](Setpoint%20Error%20Widget.md): error, overshoot and settle time.
+- [Problem Markers](Problem%20Markers.md) (partly): brownouts, CAN spikes and setpoint misses; vision rejects not yet.
+- [Widget Grid and Shared Timeline](Widget%20Grid%20and%20Shared%20Timeline.md) (partly): shared timeline built; drag-and-drop grid not yet.
+- [Choosing Widgets by Data Shape](Choosing%20Widgets%20by%20Data%20Shape.md) (partly): PowerLib conventions built; type → widget and saved layouts not yet.
 
 **Proposed**
-- [Mechanism Picker](Mechanism%20Picker.md): fixed layout; a dropdown on the graph picks which mechanism every mechanism widget shows.
 - [Standardize Setpoint Keys](Standardize%20Setpoint%20Keys.md): one `<Signal>Setpoint` naming rule across subsystem types.
-- [Match List](Match%20List.md): split a log into enable periods you can click.
-- [Problem Markers](Problem%20Markers.md): brownouts, CAN spikes, setpoint misses and vision rejects on the timeline.
 - [Auto Path Overlay](Auto%20Path%20Overlay.md): planned path next to the actual pose trail.
-- [Setpoint Error Widget](Setpoint%20Error%20Widget.md): error graph with overshoot and settle time.
 - [Before and After Compare](Before%20and%20After%20Compare.md): overlay the same signal from two logs.
 - [Jump to Tuning](Jump%20to%20Tuning.md): open the tuning drawer from a graph.
 - [Pull Logs from the Robot](Pull%20Logs%20from%20the%20Robot.md): one button to copy logs off the roboRIO.

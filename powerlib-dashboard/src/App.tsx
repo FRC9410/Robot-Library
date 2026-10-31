@@ -20,6 +20,7 @@ import ConstructionIcon from "@mui/icons-material/Construction";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import ElectricBoltIcon from "@mui/icons-material/ElectricBolt";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
+import TimelineIcon from "@mui/icons-material/Timeline";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import type {
   CharacterizationCommand,
@@ -47,6 +48,7 @@ import { tuningModeRequestTopicName, tuningModeTopicName } from "./features/netw
 import { RobotPanel } from "./features/robot/RobotPanel";
 import { DashboardPanel } from "../dashboard";
 import { LimelightsPanel } from "./features/limelights/LimelightsPanel";
+import { LogsPanel } from "./features/logs/LogsPanel";
 import { detectLimelights } from "./features/limelights/limelightUtils";
 import type { AppView } from "./types/app";
 import { TuningModeSync } from "./networktables/TuningModeSync";
@@ -507,7 +509,7 @@ function AppContent() {
 
   useEffect(() => {
     if (
-      (activeView === "robot" || activeView === "subsystems") &&
+      (activeView === "robot" || activeView === "subsystems" || activeView === "logs") &&
       !subsystemDocument.loading &&
       !subsystemDocument.path
     ) {
@@ -635,6 +637,13 @@ function AppContent() {
               />
             )}
             <Tab
+              icon={<TimelineIcon />}
+              iconPosition="start"
+              label="Logs"
+              value="logs"
+              sx={{ minHeight: 44 }}
+            />
+            <Tab
               icon={<DashboardIcon />}
               iconPosition="start"
               label="NetworkTables"
@@ -713,6 +722,11 @@ function AppContent() {
               tuningRequested={tuningModeEnabled}
             />
           )}
+
+          {/* Stays mounted so an open log survives switching tabs. */}
+          <Box sx={{ display: activeView === "logs" ? "block" : "none" }}>
+            <LogsPanel active={activeView === "logs"} subsystems={subsystemDocument.subsystems} />
+          </Box>
 
           {activeView === "networktables" && (
             <NetworkTablesPanel />
