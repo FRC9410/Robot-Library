@@ -72,11 +72,16 @@ Replays a robot log file. Works offline; it doesn't use NetworkTables.
     - setpoint misses: off by more than `toleranceFor` (5% of setpoint or 2% of range) for 0.5 s, at least 1 s after the setpoint changed, while enabled.
   - `stepStats`: overshoot and settle time (0.5 s inside tolerance) for the step in effect.
   - `busiestMechanism`: the mechanism the tab opens on. Prefers the one with the most setpoint changes; with no setpoints, the one whose value moved most often.
-- `LogsPanel.tsx` + `LogWidgets.tsx`: fixed layout.
-  - Top: mechanism graph with a dropdown (20 s window, value vs setpoint), and the field with a 3 s trail. The field uses the Drive tab's field size and flip settings.
-  - Middle: at-setpoint box (estimated when not logged), battery, setpoint error/overshoot/settle.
+- `LogsPanel.tsx` + `LogWidgets.tsx`: fixed layout, top to bottom.
+  - Timeline, directly under the file name so it's always reachable: play/pause, 0.5–4x speed, problem-marker chips, the period/marker bar and a slider. Details below.
+  - Then `MechanismGraphs` and the field with a 3 s trail.
+    - Graphs draw at most ~900 points per line. When a window has more samples, `seriesPath` keeps every Nth sample of the whole log (N fixed by window length), so the same samples stay drawn while the window slides. Choosing them relative to the window made lines shimmer during playback. The field uses the Drive tab's field size and flip settings.
+    - A multi-select dropdown picks mechanisms. Each one gets its own value-vs-setpoint graph, stacked on the same 20 s window with one cursor, so different units never share an axis.
+    - Graphs get shorter as more are added (200 / 120 / 88 px).
+    - The selection is saved in localStorage (`powerlib.logs.mechanisms.v1`), and the next log opens with the same mechanisms if it has them; otherwise `busiestMechanism`.
+  - Middle: `MechanismStatus` table, one row per selected mechanism (at setpoint, estimated when not logged; value; setpoint; error; overshoot; settle time), plus battery.
   - Below: `Drive/ActualState` strip.
-  - Timeline: play/pause, 0.5–4x speed, match-period chips, problem-marker chips (clicking one jumps there and picks its mechanism), click-to-seek, slider. Space plays/pauses; arrows step 1 s (Shift 5 s).
+  - Timeline: play/pause, 0.5–4x speed, match-period chips, problem-marker chips (clicking one jumps there and adds its mechanism to the selection), click-to-seek, slider. Space plays/pauses; arrows step 1 s (Shift 5 s).
 - The panel stays mounted (hidden) when you switch tabs, so the open log is kept. Playback pauses while hidden.
 - Ideas and plans: [Log Viewer Project](../11-Ideas/Log%20Viewer%20Project.md).
 

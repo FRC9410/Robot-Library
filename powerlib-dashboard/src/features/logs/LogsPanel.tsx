@@ -14,11 +14,22 @@ import { buildLogModel, busiestMechanism, valueAt } from "./logModel";
 import type { LogMarker } from "./logModel";
 import { parseWpilog } from "./wpilog";
 import type { WpilogFile } from "./wpilog";
-import { AtTargetTile, FieldView, formatClock, markerColors, MechanismGraph, NumberTile, StateStrip, StepStatsTile, TimelineBar } from "./LogWidgets";
+import { FieldView, formatClock, markerColors, MechanismGraphs, MechanismStatus, NumberTile, StateStrip, TimelineBar } from "./LogWidgets";
 
 type LoadedLog = { name: string; converted: boolean; file: WpilogFile };
 const speeds = [0.5, 1, 2, 4];
 const driveSettingsKey = "powerlib.driveDisplay.v1";
+const selectionKey = "powerlib.logs.mechanisms.v1";
+
+/** The mechanisms picked last time, so the next log opens on the same ones. */
+function readSavedSelection(): string[] {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(selectionKey) || "[]");
+    return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
 const markerIcons: Record<LogMarker["kind"], typeof BoltIcon> = { brownout: BoltIcon, setpoint: WarningAmberIcon, can: LanIcon };
 
 /** Use the same field size and flip the Drive tab is set to on this machine. */
@@ -47,11 +58,20 @@ export function LogsPanel({ active, subsystems }: { active: boolean; subsystems:
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
-  const [mechanismId, setMechanismId] = useState("");
+  const [mechanismIds, setMechanismIds] = useState<string[]>([]);
   const model = useMemo(() => (loaded ? buildLogModel(loaded.file, subsystems) : null), [loaded, subsystems]);
   const field = useMemo(readFieldSettings, [active]);
   const duration = model?.duration ?? 0;
-  const mechanism = model?.mechanisms.find(item => item.id === mechanismId) ?? model?.mechanisms[0];
+  const selected = useMemo(() => mechanismIds.flatMap(id => model?.mechanisms.find(item => item.id === id) ?? []), [mechanismIds, model]);
+
+  function selectMechanisms(ids: string[]) {
+    setMechanismIds(ids);
+    try {
+      localStorage.setItem(selectionKey, JSON.stringify(ids));
+    } catch {
+      // Keep this session's selection when browser storage is unavailable.
+    }
+  }
 
   const seek = useCallback((next: number) => setTime(Math.min(duration, Math.max(0, next))), [duration]);
 
@@ -65,7 +85,9 @@ export function LogsPanel({ active, subsystems }: { active: boolean; subsystems:
   useEffect(() => {
     if (!model) return;
     setTime(model.periods[0]?.start ?? 0);
-    setMechanismId(current => model.mechanisms.some(item => item.id === current) ? current : busiestMechanism(model.mechanisms)?.id ?? "");
+    const saved = readSavedSelection().filter(id => model.mechanisms.some(item => item.id === id));
+    const busiest = busiestMechanism(model.mechanisms)?.id;
+    setMechanismIds(saved.length ? saved : busiest ? [busiest] : []);
   }, [model]);
 
   async function run(task: () => Promise<void>) {
@@ -187,18 +209,6 @@ export function LogsPanel({ active, subsystems }: { active: boolean; subsystems:
       {loading && <LinearProgress />}
       {error && <Alert severity={error.startsWith("The end of this log") ? "warning" : "error"} onClose={() => setError(null)}>{error}</Alert>}
       {noPowerLib && <Alert severity="info">No PowerLib data found in this log ({model.signalCount} signals). The viewer looks for PowerLib/Subsystems/&lt;name&gt;/Data/&lt;key&gt; signals or /PowerLib/Data frames.</Alert>}
-
-      <Box sx={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 1.5 }}>
-        <MechanismGraph mechanisms={model.mechanisms} mechanism={mechanism} onSelect={setMechanismId} time={time} />
-        <FieldView pose={model.pose} time={time} field={field} />
-      </Box>
-      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 1.5 }}>
-        <AtTargetTile mechanism={mechanism} time={time} />
-        <NumberTile title="Battery" value={battery} units="V" warn={battery !== undefined && battery < 8} />
-        <Box sx={{ gridColumn: "span 2", display: "grid" }}><StepStatsTile mechanism={mechanism} time={time} /></Box>
-      </Box>
-      <StateStrip state={model.state} duration={duration} time={time} onSeek={seek} />
-
       <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
         <Stack direction="row" sx={{ alignItems: "center", gap: 1, flexWrap: "wrap", mb: 0.5 }}>
           <Tooltip title="Play or pause (Space)">
@@ -227,7 +237,7 @@ export function LogsPanel({ active, subsystems }: { active: boolean; subsystems:
                 <Chip key={`${marker.kind}-${marker.time}-${marker.mechanismId ?? ""}`} size="small" variant="outlined" clickable
                   icon={<Icon sx={{ color: `${markerColors[marker.kind]} !important` }} />} label={`${marker.label} · ${formatClock(marker.time)}`}
                   onClick={() => {
-                    if (marker.mechanismId) setMechanismId(marker.mechanismId);
+                    if (marker.mechanismId && !mechanismIds.includes(marker.mechanismId)) selectMechanisms([...mechanismIds, marker.mechanismId]);
                     seek(marker.time - 1);
                   }} />
               );
@@ -239,6 +249,16 @@ export function LogsPanel({ active, subsystems }: { active: boolean; subsystems:
           aria-label="Log time" sx={{ mt: 0.5, py: 1 }} />
         <Typography variant="caption" color="text.secondary">Space plays and pauses. Arrow keys step 1 s (Shift for 5 s). Click the timeline or state strip to jump.</Typography>
       </Paper>
+
+      <Box sx={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 1.5, alignItems: "start" }}>
+        <MechanismGraphs mechanisms={model.mechanisms} selected={selected} onSelect={selectMechanisms} time={time} />
+        <FieldView pose={model.pose} time={time} field={field} />
+      </Box>
+      <Box sx={{ display: "grid", gridTemplateColumns: "minmax(0, 3fr) minmax(0, 1fr)", gap: 1.5, alignItems: "start" }}>
+        <MechanismStatus mechanisms={selected} time={time} />
+        <NumberTile title="Battery" value={battery} units="V" warn={battery !== undefined && battery < 8} />
+      </Box>
+      <StateStrip state={model.state} duration={duration} time={time} onSeek={seek} />
     </Stack>
   );
 }

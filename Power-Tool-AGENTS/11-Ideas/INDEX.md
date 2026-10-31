@@ -16,7 +16,7 @@ frontmatter has a `status`: `proposed` (talked about, not chosen), `decided` (we
 
 **Decided** (built in v1, 2026-10-31, unless marked partly)
 - [Reading wpilog and hoot](Reading%20wpilog%20and%20hoot.md): one `.wpilog` reader, `.hoot` converted through Owlet.
-- [Mechanism Picker](Mechanism%20Picker.md): fixed layout; a dropdown on the graph picks which mechanism every mechanism widget shows.
+- [Mechanism Picker](Mechanism%20Picker.md): fixed layout; a multi-select dropdown stacks a graph and a status row for each picked mechanism.
 - [Match List](Match%20List.md): split a log into enable periods you can click.
 - [Setpoint Error Widget](Setpoint%20Error%20Widget.md): error, overshoot and settle time.
 - [Problem Markers](Problem%20Markers.md) (partly): brownouts, CAN spikes and setpoint misses; vision rejects not yet.

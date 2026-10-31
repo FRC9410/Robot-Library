@@ -1,5 +1,5 @@
 import type { MouseEvent, ReactNode } from "react";
-import { Box, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Box, Checkbox, ListItemText, MenuItem, Paper, Select, Stack, Typography } from "@mui/material";
 import { indexAt, segments, stepStats, toleranceFor, valueAt } from "./logModel";
 import type { LogMarker, LogMechanism, LogPeriod, Series } from "./logModel";
 import type { Pose } from "./wpilog";
@@ -24,7 +24,7 @@ export function stateColor(state: string, order: string[]) {
 }
 
 export const formatNumber = (value: number | undefined, places = 1) =>
-  value === undefined || !Number.isFinite(value) ? "–" : value.toFixed(places);
+  value === undefined || !Number.isFinite(value) ? "–" : value.toFixed(places).replace(/^-(0(?:\.0+)?)$/, "$1");
 export const formatClock = (seconds: number) =>
   `${Math.floor(seconds / 60)}:${Math.floor(seconds % 60).toString().padStart(2, "0")}.${Math.floor((seconds * 10) % 10)}`;
 
@@ -40,12 +40,19 @@ export function Card({ title, action, children }: { title: ReactNode; action?: R
   );
 }
 
-/** One path through the visible samples; non-finite values break the line. */
+/**
+ * One path through the visible samples; non-finite values break the line. When there are too many
+ * samples to draw, it keeps every Nth sample of the whole log (not of the window), with N fixed by
+ * the window length, so the same samples stay drawn while the window slides during playback.
+ */
 function seriesPath(series: Series<number>, from: number, to: number, x: (time: number) => number, y: (value: number) => number, stepped: boolean) {
-  const first = Math.max(0, indexAt(series.times, from));
-  const last = Math.min(series.times.length - 1, indexAt(series.times, to) + 1);
+  const count = series.times.length;
+  const spacing = count > 1 ? (series.times[count - 1] - series.times[0]) / (count - 1) : 1;
+  const stride = Math.max(1, Math.ceil((to - from) / Math.max(spacing, 1e-6) / 900));
+  let first = Math.max(0, indexAt(series.times, from));
+  first -= first % stride;
+  const last = Math.min(count - 1, indexAt(series.times, to) + stride);
   if (last < first) return "";
-  const stride = Math.max(1, Math.ceil((last - first + 1) / 900));
   let path = "";
   let drawing = false;
   let previousY = 0;
@@ -62,20 +69,45 @@ function seriesPath(series: Series<number>, from: number, to: number, x: (time: 
   return path;
 }
 
-export function MechanismGraph({ mechanisms, mechanism, onSelect, time, windowSeconds = 20 }: {
-  mechanisms: LogMechanism[]; mechanism: LogMechanism | undefined; onSelect: (id: string) => void; time: number; windowSeconds?: number;
+/** Each selected mechanism gets its own graph on the same time window, so different units never share an axis. */
+export function MechanismGraphs({ mechanisms, selected, onSelect, time, windowSeconds = 20 }: {
+  mechanisms: LogMechanism[]; selected: LogMechanism[]; onSelect: (ids: string[]) => void; time: number; windowSeconds?: number;
 }) {
-  const width = 600;
-  const height = 200;
-  const picker = (
-    <TextField select size="small" value={mechanism?.id ?? ""} onChange={event => onSelect(event.target.value)}
-      sx={{ minWidth: 200, "& .MuiInputBase-input": { py: 0.5, fontSize: 13 } }} slotProps={{ htmlInput: { "aria-label": "Mechanism to graph" } }}>
-      {mechanisms.map(item => <MenuItem key={item.id} value={item.id}>{item.name} · {item.kind}</MenuItem>)}
-    </TextField>
-  );
-  if (!mechanism) {
-    return <Card title="Mechanism"><Typography variant="body2" color="text.secondary">No PowerLib mechanisms (Velocity or Position data) in this log.</Typography></Card>;
+  if (mechanisms.length === 0) {
+    return <Card title="Mechanisms"><Typography variant="body2" color="text.secondary">No mechanisms (Velocity or Position data) in this log.</Typography></Card>;
   }
+  const height = selected.length <= 1 ? 200 : selected.length === 2 ? 120 : 88;
+  const picker = (
+    <Select multiple displayEmpty size="small" value={selected.map(item => item.id)}
+      onChange={event => onSelect(typeof event.target.value === "string" ? event.target.value.split(",") : event.target.value)}
+      renderValue={ids => ids.length === 0 ? "Pick mechanisms" : ids.map(id => mechanisms.find(item => item.id === id)?.name ?? id).join(", ")}
+      inputProps={{ "aria-label": "Mechanisms to graph" }}
+      sx={{ minWidth: 220, maxWidth: 380, "& .MuiSelect-select": { py: 0.5, fontSize: 13 } }}>
+      {mechanisms.map(item => (
+        <MenuItem key={item.id} value={item.id} dense>
+          <Checkbox size="small" checked={selected.some(chosen => chosen.id === item.id)} sx={{ p: 0.5, mr: 1 }} />
+          <ListItemText primary={item.name} secondary={`${item.kind} · ${item.units}`} />
+        </MenuItem>
+      ))}
+    </Select>
+  );
+  return (
+    <Card title={`Mechanisms · ${windowSeconds} s window`} action={picker}>
+      {selected.length === 0 && <Typography variant="body2" color="text.secondary">Pick one or more mechanisms to graph.</Typography>}
+      {selected.map(mechanism => <MechanismPlot key={mechanism.id} mechanism={mechanism} time={time} height={height} windowSeconds={windowSeconds} />)}
+      {selected.length > 0 && (
+        <Stack direction="row" sx={{ justifyContent: "space-between", pl: 5.5 }}>
+          <Typography variant="caption" color="text.secondary">−{windowSeconds / 2} s</Typography>
+          <Typography variant="caption" color="text.secondary">now</Typography>
+          <Typography variant="caption" color="text.secondary">+{windowSeconds / 2} s</Typography>
+        </Stack>
+      )}
+    </Card>
+  );
+}
+
+function MechanismPlot({ mechanism, time, height, windowSeconds }: { mechanism: LogMechanism; time: number; height: number; windowSeconds: number }) {
+  const width = 600;
   const span = Math.max(mechanism.max - mechanism.min, 1e-6);
   const low = mechanism.min - span * 0.08;
   const high = mechanism.max + span * 0.08;
@@ -84,15 +116,22 @@ export function MechanismGraph({ mechanisms, mechanism, onSelect, time, windowSe
   const x = (sample: number) => ((sample - from) / windowSeconds) * width;
   const y = (value: number) => height - ((value - low) / (high - low)) * height;
   const zero = low < 0 && high > 0 ? y(0) : null;
-  const current = valueAt(mechanism.value, time);
-  const target = valueAt(mechanism.setpoint, time);
   const places = mechanism.kind === "velocity" ? 1 : 2;
   return (
-    <Card title={`${mechanism.kind === "velocity" ? "Velocity" : "Position"} vs setpoint · ${mechanism.units} · ${windowSeconds} s window`} action={picker}>
+    <Box>
+      <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "baseline", gap: 1, pl: 5.5 }}>
+        <Typography variant="body2" sx={{ fontWeight: 700 }}>{mechanism.name}</Typography>
+        <Typography variant="caption" color="text.secondary">
+          <Box component="span" sx={{ color: logColors.value }}>━</Box> {mechanism.kind === "velocity" ? "Velocity" : "Position"}{" "}
+          <b>{formatNumber(valueAt(mechanism.value, time), places)}</b>
+          {mechanism.setpoint && <> · <Box component="span" sx={{ color: logColors.setpoint }}>┅</Box> Setpoint <b>{formatNumber(valueAt(mechanism.setpoint, time), places)}</b></>}
+          {" "}{mechanism.units}
+        </Typography>
+      </Stack>
       <Stack direction="row" sx={{ gap: 0.75, minWidth: 0 }}>
         <Stack sx={{ justifyContent: "space-between", height, textAlign: "right", minWidth: 36 }}>
           <Typography variant="caption" color="text.secondary">{formatNumber(high, places)}</Typography>
-          <Typography variant="caption" color="text.secondary">{formatNumber((high + low) / 2, places)}</Typography>
+          {height >= 120 && <Typography variant="caption" color="text.secondary">{formatNumber((high + low) / 2, places)}</Typography>}
           <Typography variant="caption" color="text.secondary">{formatNumber(low, places)}</Typography>
         </Stack>
         <Box component="svg" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img"
@@ -109,18 +148,7 @@ export function MechanismGraph({ mechanisms, mechanism, onSelect, time, windowSe
           <line x1={width / 2} x2={width / 2} y1={0} y2={height} stroke={logColors.cursor} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
         </Box>
       </Stack>
-      <Stack direction="row" sx={{ justifyContent: "space-between", pl: 5.5 }}>
-        <Typography variant="caption" color="text.secondary">−{windowSeconds / 2} s</Typography>
-        <Typography variant="caption" color="text.secondary">now</Typography>
-        <Typography variant="caption" color="text.secondary">+{windowSeconds / 2} s</Typography>
-      </Stack>
-      <Stack direction="row" sx={{ gap: 2, flexWrap: "wrap" }}>
-        <Typography variant="body2"><Box component="span" sx={{ color: logColors.value }}>━</Box> {mechanism.kind === "velocity" ? "Velocity" : "Position"}{" "}
-          <b>{formatNumber(current, places)}</b> {mechanism.units}</Typography>
-        {mechanism.setpoint && <Typography variant="body2"><Box component="span" sx={{ color: logColors.setpoint }}>┅</Box> Setpoint{" "}
-          <b>{formatNumber(target, places)}</b> {mechanism.units}</Typography>}
-      </Stack>
-    </Card>
+    </Box>
   );
 }
 
@@ -162,21 +190,50 @@ export function FieldView({ pose, time, field }: { pose?: Series<Pose>; time: nu
   );
 }
 
-export function AtTargetTile({ mechanism, time }: { mechanism?: LogMechanism; time: number }) {
-  const target = mechanism ? valueAt(mechanism.setpoint, time) : undefined;
-  const value = mechanism ? valueAt(mechanism.value, time) : undefined;
-  const logged = mechanism?.atTarget ? valueAt(mechanism.atTarget, time) : undefined;
-  const estimated = logged === undefined && mechanism && target !== undefined && value !== undefined
-    && Number.isFinite(target) && Number.isFinite(value) ? Math.abs(value - target) <= toleranceFor(mechanism, target) : undefined;
-  const state = logged ?? estimated;
+/** One row per selected mechanism: on target, value, setpoint, error, and the last step's overshoot and settle time. */
+export function MechanismStatus({ mechanisms, time }: { mechanisms: LogMechanism[]; time: number }) {
+  const labels = ["Mechanism", "At setpoint", "Value", "Setpoint", "Error", "Overshoot", "Settle time"];
   return (
-    <Card title={`${mechanism?.name ?? "Mechanism"} at setpoint${logged === undefined && estimated !== undefined ? " (estimated)" : ""}`}>
-      <Box sx={{ height: 36, borderRadius: 1, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700,
-        bgcolor: state === undefined ? "action.hover" : state ? "rgba(34,197,94,0.18)" : "rgba(239,68,68,0.18)",
-        color: state === undefined ? "text.secondary" : state ? logColors.good : logColors.bad }}>
-        {state === undefined ? "No setpoint" : state ? "true" : "false"}
-      </Box>
+    <Card title="Mechanism status · last setpoint step">
+      {mechanisms.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">Pick mechanisms above to see their status.</Typography>
+      ) : (
+        <Box sx={{ display: "grid", gridTemplateColumns: "minmax(110px, 1.4fr) repeat(6, minmax(0, 1fr))", columnGap: 1.5, rowGap: 0.75, alignItems: "center" }}>
+          {labels.map(label => <Typography key={label} variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>{label}</Typography>)}
+          {mechanisms.map(mechanism => <StatusRow key={mechanism.id} mechanism={mechanism} time={time} />)}
+        </Box>
+      )}
     </Card>
+  );
+}
+
+function StatusRow({ mechanism, time }: { mechanism: LogMechanism; time: number }) {
+  const value = valueAt(mechanism.value, time);
+  const target = valueAt(mechanism.setpoint, time);
+  const logged = mechanism.atTarget ? valueAt(mechanism.atTarget, time) : undefined;
+  const estimated = logged === undefined && target !== undefined && value !== undefined && Number.isFinite(target) && Number.isFinite(value)
+    ? Math.abs(value - target) <= toleranceFor(mechanism, target) : undefined;
+  const onTarget = logged ?? estimated;
+  const stats = stepStats(mechanism, time);
+  const places = mechanism.kind === "velocity" ? 1 : 2;
+  const units = (text: string) => text === "–" ? text : `${text} ${mechanism.units}`;
+  const cell = (text: string, color?: string) => <Typography variant="body2" sx={{ fontVariantNumeric: "tabular-nums", color }}>{text}</Typography>;
+  return (
+    <>
+      <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>{mechanism.name}</Typography>
+      <Box component="span" title={logged === undefined && estimated !== undefined ? "Estimated from value and setpoint" : undefined}
+        sx={{ justifySelf: "start", px: 1, py: 0.25, borderRadius: 1, fontSize: 13, fontWeight: 700,
+          bgcolor: onTarget === undefined ? "action.hover" : onTarget ? "rgba(34,197,94,0.18)" : "rgba(239,68,68,0.18)",
+          color: onTarget === undefined ? "text.secondary" : onTarget ? logColors.good : logColors.bad }}>
+        {onTarget === undefined ? "no setpoint" : `${onTarget}${logged === undefined ? " (est.)" : ""}`}
+      </Box>
+      {cell(units(formatNumber(value, places)))}
+      {cell(units(formatNumber(target, places)))}
+      {cell(units(formatNumber(value !== undefined && target !== undefined ? target - value : undefined, places)))}
+      {cell(stats ? `${stats.overshootPercent.toFixed(0)}%` : "–")}
+      {cell(stats ? stats.settleSeconds !== null ? `${stats.settleSeconds.toFixed(2)} s` : stats.settling ? "settling…" : "not settled" : "–",
+        stats && stats.settleSeconds === null ? "#f59e0b" : undefined)}
+    </>
   );
 }
 
@@ -186,39 +243,6 @@ export function NumberTile({ title, value, units, places = 1, warn }: { title: s
       <Typography sx={{ fontSize: 28, fontWeight: 800, lineHeight: 1.1, color: warn ? logColors.bad : "text.primary" }}>
         {formatNumber(value, places)}{value !== undefined && Number.isFinite(value) && units ? <Typography component="span" color="text.secondary" sx={{ ml: 0.5 }}>{units}</Typography> : null}
       </Typography>
-    </Card>
-  );
-}
-
-export function StepStatsTile({ mechanism, time }: { mechanism?: LogMechanism; time: number }) {
-  const stats = mechanism ? stepStats(mechanism, time) : null;
-  const value = mechanism ? valueAt(mechanism.value, time) : undefined;
-  const target = mechanism ? valueAt(mechanism.setpoint, time) : undefined;
-  const error = value !== undefined && target !== undefined ? target - value : undefined;
-  const places = mechanism?.kind === "velocity" ? 1 : 2;
-  const stat = (label: string, text: string, warn = false) => (
-    <Box>
-      <Typography variant="caption" color="text.secondary">{label}</Typography>
-      <Typography sx={{ fontSize: 18, fontWeight: 700, color: warn ? "#f59e0b" : "text.primary" }}>{text}</Typography>
-    </Box>
-  );
-  if (mechanism && !mechanism.setpoint) {
-    return (
-      <Card title={`${mechanism.name} setpoint error`}>
-        <Typography variant="body2" color="text.secondary">This log has no setpoint for {mechanism.name}, so there's no error to show.</Typography>
-      </Card>
-    );
-  }
-  return (
-    <Card title={`${mechanism?.name ?? "Mechanism"} setpoint error · last step`} action={stats && (
-      <Typography variant="caption" color="text.secondary">{formatNumber(stats.from, places)} → {formatNumber(stats.to, places)} {mechanism?.units}</Typography>
-    )}>
-      <Stack direction="row" sx={{ gap: 3 }}>
-        {stat("Error now", `${formatNumber(error, places)} ${mechanism?.units ?? ""}`)}
-        {stat("Overshoot", stats ? `${stats.overshootPercent.toFixed(0)}%` : "–")}
-        {stat("Settle time", stats ? stats.settleSeconds !== null ? `${stats.settleSeconds.toFixed(2)} s` : stats.settling ? "settling…" : "not settled" : "–",
-          Boolean(stats && stats.settleSeconds === null))}
-      </Stack>
     </Card>
   );
 }

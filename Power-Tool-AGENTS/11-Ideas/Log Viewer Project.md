@@ -30,6 +30,7 @@ Other ideas are listed in [Ideas](INDEX.md).
 - 2026-10-31: Tested on real 2026 competition logs (pre-PowerLib). Power Tool now finds AdvantageScope's cached Owlets and picks the one matching the log's format version. It also reads Owlet's built-in signals and plain `<Name> Velocity` names. See [Reading wpilog and hoot](Reading%20wpilog%20and%20hoot.md).
 
 - 2026-10-31: Opening a real `.hoot` from the Open log dialog works end to end in the Electron app.
+- 2026-10-31: Several mechanisms can be viewed at once (stacked graphs + a status table), and the selection is remembered. See [Mechanism Picker](Mechanism%20Picker.md).
 
 ## Not tested yet
 - A log from a PowerLib robot. The real logs so far predate PowerLib; PowerLib keys are only tested with the synthetic match.

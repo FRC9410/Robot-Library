@@ -25,6 +25,23 @@ Entry format:
 
 ---
 
+## 2026-10-31: Logs tab shows several mechanisms at once, timeline on top, steady graphs
+- **What:**
+  - The mechanism dropdown is now a multi-select. Each picked mechanism gets its own graph, stacked on the same time window with one cursor.
+  - The at-setpoint box and setpoint-error widget are replaced by one status table with a row per mechanism.
+  - The selection is remembered (localStorage) for the next log, and clicking a problem marker adds its mechanism.
+  - The timeline (play, speed, markers, slider) moved from the bottom to the top, under the file name.
+  - Graph lines no longer shimmer during playback: when a window has more samples than are drawn, the kept samples are now fixed positions in the log instead of positions relative to the moving window.
+  - Values that round to zero no longer show as `-0.0`.
+- **Why:** Compare mechanisms that work together, like shooter and hood while scoring; reach playback without scrolling; the wiggle was reported from the Electron app during playback.
+- **Files:** `powerlib-dashboard/src/features/logs/LogsPanel.tsx`, `powerlib-dashboard/src/features/logs/LogWidgets.tsx`.
+- **Checks:** `node scripts/log-check.mjs`, `npm run build`. Browser tests:
+  - picked three mechanisms through the dropdown, then reloaded to confirm the selection is kept;
+  - stepped the slider one sample at a time and confirmed the drawn points stayed identical (and confirmed the wiggle is gone in the Electron app);
+  - confirmed the timeline sits above the graphs.
+- **Notes updated:** [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [Mechanism Picker](../11-Ideas/Mechanism%20Picker.md), [Log Viewer Project](../11-Ideas/Log%20Viewer%20Project.md)
+- **Branch / commit:** feature/Log-Viewer (uncommitted)
+
 ## 2026-10-31: Power Tool Logs tab (log viewer v1)
 - **What:**
   - New **Logs** tab that replays a robot log. It opens `.wpilog` directly and `.hoot` through CTRE's Owlet, from a file dialog or by drag-and-drop.
