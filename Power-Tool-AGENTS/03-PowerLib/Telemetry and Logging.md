@@ -83,4 +83,4 @@ Writes directly to SignalLogger at 50 Hz under `PowerLib/RobotStatus/`:
 - Power Tool keeps **no history**; it only shows the latest NT value. The only export is the Drive tab's one-shot JSON snapshot.
 - The NT frame (10 Hz) is a lighter, lower-rate copy of the same map, so a viewer could also record NT live.
 
-Related: [Telemetry Flow](../06-Data-Flows/Telemetry%20Flow.md), [Shared Data Store](Shared%20Data%20Store.md), [NetworkTables Layer](../05-Power-Tool/NetworkTables%20Layer.md), [Log Viewer Project](../09-Changelog/Log%20Viewer%20Project.md)
+Related: [Telemetry Flow](../06-Data-Flows/Telemetry%20Flow.md), [Shared Data Store](Shared%20Data%20Store.md), [NetworkTables Layer](../05-Power-Tool/NetworkTables%20Layer.md), [Log Viewer Project](../11-Ideas/Log%20Viewer%20Project.md)

@@ -13,15 +13,25 @@ matches the code, so updating it is part of finishing a change.
 ## When you change code
 
 1. **Add a [CHANGELOG](09-Changelog/CHANGELOG.md) entry**, newest at the top, using the format
-   at the top of that file. One entry per logical change, not per commit.
+   at the top of that file. One entry per logical change, not per commit. **Code changes
+   only:** edits that touch only vault notes don't get an entry.
 2. **Update the note that owns the area you touched.** Use the [Home](README.md) map to find it.
    If a class, file, topic path, log key or default value named in a note changed, fix the note.
 3. **New file or class?** Add it to its area note. New area? Create a note in the right folder
    and link it from that folder's `INDEX.md` and from [Home](README.md).
 4. **Changed how two parts talk to each other** (NetworkTables topics, JSON files, IPC channels,
    log keys)? Update the matching note in [06-Data-Flows](06-Data-Flows/INDEX.md) too.
-5. **Working on the log viewer?** Record decisions and open questions in
-   [Log Viewer Project](09-Changelog/Log%20Viewer%20Project.md).
+5. **Built an idea from [11-Ideas](11-Ideas/INDEX.md)?** Set its note's `status` to `decided`
+   (if it wasn't already) and update the project note, e.g.
+   [Log Viewer Project](11-Ideas/Log%20Viewer%20Project.md).
+
+## When you talk about ideas
+
+- **One note per idea** in [11-Ideas](11-Ideas/INDEX.md), listed in its `INDEX.md` under its project.
+- Frontmatter adds `status: proposed | decided | dropped`. Start the body with a `**Status:**` line and date.
+- Sections: **Idea**, **Why**, and **Open questions** or **Notes** if there are any.
+- A dropped idea keeps its note, with a line saying why it was dropped.
+- Project-wide status and open questions go in the project note. Questions about a single idea go in that idea's note.
 
 ## Writing rules
 

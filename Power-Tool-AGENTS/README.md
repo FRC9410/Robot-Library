@@ -69,8 +69,11 @@ changelog. Written for teammates and coding agents. Open this folder in Obsidian
 - [powerlib-sim Skill](08-Skills/powerlib-sim%20Skill.md): the MapleSim setup skill.
 
 ## 09 Changelog ([index](09-Changelog/INDEX.md))
-- [CHANGELOG](09-Changelog/CHANGELOG.md): every change, newest first.
-- [Log Viewer Project](09-Changelog/Log%20Viewer%20Project.md): working notes, decisions and open questions for the log viewer.
+- [CHANGELOG](09-Changelog/CHANGELOG.md): every code change, newest first.
+
+## 11 Ideas ([index](11-Ideas/INDEX.md))
+- [Log Viewer Project](11-Ideas/Log%20Viewer%20Project.md): status and open questions for the log viewer.
+- One note per idea we've talked about, each marked `proposed`, `decided` or `dropped`. See the [index](11-Ideas/INDEX.md).
 
 ## Meta
 - [Maintaining This Vault](Maintaining%20This%20Vault.md): rules for keeping these notes in sync with the code.

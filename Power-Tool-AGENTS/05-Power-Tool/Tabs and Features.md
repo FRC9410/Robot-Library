@@ -69,4 +69,4 @@ Types and Java literal formatting only. Constants are edited in the Robot tab dr
 3. Put the code in `src/features/<name>/`.
 4. If it needs disk access, add an IPC handler in `electron/main.ts`, expose it in `preload.cts`, and type it in `src/types/electron.d.ts`.
 
-Related: [Power Tool Architecture](Power%20Tool%20Architecture.md), [NetworkTables Layer](NetworkTables%20Layer.md), [Custom Dashboard](Custom%20Dashboard.md), [Log Viewer Project](../09-Changelog/Log%20Viewer%20Project.md)
+Related: [Power Tool Architecture](Power%20Tool%20Architecture.md), [NetworkTables Layer](NetworkTables%20Layer.md), [Custom Dashboard](Custom%20Dashboard.md), [Log Viewer Project](../11-Ideas/Log%20Viewer%20Project.md)

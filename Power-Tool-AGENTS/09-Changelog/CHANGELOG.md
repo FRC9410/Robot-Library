@@ -6,9 +6,11 @@ tags: [changelog]
 
 # Changelog
 
-Newest first. Add an entry for every change we make to Robot-Library: what changed, why, the
-files touched, and the notes in this vault that were updated. Older history (before this vault
-existed) is summarized from `git log` and grouped by period.
+Newest first. **Code changes only:** add an entry for every change to Robot-Library's code
+(library, templates, scripts, Power Tool): what changed, why, the files touched, and the notes in
+this vault that were updated. Edits that only touch vault notes don't get an entry, and ideas
+and decisions go in [11 Ideas](../11-Ideas/INDEX.md). Older history (before this vault existed)
+is summarized from `git log` and grouped by period.
 
 Entry format:
 
@@ -20,47 +22,6 @@ Entry format:
 - **Notes updated:** links to vault notes changed to match
 - **Branch / commit:** feature/x, abc1234
 ```
-
----
-
-## 2026-10-30: Vault correctness fixes (second Codex review)
-- **What:**
-  - Adding a Robot State now includes the extra `requestsChanged = true` change. The first loop runs the first handler in the list, which is harmless in the shipped template (Idle only) but wrong once a handler is placed before Idle.
-  - Relative startup is a coordinate reset, not physical homing.
-  - SignalLogger records only while running; practice without an FMS records nothing by default. Added how to confirm.
-  - Power Tool's UI only edits existing constant values.
-- **Files:** `Power-Tool-AGENTS/**` only. No code changed. The shipped `StateMachine.java` is correct as-is.
-- **Branch / commit:** feature/Log-Viewer (uncommitted)
-
-## 2026-10-30: Vault review additions (from a Codex review)
-- **What:** Added `10-Guides/`:
-  - First Robot Walkthrough;
-  - File Ownership and Precedence;
-  - Units and Coordinates;
-  - Configuration Examples;
-  - Robot Lifecycle;
-  - Adding a Robot State;
-  - Troubleshooting.
-
-  Also added Mechanism Behavior (PowerLib), a vision behavior-by-mode and log-status table, and a Change to Tests Map.
-- **Corrected:**
-  - `mechanismHealthy` is false for unconfigured mechanisms even in sim.
-  - Live tuning has no guaranteed end-to-end delay.
-  - The dashboard field size (16.54 × 8.07 m) differs from the vision bounds (17.548 × 8.052 m).
-  - Adding a custom constant in Java alone is overwritten once the file is tracked in `powerlib-constants.json`.
-- **Why:** Make the reference notes usable step by step, and fix inaccuracies the review found.
-- **Files:** `Power-Tool-AGENTS/**` only. Added `.tools/vault_lint.py` (MIT, from obsidian-notes) so linting is reproducible.
-- **Branch / commit:** feature/Log-Viewer (uncommitted)
-
-## 2026-10-30: Added the Power-Tool-AGENTS vault
-- **What:** Created this Obsidian vault documenting how the library, installer, robot templates,
-  Power Tool and tests work and connect, plus this changelog and the
-  [Log Viewer Project](Log%20Viewer%20Project.md) note.
-- **Why:** Groundwork before building the Power Tool log viewer, so humans and agents have a
-  map of the codebase and a record of changes.
-- **Files:** `Power-Tool-AGENTS/**` (docs only; no code changed). The installer downloads files
-  by explicit path, so this folder is never copied into robot projects.
-- **Branch / commit:** feature/Log-Viewer (uncommitted)
 
 ---
 
@@ -108,4 +69,4 @@ Entry format:
   subsystems, button-binding generator (later removed), Update Power Tool scripts, branch-aware
   installs (`-RepoRef`), `.template` naming for existing files.
 
-Related: [Log Viewer Project](Log%20Viewer%20Project.md), [Maintaining This Vault](../Maintaining%20This%20Vault.md)
+Related: [Log Viewer Project](../11-Ideas/Log%20Viewer%20Project.md), [Maintaining This Vault](../Maintaining%20This%20Vault.md)

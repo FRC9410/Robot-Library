@@ -15,6 +15,7 @@
   --pt-skills: #a78bfa;    /* 08 violet */
   --pt-changelog: #818cf8; /* 09 indigo */
   --pt-guides: #a3e635;    /* 10 lime */
+  --pt-ideas: #fb7185;     /* 11 rose */
 }
 
 /* ---------- Palette (light theme: darker 600s for contrast on white) ---------- */
@@ -30,6 +31,7 @@
   --pt-skills: #7c3aed;
   --pt-changelog: #4f46e5;
   --pt-guides: #65a30d;
+  --pt-ideas: #e11d48;
 }
 
 /* ---------- File explorer: colored folders and their notes ---------- */
@@ -43,6 +45,7 @@
 .nav-folder-title[data-path^="08-Skills"],            .nav-file-title[data-path^="08-Skills/"]            { --pt-c: var(--pt-skills); }
 .nav-folder-title[data-path^="09-Changelog"],         .nav-file-title[data-path^="09-Changelog/"]         { --pt-c: var(--pt-changelog); }
 .nav-folder-title[data-path^="10-Guides"],            .nav-file-title[data-path^="10-Guides/"]            { --pt-c: var(--pt-guides); }
+.nav-folder-title[data-path^="11-Ideas"],             .nav-file-title[data-path^="11-Ideas/"]             { --pt-c: var(--pt-ideas); }
 .nav-file-title[data-path="README.md"],
 .nav-file-title[data-path="Maintaining This Vault.md"]                                                     { --pt-c: var(--pt-root); }
 

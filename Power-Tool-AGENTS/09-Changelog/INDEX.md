@@ -6,7 +6,6 @@ tags: [index]
 
 # Changelog
 
-- [CHANGELOG](CHANGELOG.md): add an entry for every change.
-- [Log Viewer Project](Log%20Viewer%20Project.md): current project notes, decisions and open questions.
+- [CHANGELOG](CHANGELOG.md): an entry for every code change. Ideas and decisions go in [Ideas](../11-Ideas/INDEX.md).
 
 Up: [Home](../README.md)
