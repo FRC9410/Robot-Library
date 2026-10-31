@@ -68,6 +68,28 @@ The tuning switch stays in the header. Live edits require a connected robot and 
 
 Existing constants appear directly in the same side panel, alongside the group's live tunables. A published constant has one live row rather than a duplicate saved row. Apply sends live edits through NetworkTables and saves edits to saved-only values in the project configuration. Live values show their baseline beneath the field. Saved values can also be changed while disconnected; run Update Code, rebuild, and deploy to apply those defaults. Names and Java types stay fixed, and constants cannot be added or deleted. Numeric edits must fit the declared Java type.
 
+## Auto Builder
+
+The Autos tab builds routines for the existing `frc.powerlib.auto.Auto` API without changing it. The left column lists the project's autos and holds Save and Update code. The center shows the selected auto's settings, the field (or the generated code) and the replay bar. The right column lists the steps in run order, with the selected step's settings below; with no step selected it shows totals, problems and editing tips.
+
+Click the field to add a drive point after the selected step, drag a point to move it, and drag its ring to set the heading (Shift snaps to 15°). Steps run in order:
+
+- Drive to point: `DriveToPose` with this leg's max velocity, max acceleration and finish tolerances (`DriveConstraints`). The leg ends once the robot is within the end distance and slower than the end velocity. Loosen both to round a point without stopping. New legs copy the previous leg's limits, and Use for all legs copies them across the auto.
+- Subpoints (a drive step's "During this move"): state requests made partway along the leg, at a percentage of the straight line from where the leg started (`DriveToPose.atProgress`). If the leg finishes first, for example with loose tolerances, they run when it ends. They show as diamonds on the path that you can drag; the path changes color at each one, and the replay timeline marks when they fire.
+- Request state: `RequestState`. It continues immediately and the request stays active.
+- Wait for state: waits for the StateMachine's actual state, with an optional timeout. Its replay estimate only paces the replay.
+- Wait: a fixed pause.
+
+Path segments are colored by the state requested at that point. Robot states come from `RobotState` in `StateMachine.java`. Point at robot uses the live pose.
+
+Symmetry (↔ and ↕ beside the alliance) also generates a mirrored copy for the other side: flipped across the center line, top to bottom, or both, with the opposite alliance (or "(mirrored)" when the auto is for any alliance). The field can show either version, and edits on the mirrored view are flipped back onto the original. The ⋯ menu can also flip an auto's points in place.
+
+Replay plays the ideal motion from point 1 using the same math as the robot's `DriveToPoseController`, assuming the robot tracks its commands exactly and turns at 180°/s. Consecutive drive legs carry their speed into the next leg; any other step leaves the robot stopped. The timeline marks the 15 s autonomous period and flags legs that never reach their finish tolerances.
+
+Save writes `power-tool/generated/powerlib-autos.json`. Update code also writes `src/main/java/frc/robot/autos/GeneratedAutos.java` and, if needed, adds `GeneratedAutos.register(autoBuilder, robot);` to `RobotAutos.register`. Hand-written autos in `RobotAutos.java` are untouched. Generated drive steps need `DriveToPose.java` and PowerLib's `DriveConstraints.java`; if the project is missing them, install the PowerLib templates. Auto names must not match a string in `RobotAutos.java`, because `AutoBuilder` stops robot code at startup on duplicate names. Run `npm run check:autos` to check validation, code generation, symmetry, subpoints, replay and file updates.
+
+The `allowScripts` entry in `package.json` approves the install scripts of Electron, esbuild and electron-winstaller, which npm 11 asks about and which `npm ci` needs to download Electron.
+
 ## Scripts
 
 ```text

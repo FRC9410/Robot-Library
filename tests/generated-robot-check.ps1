@@ -28,7 +28,7 @@ try {
     $installLog = Join-Path $fixture 'install.log'
     & $GradleExecutable --offline --no-daemon --console=plain -g (Join-Path $root 'build/validation-gradle-cache') -I (Join-Path $root 'install.gradle') robotLibraryInstall -PpowerlibInteractive=false -PpowerlibInstall=true -PpowerlibInstallLib=true -PpowerlibInstallTemplates=true -PpowerlibInstallVendordeps=false -PpowerlibInstallTools=false -PpowerlibInstallDashboard=false -PpowerlibInstallSkills=false -PpowerlibSkipBuild=true *> $installLog
     if ($LASTEXITCODE -ne 0) { throw (Get-Content $installLog -Tail 35 | Out-String) }
-    foreach ($helper in @('health/HealthChecks.java', 'controls/ButtonBindings.java', 'auto/Auto.java',
+    foreach ($helper in @('health/HealthChecks.java', 'controls/ButtonBindings.java', 'auto/Auto.java', 'auto/DriveConstraints.java', 'auto/DriveToPoseController.java', 'auto/LegSubpoints.java',
         'configs/LimelightHeadingConfig.java', 'configs/VisionHeadingInitializationConfig.java',
         'configs/VisionPoseFilterConfig.java', 'vision/VisionPoseFilter.java',
         'vision/LimelightVision.java', 'vision/VisionHeadingInitializer.java', 'vision/VisionHeadingReadiness.java',
@@ -39,6 +39,7 @@ try {
     }
     $robotAutos = Join-Path $fixture 'src/main/java/frc/robot/autos/RobotAutos.java'
     if (-not (Test-Path -LiteralPath $robotAutos)) { throw 'Fresh install omitted RobotAutos template.' }
+    if (-not (Test-Path -LiteralPath (Join-Path $fixture 'src/main/java/frc/robot/autos/GeneratedAutos.java'))) { throw 'Fresh install omitted GeneratedAutos template.' }
     $robotContainer = Join-Path $fixture 'src/main/java/frc/robot/RobotContainer.java'
     if (-not ([IO.File]::ReadAllText($robotContainer).Contains('RobotAutos.register(autoBuilder, stateMachine);'))) {
         throw 'Fresh RobotContainer does not register RobotAutos before publishing the chooser.'

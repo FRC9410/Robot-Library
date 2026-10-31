@@ -27,7 +27,8 @@ function readSettings(): DisplaySettings {
   } catch { return defaults; }
 }
 
-function Field({ pose, field, flip, layout }: { pose?: { x: number; y: number; heading: number }; field: { length: number; width: number }; flip: boolean; layout: FieldLayout | null }) {
+/** `image` is a blue-left top-down field picture cropped to the field boundary; a chosen field layout takes priority. */
+function Field({ pose, field, flip, layout, image }: { pose?: { x: number; y: number; heading: number }; field: { length: number; width: number }; flip: boolean; layout: FieldLayout | null; image?: string }) {
   const gridId = `drive-grid-${useId().replaceAll(":", "")}`;
   const height = 480;
   const width = height * field.length / field.width;
@@ -38,7 +39,8 @@ function Field({ pose, field, flip, layout }: { pose?: { x: number; y: number; h
     </pattern></defs>
     <g transform={flip ? `translate(${width} ${height}) rotate(180)` : undefined}>
       <rect width={width} height={height} rx="5" fill="#101e29" stroke="#7993a5" strokeWidth="3" />
-      {layout ? <FieldBackdrop layout={layout} width={width} height={height} /> : <>
+      {layout ? <FieldBackdrop layout={layout} width={width} height={height} />
+        : image ? <image href={image} width={width} height={height} preserveAspectRatio="none" /> : <>
         <rect width={width} height={height} fill={`url(#${gridId})`} />
         <rect width="16" height={height} fill="#307de0" opacity=".55" />
         <rect x={width - 16} width="16" height={height} fill="#ec4d5d" opacity=".55" />
@@ -110,8 +112,10 @@ function CameraStream({ camera, override, images, onFailed }: {
 
 export type DrivePanelData = { topics: NtTopicSnapshot[]; drive: ReturnType<typeof driveModel>; now: number };
 
-export function DrivePanel({ subsystems = [], renderTopCards, renderSidebar }: {
+export function DrivePanel({ subsystems = [], fieldImage, renderTopCards, renderSidebar }: {
   subsystems?: GeneratedSubsystem[];
+  /** Field picture for a custom dashboard, shown when no View → Field Layout is chosen. */
+  fieldImage?: string;
   renderTopCards?: (data: DrivePanelData) => ReactNode;
   renderSidebar?: (data: DrivePanelData) => ReactNode;
 }) {
@@ -219,7 +223,7 @@ export function DrivePanel({ subsystems = [], renderTopCards, renderSidebar }: {
       <div className={`drive-rail ${cameras.length ? "" : "without-cameras"}`}>
         <small className="drive-select-label">Select view</small>
         <button className={`drive-thumb drive-field-thumb ${selectedView === "field" ? "selected" : ""}`} onClick={() => setSelectedView("field")} aria-label="Show field view">
-          <div className="drive-thumb-preview drive-field-preview" style={{ aspectRatio: `${field.length} / ${field.width}` }}><Field pose={model.pose} field={field} flip={settings.flip} layout={layout} /></div><b>FIELD</b>
+          <div className="drive-thumb-preview drive-field-preview" style={{ aspectRatio: `${field.length} / ${field.width}` }}><Field pose={model.pose} field={field} flip={settings.flip} layout={layout} image={fieldImage} /></div><b>FIELD</b>
         </button>
         {cameras.length > 0 && <div className="drive-camera-list" ref={cameraList} role="region" aria-label="Camera views" tabIndex={0}>
         {cameras.map(camera => <button key={camera.id} data-camera-id={camera.id} className={`drive-thumb ${selectedView === camera.id ? "selected" : ""}`}
@@ -231,7 +235,7 @@ export function DrivePanel({ subsystems = [], renderTopCards, renderSidebar }: {
         {!cameras.length && <div className="drive-no-cameras">Cameras appear here when published to NetworkTables.</div>}
       </div>
       <div className="drive-stage">{selectedCamera ? <CameraCanvas camera={selectedCamera} images={images} failed={!!failed[selectedCamera.id] || selectedCamera.connected === false} />
-        : <Field pose={model.pose} field={field} flip={settings.flip} layout={layout} />}</div>
+        : <Field pose={model.pose} field={field} flip={settings.flip} layout={layout} image={fieldImage} />}</div>
       <aside className="drive-sidebar">
         {chooser && <section className="drive-auto"><div className="drive-auto-choice"><label htmlFor="drive-auto">AUTONOMOUS</label>
           <select id="drive-auto" value={pending?.path === chooser.path && chooser.options.includes(pending.name) ? pending.name :

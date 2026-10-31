@@ -20,6 +20,7 @@ import ConstructionIcon from "@mui/icons-material/Construction";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import ElectricBoltIcon from "@mui/icons-material/ElectricBolt";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
+import RouteIcon from "@mui/icons-material/Route";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import type {
   CharacterizationCommand,
@@ -47,6 +48,7 @@ import { tuningModeRequestTopicName, tuningModeTopicName } from "./features/netw
 import { RobotPanel } from "./features/robot/RobotPanel";
 import { DashboardPanel } from "../dashboard";
 import { LimelightsPanel } from "./features/limelights/LimelightsPanel";
+import { AutoBuilderPanel } from "./features/autos/AutoBuilderPanel";
 import { getFieldLayoutId, setFieldLayoutId } from "./features/field/fieldLayouts";
 import { detectLimelights } from "./features/limelights/limelightUtils";
 import type { AppView } from "./types/app";
@@ -503,7 +505,6 @@ function AppContent() {
     // The menu starts on "None"; check the saved layout instead.
     window.powerlib?.setFieldLayoutMenu?.(getFieldLayoutId());
 
-
     return () => {
       removeConnectionSettings?.();
       removeUpdateSubsystemCode?.();
@@ -626,6 +627,7 @@ function AppContent() {
               value="robot"
               sx={{ minHeight: 44 }}
             />
+            <Tab icon={<RouteIcon />} iconPosition="start" label="Autos" value="autos" sx={{ minHeight: 44 }} />
             <Tab
               icon={<ConstructionIcon />}
               iconPosition="start"
@@ -721,6 +723,8 @@ function AppContent() {
               tuningRequested={tuningModeEnabled}
             />
           )}
+
+          {activeView === "autos" && <AutoBuilderPanel />}
 
           {activeView === "networktables" && (
             <NetworkTablesPanel />

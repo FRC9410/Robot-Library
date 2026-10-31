@@ -9,6 +9,10 @@ contextBridge.exposeInMainWorld("powerlib", {
   saveSubsystems: (subsystems: unknown[], swerve?: unknown) =>
     ipcRenderer.invoke("powerlib:save-subsystems", subsystems, swerve),
   updateSubsystemCode: () => ipcRenderer.invoke("powerlib:update-subsystem-code"),
+  readAutos: () => ipcRenderer.invoke("powerlib:read-autos"),
+  saveAutos: (document: unknown) => ipcRenderer.invoke("powerlib:save-autos", document),
+  updateAutoCode: (document: unknown, javaSource: string) =>
+    ipcRenderer.invoke("powerlib:update-auto-code", document, javaSource),
   updateInstallSection: (section: string) => ipcRenderer.invoke("powerlib:update-install-section", section),
   updatePowerTool: () => ipcRenderer.invoke("powerlib:update-power-tool"),
   onMenuConnectionSettings: (callback: () => void) => {

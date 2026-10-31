@@ -9,6 +9,7 @@ import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import frc.powerlib.PowerRobotContainer;
 import frc.powerlib.auto.AutoBuilder;
 import frc.robot.autos.RobotAutos;
+import frc.robot.commands.DriveToPose;
 import frc.robot.commands.SwerveDriveCommand;
 import frc.robot.Constants;
 import frc.robot.subsystems.PowerDashboard;
@@ -19,7 +20,9 @@ public class RobotContainer implements PowerRobotContainer {
   private final PowerDashboard powerDashboard = new PowerDashboard(stateMachine);
   private final CommandXboxController driverController =
       new CommandXboxController(Constants.OI.DRIVER_CONTROLLER_PORT);
-  private final AutoBuilder autoBuilder = new AutoBuilder();
+  // Drive steps in hand-written autos use DriveToPose with DriveConstraints.DEFAULT.
+  private final AutoBuilder autoBuilder =
+      new AutoBuilder(pose -> new DriveToPose(stateMachine.drivetrain, pose));
 
   public RobotContainer() {
     configureBindings();

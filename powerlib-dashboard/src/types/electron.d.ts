@@ -1,6 +1,17 @@
 import type { ConstantRow, ConstantsFile } from "../features/constants/types";
 export {};
 
+type AutoFilesState = {
+  path: string;
+  document: unknown;
+  states: string[];
+  driveCommandInstalled: boolean;
+  robotAutosHooked: boolean | null;
+  robotAutosStrings: string[];
+  robot: { width: number; length: number };
+  error?: string;
+};
+
 declare global {
   interface Window {
     powerlib?: {
@@ -23,6 +34,13 @@ declare global {
       updateSubsystemCode: () => Promise<{
         stdout: string;
         stderr: string;
+      }>;
+      readAutos: () => Promise<AutoFilesState>;
+      saveAutos: (document: unknown) => Promise<AutoFilesState>;
+      updateAutoCode: (document: unknown, javaSource: string) => Promise<{
+        generatedPath: string;
+        hookAdded: boolean;
+        state: AutoFilesState;
       }>;
       updateInstallSection: (section: string) => Promise<{
         stdout: string;

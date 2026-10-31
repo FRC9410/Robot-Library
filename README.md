@@ -56,7 +56,9 @@ These robot starter/template files are written into the robot project. On the fi
 ```text
 src/main/java/frc/robot/Constants.java
 src/main/java/frc/robot/RobotContainer.java
+src/main/java/frc/robot/autos/GeneratedAutos.java
 src/main/java/frc/robot/autos/RobotAutos.java
+src/main/java/frc/robot/commands/DriveToPose.java
 src/main/java/frc/robot/commands/SwerveDriveCommand.java
 src/main/java/frc/robot/constants/CanBusConstants.java
 src/main/java/frc/robot/constants/LEDConstants.java
@@ -75,6 +77,8 @@ The installer creates temporary backups before replacing files. Successful insta
 
 `RobotAutos.java` is created only when missing. Existing robot autos are preserved on
 every install, including the first, without creating a `.template` copy for this file.
+`GeneratedAutos.java` is also created only when missing; the Power Tool Auto Builder owns
+its contents after that.
 
 ## Autonomous Chooser
 
@@ -113,16 +117,24 @@ resolves to the available default. These tags filter routines; they do not mirro
 coordinates. Existing running commands continue unchanged.
 
 `frc.powerlib.auto.Auto` defines a routine using either direct destinations or a path
-cursor. Configure `AutoBuilder` with your robot's drive-command factory once:
+cursor. The starter `RobotContainer` configures `AutoBuilder` with a drive-command factory:
 
 ```java
-private final AutoBuilder autoBuilder = new AutoBuilder(this::driveToPoint);
+private final AutoBuilder autoBuilder =
+    new AutoBuilder(pose -> new DriveToPose(stateMachine.drivetrain, pose));
 ```
 
-`driveToPoint(Pose2d destination)` is a robot-provided method returning a fresh command
-that requires the drivetrain, finishes when the destination is reached, and stops its
-outputs in `end()`. The builder sequences these commands; it does not choose a motion
-controller, arrival tolerance, timeout, starting pose, or coordinate transformation.
+`frc.robot.commands.DriveToPose` drives to a blue-origin pose using
+`frc.powerlib.auto.DriveToPoseController`. It limits speed and acceleration, and finishes once
+the robot is inside both end tolerances of a `DriveConstraints(maxVelocity, maxAcceleration,
+endDistanceTolerance, endVelocityTolerance)`; the factory above uses `DriveConstraints.DEFAULT`.
+Each leg starts from the robot's measured velocity, so looser end tolerances let consecutive
+legs round a corner instead of stopping. Pass `new DriveToPose(drivetrain, pose, constraints)`
+from `addCommand()` for a leg with its own limits. `atProgress(fraction, action)` runs an
+action, such as a state request, once the robot is that fraction (0 to 1) of the way along
+the leg, or when the leg finishes if that comes first (`frc.powerlib.auto.LegSubpoints`). You can replace the factory with any
+method that returns a fresh command which requires the drivetrain, finishes at the
+destination, and stops its outputs in `end()`. Coordinates are never flipped by alliance.
 
 Both definitions below execute the same steps. `pickupPoint` and `shootingPoint` are
 `Pose2d` destinations; the command methods are factories for your robot's actions.

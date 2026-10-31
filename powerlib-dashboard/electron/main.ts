@@ -6,6 +6,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { readConstantsFiles, saveConstantsFile } from "./constantsFiles.js";
+import { readAutoFiles, saveAutoFiles, updateAutoCode } from "./autoFiles.js";
 import { generatedJsonPath } from "./projectPaths.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -249,6 +250,10 @@ ipcMain.handle("powerlib:read-constants", async () => readConstantsFiles(await g
 ipcMain.handle("powerlib:save-constants", async (_event, id, source, constants) =>
   saveConstantsFile(await getConstantsRobotRoot(), id, source, constants));
 
+ipcMain.handle("powerlib:read-autos", async () => readAutoFiles(getDetectedRobotRoot()));
+ipcMain.handle("powerlib:save-autos", async (_event, document: unknown) => saveAutoFiles(getDetectedRobotRoot(), document));
+ipcMain.handle("powerlib:update-auto-code", async (_event, document: unknown, javaSource: unknown) =>
+  updateAutoCode(getDetectedRobotRoot(), document, javaSource));
 ipcMain.handle("powerlib:update-subsystem-code", async () => {
   const robotRoot = getDetectedRobotRoot();
   const subsystemsPath = await generatedJsonPath(robotRoot, "powerlib-subsystems.json");

@@ -8,6 +8,8 @@ public final class RobotAutos {
   private RobotAutos() {}
 
   public static void register(AutoBuilder autoBuilder, StateMachine robot) {
+    GeneratedAutos.register(autoBuilder, robot);
+
     // Register command factories here; each factory must create a fresh command for every run.
     // autoBuilder.addAuto("My Auto", () -> buildMyAuto(robot));
 

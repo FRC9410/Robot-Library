@@ -250,7 +250,7 @@ function formatDeclaration(row: ConstantRow, target: ConstantsTarget) {
   return `${annotation}public static ${tunable ? "volatile" : "final"} ${row.type.trim()} ${row.name} = ${row.value.trim()};`;
 }
 
-async function replaceFile(filePath: string, content: string) {
+export async function replaceFile(filePath: string, content: string) {
   const temporaryPath = `${filePath}.${randomUUID()}.tmp`;
   try {
     await fs.writeFile(temporaryPath, content, "utf8");

@@ -83,6 +83,21 @@ def templateFiles = [
         replacement: false
     ),
     new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/auto/DriveConstraints.java',
+        destination: 'src/main/java/frc/powerlib/auto/DriveConstraints.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/auto/DriveToPoseController.java',
+        destination: 'src/main/java/frc/powerlib/auto/DriveToPoseController.java',
+        replacement: false
+    ),
+    new TemplateFile(
+        source: 'powerlib/src/main/java/frc/powerlib/auto/LegSubpoints.java',
+        destination: 'src/main/java/frc/powerlib/auto/LegSubpoints.java',
+        replacement: false
+    ),
+    new TemplateFile(
         source: 'powerlib/src/main/java/frc/powerlib/tuning/TuningCadence.java',
         destination: 'src/main/java/frc/powerlib/tuning/TuningCadence.java',
         replacement: false
@@ -323,6 +338,11 @@ def templateFiles = [
         replacement: true
     ),
     new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/commands/DriveToPose.java',
+        destination: 'src/main/java/frc/robot/commands/DriveToPose.java',
+        replacement: true
+    ),
+    new TemplateFile(
         source: 'replacements/src/main/java/frc/robot/subsystems/states/IdleState.java',
         destination: 'src/main/java/frc/robot/subsystems/states/IdleState.java',
         replacement: true
@@ -360,6 +380,12 @@ def templateFiles = [
     new TemplateFile(
         source: 'replacements/src/main/java/frc/robot/autos/RobotAutos.java',
         destination: 'src/main/java/frc/robot/autos/RobotAutos.java',
+        replacement: true,
+        createOnly: true
+    ),
+    new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/autos/GeneratedAutos.java',
+        destination: 'src/main/java/frc/robot/autos/GeneratedAutos.java',
         replacement: true,
         createOnly: true
     ),
