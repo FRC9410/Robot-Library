@@ -38,7 +38,9 @@ export type AutoRoutine = {
   steps: AutoStep[];
 };
 
-export type AutoDocument = { version: 1; autos: AutoRoutine[] };
+/** `periodSeconds` is the autonomous period the replay timeline marks (20 s in 2026 REBUILT). */
+export type AutoDocument = { version: 1; periodSeconds: number; autos: AutoRoutine[] };
+export const defaultPeriodSeconds = 20;
 
 /** What the builder knows about the robot project it generates for. */
 export type AutoProject = {
@@ -64,7 +66,7 @@ export const defaultConstraints: LegConstraints = { maxVelocity: 3, maxAccelerat
 export const constraintKeys = Object.keys(defaultConstraints) as (keyof LegConstraints)[];
 export const noSymmetry: Symmetry = { flipX: false, flipY: false };
 
-export const emptyDocument = (): AutoDocument => ({ version: 1, autos: [] });
+export const emptyDocument = (): AutoDocument => ({ version: 1, periodSeconds: defaultPeriodSeconds, autos: [] });
 
 export function createId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -93,6 +95,8 @@ export function round(value: number, digits = 2) {
 
 /** Wraps degrees into (-180, 180] so headings stay readable. */
 export function normalizeHeading(degrees: number) {
+  // In-range headings pass through exactly; the modulo below adds floating-point noise.
+  if (degrees > -180 && degrees <= 180) return degrees;
   const wrapped = ((degrees + 180) % 360 + 360) % 360 - 180;
   return wrapped === -180 ? 180 : wrapped;
 }
@@ -147,7 +151,8 @@ export function parseAutoDocument(value: unknown): AutoDocument {
       steps
     });
   }
-  return { version: 1, autos };
+  const period = (value as { periodSeconds?: unknown }).periodSeconds;
+  return { version: 1, periodSeconds: typeof period === "number" && Number.isFinite(period) && period > 0 ? period : defaultPeriodSeconds, autos };
 }
 
 function parseStep(value: unknown): AutoStep | null {
@@ -306,8 +311,11 @@ function stepCall(step: AutoStep) {
 }
 
 function autoRegistration(auto: AutoRoutine) {
+  const start = auto.steps.find((step): step is DriveStep => step.type === "drive");
   const calls = [
     ...(auto.alliance ? [`.withAlliance(Alliance.${auto.alliance})`] : []),
+    // Simulation has no vision, so the simulated robot starts at point 1 (the replay's start).
+    ...(start ? [`.addCommand(() -> startInSimulation(robot, new Pose2d(${javaDouble(start.x)}, ${javaDouble(start.y)}, Rotation2d.fromDegrees(${javaDouble(start.heading)}))))`] : []),
     ...auto.steps.map(stepCall),
     ...(auto.clearRequestsAtEnd && requestsStates(auto)
       ? [".addCommand(() -> Commands.runOnce(() -> robot.clearRequest(OWNER), robot))"] : [])
@@ -331,6 +339,8 @@ package frc.robot.autos;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
+import edu.wpi.first.wpilibj.RobotBase;
+import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
 import frc.powerlib.auto.Auto;
 import frc.powerlib.auto.AutoBuilder;
@@ -346,6 +356,13 @@ public final class ${generatedAutosClass} {
   private static final Object OWNER = new Object();
 
   private ${generatedAutosClass}() {}
+
+  /** In simulation only, puts the robot at the auto's first point; a real robot keeps its vision pose. */
+  private static Command startInSimulation(StateMachine robot, Pose2d start) {
+    return Commands.runOnce(() -> {
+      if (RobotBase.isSimulation()) robot.drivetrain.resetPose(start);
+    });
+  }
 
   public static void register(AutoBuilder autoBuilder, StateMachine robot) {
 ${autos.length ? autos.join("\n\n") : "    // No autos yet. Build one in the Power Tool Auto Builder."}

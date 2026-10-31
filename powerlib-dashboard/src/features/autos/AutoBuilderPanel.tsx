@@ -20,14 +20,14 @@ import {
   Typography
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
-import CodeIcon from "@mui/icons-material/Code";
+import CloudDoneIcon from "@mui/icons-material/CloudDone";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import DeleteIcon from "@mui/icons-material/DeleteOutlined";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutlined";
 import KeyboardIcon from "@mui/icons-material/Keyboard";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 import RedoIcon from "@mui/icons-material/Redo";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import SaveIcon from "@mui/icons-material/Save";
 import StarIcon from "@mui/icons-material/Star";
 import StarBorderIcon from "@mui/icons-material/StarBorder";
 import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
@@ -39,7 +39,7 @@ import { useFieldLayout } from "../field/fieldLayouts";
 import { AutoField } from "./AutoField";
 import { AutoReplayBar } from "./AutoReplayBar";
 import { ShortcutsDialog } from "./AutoShortcuts";
-import { StepInspector, StepList, stepDescriptions, stepIcons } from "./AutoSteps";
+import { MultiStepInspector, StepInspector, StepList, stepDescriptions, stepIcons } from "./AutoSteps";
 import type { LegReplayInfo } from "./AutoSteps";
 import {
   createAuto,
@@ -58,9 +58,11 @@ import {
   stepLabels,
   validateAutos
 } from "./autoModel";
-import type { AutoProject, AutoRoutine, AutoStep, AutoStepType, DriveStep, LegConstraints, Symmetry } from "./autoModel";
-import { frameAt, replayAuto, segmentAt, stateAt } from "./autoReplay";
+import type { AutoDocument, AutoProject, AutoRoutine, AutoStep, AutoStepType, DriveStep, LegConstraints, Symmetry } from "./autoModel";
+import { frameAt, loopPeriodSeconds, replayAuto, segmentAt, stateAt } from "./autoReplay";
 import { useAutoHistory } from "./useAutoHistory";
+import { autoFieldSize, setPendingAutoSave } from "./autoCode";
+import { ColumnSplitter, gridColumns, useColumnLayout } from "./AutoColumns";
 import "./autos.css";
 import "./autoBuilder.css";
 
@@ -79,17 +81,6 @@ type Message = { severity: "success" | "error" | "info" | "warning"; text: strin
 
 const stateColors = ["#38bdf8", "#f472b6", "#a3e635", "#fb923c", "#c084fc", "#2dd4bf", "#f87171", "#fde047"];
 
-/** Without a View → Field Layout choice, uses the field size from Drive crew tools so both views agree. */
-function readFieldSize() {
-  const fallback = { length: template.field.lengthMeters, width: template.field.widthMeters };
-  try {
-    const value = JSON.parse(localStorage.getItem("powerlib.driveDisplay.v1") || "{}");
-    return { length: Number.isFinite(value.length) && value.length > 0 ? value.length : fallback.length,
-      width: Number.isFinite(value.width) && value.width > 0 ? value.width : fallback.width };
-  } catch {
-    return fallback;
-  }
-}
 
 const previousDrive = (steps: AutoStep[], beforeIndex: number) =>
   steps.slice(0, beforeIndex).reverse().find((step): step is DriveStep => step.type === "drive");
@@ -104,8 +95,15 @@ export function AutoBuilderPanel() {
   const { document, change, reset, undo, redo, canUndo, canRedo } = useAutoHistory();
   const [savedJson, setSavedJson] = useState(JSON.stringify(emptyDocument()));
   const [selectedAutoId, setSelectedAutoId] = useState<string | null>(null);
-  const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"save" | "update" | null>(null);
+  /** Selected steps in click order; the last is the primary step the inspector shows. */
+  const [selection, setSelection] = useState<string[]>([]);
+  const selectedStepId = selection.length ? selection[selection.length - 1] : null;
+  const setSelectedStepId = useCallback((id: string | null) => setSelection(id ? [id] : []), []);
+  const selectSteps = useCallback((ids: string[], mode: "replace" | "toggle" | "add") => setSelection(current =>
+    mode === "replace" ? ids
+      : mode === "add" ? [...current.filter(id => !ids.includes(id)), ...ids]
+        : ids.reduce((next, id) => next.includes(id) ? next.filter(other => other !== id) : [...next, id], current)), []);
+  const [saveState, setSaveState] = useState<"saved" | "saving" | "error">("saved");
   const [message, setMessage] = useState<Message | null>(null);
   const [view, setView] = useState<"field" | "code">("field");
   const [showMirror, setShowMirror] = useState(false);
@@ -116,9 +114,10 @@ export function AutoBuilderPanel() {
   /** Right-click menu for an auto in the list, at the pointer. */
   const [autoMenu, setAutoMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const clipboard = useRef<AutoStep | null>(null);
+  const clipboard = useRef<AutoStep[]>([]);
   const layout = useFieldLayout();
-  const field = useMemo(() => layout ? { length: layout.length, width: layout.width } : readFieldSize(), [layout]);
+  const [columns, setColumns] = useColumnLayout();
+  const field = useMemo(() => layout ? { length: layout.length, width: layout.width } : autoFieldSize(), [layout]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(performance.now()), 500);
@@ -144,7 +143,11 @@ export function AutoBuilderPanel() {
 
   // Replay drives the field robot; the live robot is shown otherwise.
   const frame = replayTime === null ? undefined : frameAt(replay, replayTime);
-  const fieldPose = frame ? { x: frame.x, y: frame.y, heading: frame.heading } : livePose;
+  // The replay robot's wheels follow its direction of travel, taken from the next frame.
+  const nextFrame = replayTime === null ? undefined : frameAt(replay, replayTime + loopPeriodSeconds);
+  const travel = frame && nextFrame && Math.hypot(nextFrame.x - frame.x, nextFrame.y - frame.y) > 1e-6
+    ? Math.atan2(nextFrame.y - frame.y, nextFrame.x - frame.x) * 180 / Math.PI : undefined;
+  const fieldPose = frame ? { x: frame.x, y: frame.y, heading: frame.heading, travel } : livePose;
   const activeSegment = replayTime === null ? undefined : segmentAt(replay, replayTime);
   const activeStepId = activeSegment && activeSegment.stepId !== "clear" ? activeSegment.stepId : null;
   const replayState = replayTime === null ? null : stateAt(replay, replayTime);
@@ -163,7 +166,8 @@ export function AutoBuilderPanel() {
         if (next >= replay.duration) { finished = true; return replay.duration; }
         return next;
       });
-      if (finished) setPlaying(false);
+      // At the end the replay stops on its own and the field returns to editing.
+      if (finished) { setPlaying(false); setReplayTime(null); }
       else frameId = requestAnimationFrame(tick);
     };
     frameId = requestAnimationFrame(tick);
@@ -208,10 +212,10 @@ export function AutoBuilderPanel() {
     if (selectedAutoId !== null && !document.autos.some(candidate => candidate.id === selectedAutoId)) {
       setSelectedAutoId(document.autos[0]?.id ?? null);
       setSelectedStepId(null);
-    } else if (selectedStepId !== null && !auto?.steps.some(step => step.id === selectedStepId)) {
-      setSelectedStepId(null);
+    } else if (selection.some(id => !auto?.steps.some(step => step.id === id))) {
+      setSelection(current => current.filter(id => auto?.steps.some(step => step.id === id)));
     }
-  }, [document, selectedAutoId, selectedStepId, auto]);
+  }, [document, selectedAutoId, selection, auto, setSelectedStepId]);
 
   // `key` merges rapid edits of the same thing (a drag, typing in one field) into one undo step.
   const updateAuto = (id: string, update: (auto: AutoRoutine) => AutoRoutine, key?: string) => {
@@ -222,20 +226,22 @@ export function AutoBuilderPanel() {
     updateSelected(current => ({ ...current, steps: current.steps.map(step => step.id === stepId ? { ...step, ...patch } as AutoStep : step) }), key);
   };
 
-  /** New steps go after the selected step so an auto is built in order. */
-  const insertStep = (step: AutoStep) => {
+  /** New steps go after the selected step (the last one, in run order) so an auto is built in order. */
+  const insertSteps = (added: AutoStep[]) => {
+    if (!added.length) return;
     updateSelected(current => {
-      const index = current.steps.findIndex(candidate => candidate.id === selectedStepId);
+      const after = Math.max(-1, ...current.steps.flatMap((step, index) => selection.includes(step.id) ? [index] : []));
       const steps = [...current.steps];
-      steps.splice(index < 0 ? steps.length : index + 1, 0, step);
+      steps.splice(after < 0 ? steps.length : after + 1, 0, ...added);
       return { ...current, steps };
     });
-    setSelectedStepId(step.id);
+    setSelection(added.map(step => step.id));
   };
+  const insertStep = (step: AutoStep) => insertSteps([step]);
   const insertionIndex = () => {
     if (!auto) return 0;
-    const index = auto.steps.findIndex(candidate => candidate.id === selectedStepId);
-    return index < 0 ? auto.steps.length : index + 1;
+    const after = Math.max(-1, ...auto.steps.flatMap((step, index) => selection.includes(step.id) ? [index] : []));
+    return after < 0 ? auto.steps.length : after + 1;
   };
   /** A new leg starts from the previous leg's pose and limits, so long autos need few edits. */
   const newDriveStep = (x?: number, y?: number): DriveStep => {
@@ -265,37 +271,81 @@ export function AutoBuilderPanel() {
       ? { ...step, subpoints: step.subpoints.map(subpoint => subpoint.id === subpointId ? { ...subpoint, progress } : subpoint) }
       : step) }), `subpoint:${subpointId}`);
   };
-  /** Moves or turns the selected drive point in the frame shown on the field. */
+  /** Applies field edits to several drive points at once, flipping them back in the mirrored view. */
+  const changePoints = (changes: { stepId: string; x?: number; y?: number; heading?: number }[], key: string) => {
+    if (!auto || !shownAuto) return;
+    const patches = new Map(changes.map(change => {
+      const shown = shownAuto.steps.find((step): step is DriveStep => step.id === change.stepId && step.type === "drive");
+      if (!shown) return [change.stepId, null] as const;
+      const next = { x: change.x ?? shown.x, y: change.y ?? shown.y, heading: change.heading ?? shown.heading };
+      return [change.stepId, viewingMirror ? flipPoint(next, auto.symmetry, field) : next] as const;
+    }));
+    updateSelected(current => ({ ...current, steps: current.steps.map(step => {
+      const patch = patches.get(step.id);
+      return patch && step.type === "drive" ? { ...step, x: patch.x, y: patch.y, heading: patch.heading } : step;
+    }) }), key);
+  };
+  const movePoints = (moves: { stepId: string; x: number; y: number }[]) => changePoints(moves, `move:${moves.map(move => move.stepId).join(",")}`);
+  /** Moves or turns the selected drive points in the frame shown on the field. */
   const nudgeSelected = (dx: number, dy: number, turn: number) => {
-    const shown = shownAuto?.steps.find((step): step is DriveStep => step.id === selectedStepId && step.type === "drive");
-    if (!shown) return;
+    const shown = (shownAuto?.steps ?? []).filter((step): step is DriveStep => step.type === "drive" && selection.includes(step.id));
+    if (!shown.length) return;
     const clamp = (value: number, max: number) => round(Math.min(Math.max(value, 0), max));
-    fieldChangePoint(shown.id, turn !== 0 ? { heading: normalizeHeading(Math.round(shown.heading + turn)) }
-      : { x: clamp(shown.x + dx, field.length), y: clamp(shown.y + dy, field.width) }, `nudge:${shown.id}:${turn !== 0 ? "turn" : "move"}`);
+    changePoints(shown.map(step => turn !== 0
+      ? { stepId: step.id, heading: normalizeHeading(Math.round(step.heading + turn)) }
+      : { stepId: step.id, x: clamp(step.x + dx, field.length), y: clamp(step.y + dy, field.width) }),
+    `nudge:${shown.map(step => step.id).join(",")}:${turn !== 0 ? "turn" : "move"}`);
   };
   /** A copy with new ids, so pasted and duplicated steps never share subpoints with the original. */
   const cloneStep = (step: AutoStep): AutoStep => step.type === "drive"
     ? { ...step, id: createId(), subpoints: step.subpoints.map(subpoint => ({ ...subpoint, id: createId() })) }
     : { ...step, id: createId() };
 
-  const moveStep = (stepId: string, offset: number) => {
+  /** Moves the steps one place earlier or later together, keeping their order; blocked at the ends. */
+  const moveSteps = (stepIds: string[], offset: number) => {
     updateSelected(current => {
-      const index = current.steps.findIndex(step => step.id === stepId);
-      const target = index + offset;
-      if (index < 0 || target < 0 || target >= current.steps.length) return current;
       const steps = [...current.steps];
-      [steps[index], steps[target]] = [steps[target], steps[index]];
+      const indexes = steps.flatMap((step, index) => stepIds.includes(step.id) ? [index] : []);
+      if (!indexes.length || (offset < 0 ? indexes[0] === 0 : indexes[indexes.length - 1] === steps.length - 1)) return current;
+      for (const index of offset < 0 ? indexes : [...indexes].reverse()) {
+        [steps[index], steps[index + offset]] = [steps[index + offset], steps[index]];
+      }
       return { ...current, steps };
     });
   };
-  const deleteStep = (stepId: string) => {
-    updateSelected(current => ({ ...current, steps: current.steps.filter(step => step.id !== stepId) }));
-    if (selectedStepId === stepId) setSelectedStepId(null);
+  /** Drops the steps (kept in their order) before the step now at beforeIndex. */
+  const moveStepsTo = (stepIds: string[], beforeIndex: number) => {
+    updateSelected(current => {
+      const moving = current.steps.filter(step => stepIds.includes(step.id));
+      const anchor = current.steps.slice(beforeIndex).find(step => !stepIds.includes(step.id));
+      const rest = current.steps.filter(step => !stepIds.includes(step.id));
+      rest.splice(anchor ? rest.indexOf(anchor) : rest.length, 0, ...moving);
+      return rest.every((step, index) => step === current.steps[index]) ? current : { ...current, steps: rest };
+    });
+  };
+  const deleteSteps = (stepIds: string[]) => {
+    updateSelected(current => ({ ...current, steps: current.steps.filter(step => !stepIds.includes(step.id)) }));
+    setSelection(current => current.filter(id => !stepIds.includes(id)));
+  };
+  const deleteStep = (stepId: string) => deleteSteps([stepId]);
+  const applyLimits = (stepIds: string[] | null, limits: Partial<LegConstraints>) => {
+    updateSelected(current => ({ ...current, steps: current.steps.map(step =>
+      step.type === "drive" && (stepIds === null || stepIds.includes(step.id)) ? { ...step, ...limits } : step) }),
+    `limits:${stepIds?.join(",") ?? "all"}:${Object.keys(limits).join(",")}`);
   };
   const applyLimitsToAll = (limits: LegConstraints) => {
-    updateSelected(current => ({ ...current, steps: current.steps.map(step => step.type === "drive" ? { ...step, ...limits } : step) }));
+    applyLimits(null, limits);
     setMessage({ severity: "success", text: "Applied these limits to every drive step in this auto." });
   };
+  /** Lines up the selected drive points with the primary (last selected) one. */
+  const alignSelected = (axis: "x" | "y") => {
+    const primary = auto?.steps.find((step): step is DriveStep => step.id === selectedStepId && step.type === "drive")
+      ?? [...(auto?.steps ?? [])].reverse().find((step): step is DriveStep => step.type === "drive" && selection.includes(step.id));
+    if (!primary) return;
+    updateSelected(current => ({ ...current, steps: current.steps.map(step =>
+      step.type === "drive" && selection.includes(step.id) ? { ...step, [axis]: primary[axis] } : step) }));
+  };
+  const stepsInOrder = (stepIds: string[]) => (auto?.steps ?? []).filter(step => stepIds.includes(step.id));
 
   // Building shortcuts; AutoShortcuts.tsx lists them for the help dialog.
   useEffect(() => {
@@ -308,7 +358,7 @@ export function AutoBuilderPanel() {
       if (shortcutsOpen || autoMenu || addMenu || target?.closest("[role='menu'], [role='listbox'], [role='dialog']")) return;
       const handled = () => { event.preventDefault(); event.stopPropagation(); };
 
-      if (control && key === "s") { handled(); if (api && dirty && busy === null) void save(); return; }
+      if (control && key === "s") { handled(); void save(); return; }
       // Inside a text field, undo and redo edit the text instead.
       if (typing) return;
       if (control && key === "z" && !event.shiftKey) { handled(); undo(); return; }
@@ -318,7 +368,12 @@ export function AutoBuilderPanel() {
       if (!auto || event.altKey && !["arrowup", "arrowdown"].includes(key)) return;
 
       const index = auto.steps.findIndex(step => step.id === selectedStepId);
-      if (!control && !event.altKey && ["1", "2", "3", "4"].includes(event.key)) {
+      const selectedSteps = stepsInOrder(selection);
+      const anyDrive = selectedSteps.some(step => step.type === "drive");
+      if (control && key === "a") {
+        handled();
+        setSelection(auto.steps.map(step => step.id));
+      } else if (!control && !event.altKey && ["1", "2", "3", "4"].includes(event.key)) {
         handled();
         addStep((["drive", "requestState", "waitForState", "wait"] as const)[Number(event.key) - 1]);
       } else if (!control && (event.key === "[" || event.key === "]") && auto.steps.length) {
@@ -326,33 +381,33 @@ export function AutoBuilderPanel() {
         const next = index < 0 ? (event.key === "]" ? 0 : auto.steps.length - 1)
           : Math.min(auto.steps.length - 1, Math.max(0, index + (event.key === "]" ? 1 : -1)));
         setSelectedStepId(auto.steps[next].id);
-      } else if (control && key === "v" && clipboard.current) {
+      } else if (control && key === "v" && clipboard.current.length) {
         handled();
-        insertStep(cloneStep(clipboard.current));
-      } else if (index < 0) {
+        insertSteps(clipboard.current.map(cloneStep));
+      } else if (!selectedSteps.length) {
         return;
       } else if (control && key === "c") {
         handled();
-        clipboard.current = auto.steps[index];
-        setMessage({ severity: "info", text: "Copied the step. Press Ctrl+V to paste it after the selected step." });
+        clipboard.current = selectedSteps;
+        setMessage({ severity: "info", text: `Copied ${selectedSteps.length === 1 ? "the step" : `${selectedSteps.length} steps`}. Press Ctrl+V to paste after the selected step.` });
       } else if (control && key === "d") {
         handled();
-        insertStep(cloneStep(auto.steps[index]));
+        insertSteps(selectedSteps.map(cloneStep));
       } else if (event.key === "Delete" || event.key === "Backspace") {
         handled();
-        deleteStep(auto.steps[index].id);
+        deleteSteps(selection);
       } else if (event.key === "Escape") {
         handled();
-        setSelectedStepId(null);
+        setSelection([]);
       } else if (event.altKey && (key === "arrowup" || key === "arrowdown")) {
         handled();
-        moveStep(auto.steps[index].id, key === "arrowup" ? -1 : 1);
-      } else if (!control && key.startsWith("arrow") && auto.steps[index].type === "drive") {
+        moveSteps(selection, key === "arrowup" ? -1 : 1);
+      } else if (!control && key.startsWith("arrow") && anyDrive) {
         handled();
         const distance = event.shiftKey ? 0.25 : 0.05;
         nudgeSelected(key === "arrowleft" ? -distance : key === "arrowright" ? distance : 0,
           key === "arrowdown" ? -distance : key === "arrowup" ? distance : 0, 0);
-      } else if (!control && (key === "q" || key === "e") && auto.steps[index].type === "drive") {
+      } else if (!control && (key === "q" || key === "e") && anyDrive) {
         handled();
         nudgeSelected(0, 0, (event.shiftKey ? 1 : 15) * (key === "q" ? 1 : -1));
       }
@@ -403,37 +458,37 @@ export function AutoBuilderPanel() {
     updateAuto(id, current => ({ ...current, steps: flipSteps(current.steps, flips, field) }));
   };
 
-  const save = async () => {
+  // Edits save on their own after a short pause; File → Update Code writes them into robot code.
+  const persist = useCallback(async (next: AutoDocument) => {
     if (!api) return;
-    setBusy("save");
+    setSaveState("saving");
     try {
-      applyFiles(await api.saveAutos(document));
-      setSavedJson(JSON.stringify(document));
-      setMessage({ severity: "success", text: "Saved. Use Update code to write the autos into robot code." });
+      await api.saveAutos(next);
+      setSavedJson(JSON.stringify(next));
+      setSaveState("saved");
     } catch (error) {
+      setSaveState("error");
       setMessage({ severity: "error", text: error instanceof Error ? error.message : "Could not save autos." });
-    } finally {
-      setBusy(null);
     }
-  };
-  const updateCode = async () => {
-    if (!api) return;
-    if (hasErrors(issues)) {
-      setMessage({ severity: "error", text: "Fix the problems marked in red before updating code." });
-      return;
-    }
-    setBusy("update");
-    try {
-      const result = await api.updateAutoCode(document, generateAutosJava(document, project));
-      applyFiles(result.state);
-      setSavedJson(JSON.stringify(document));
-      setMessage({ severity: "success", text: `Wrote GeneratedAutos.java${result.hookAdded ? " and registered it in RobotAutos.java" : ""}. Deploy robot code to use it.` });
-    } catch (error) {
-      setMessage({ severity: "error", text: error instanceof Error ? error.message : "Could not update auto code." });
-    } finally {
-      setBusy(null);
-    }
-  };
+  }, [api]);
+  const flushRef = useRef<(() => Promise<void>) | null>(null);
+  useEffect(() => {
+    if (!api || !dirty || files.loading) { flushRef.current = null; setPendingAutoSave(null); return; }
+    const timer = window.setTimeout(() => { flushRef.current = null; setPendingAutoSave(null); void persist(document); }, 500);
+    const flush = () => { window.clearTimeout(timer); flushRef.current = null; setPendingAutoSave(null); return persist(document); };
+    flushRef.current = flush;
+    setPendingAutoSave(flush);
+    return () => window.clearTimeout(timer);
+  }, [api, dirty, document, files.loading, persist]);
+  // Leaving the tab saves anything still waiting.
+  useEffect(() => () => { void flushRef.current?.(); }, []);
+  const save = async () => { await flushRef.current?.(); };
+  // File → Update Code may register the autos in RobotAutos.java; refresh what the panel shows.
+  useEffect(() => {
+    const onWritten = () => { void api?.readAutos().then(applyFiles).catch(() => {}); };
+    window.addEventListener("powerlib:autos-written", onWritten);
+    return () => window.removeEventListener("powerlib:autos-written", onWritten);
+  });
 
   const generated = useMemo(() => {
     if (view !== "code") return "";
@@ -450,12 +505,13 @@ export function AutoBuilderPanel() {
     exitSpeed: frameAt(replay, selectedSegment.end)?.speed ?? 0,
     finished: !replay.unfinishedStepIds.includes(selectedStep.id)
   } : undefined;
-  const legCount = auto?.steps.filter(step => step.type === "drive").length ?? 0;
+  // Problems with the auto itself (not a step), shown beside its name.
+  const autoLevelIssues = autoIssues.filter(issue => !issue.stepId);
 
   return (
-    <div className="ab-root">
+    <div className="ab-root" style={{ gridTemplateColumns: gridColumns(columns) }}>
       {/* Autos in this robot project, with the actions that apply to all of them. */}
-      <section className="ab-pane">
+      <section className={`ab-pane${columns.leftOpen ? "" : " collapsed"}`}>
         <div className="ab-pane-header">
           <Typography sx={{ fontWeight: 600, flex: 1 }}>Autos</Typography>
           <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={newAuto}>New</Button>
@@ -493,15 +549,15 @@ export function AutoBuilderPanel() {
             onDuplicate={duplicateAuto} onFlip={flipInPlace} onDelete={deleteAuto} onDefault={setDefault}
             onToggleClear={id => updateAuto(id, current => ({ ...current, clearRequestsAtEnd: !current.clearRequestsAtEnd }))} />
         </div>
-        <Stack spacing={1} sx={{ p: 1.5, borderTop: "1px solid rgba(250, 204, 21, 0.12)" }}>
-          {dirty && <Typography variant="caption" color="warning.main">Unsaved changes</Typography>}
-          {errorCount > 0 && <Typography variant="caption" color="error">{errorCount} problem{errorCount === 1 ? "" : "s"} to fix before updating code</Typography>}
-          {files.robotAutosHooked === false && <Typography variant="caption" color="text.secondary">Update code also registers generated autos in RobotAutos.java.</Typography>}
-          <Button fullWidth variant="contained" startIcon={busy === "update" ? <CircularProgress size={16} /> : <CodeIcon />}
-            disabled={!api || busy !== null || errorCount > 0} sx={{ whiteSpace: "nowrap" }} onClick={() => void updateCode()}>Update code</Button>
-          <Stack direction="row" spacing={1}>
-            <Button fullWidth size="small" variant="outlined" startIcon={busy === "save" ? <CircularProgress size={14} /> : <SaveIcon />}
-              disabled={!api || busy !== null || !dirty} onClick={() => void save()}>Save</Button>
+        <Stack spacing={0.5} sx={{ p: 1, borderTop: "1px solid rgba(250, 204, 21, 0.12)" }}>
+          {errorCount > 0 && <Typography variant="caption" color="error">{errorCount} problem{errorCount === 1 ? "" : "s"} to fix</Typography>}
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+            <Tooltip title={api ? "Autos save as you edit. File → Update Code writes them into robot code." : "Open in Power Tool to save autos"}>
+              <Typography variant="caption" sx={{ flex: 1, display: "flex", alignItems: "center", gap: 0.5 }}
+                color={saveState === "error" ? "error" : "text.secondary"}>
+                {saveState === "error" ? "Not saved" : dirty || saveState === "saving" ? "Saving…" : <><CloudDoneIcon sx={{ fontSize: 14 }} />Saved</>}
+              </Typography>
+            </Tooltip>
             <Tooltip title="Undo (Ctrl+Z)">
               <span><IconButton size="small" aria-label="Undo" disabled={!canUndo} onClick={undo}><UndoIcon fontSize="small" /></IconButton></span>
             </Tooltip>
@@ -516,6 +572,8 @@ export function AutoBuilderPanel() {
           </Stack>
         </Stack>
       </section>
+
+      <ColumnSplitter side="left" layout={columns} onChange={setColumns} />
 
       {/* The selected auto: its settings, the field or code, and the replay. */}
       <section className="ab-main">
@@ -542,6 +600,9 @@ export function AutoBuilderPanel() {
               <ToggleButton value="y" aria-label="Mirror top to bottom"><SwapVertIcon fontSize="small" /></ToggleButton>
             </ToggleButtonGroup>
           </Tooltip>
+          {autoLevelIssues.length > 0 && <Tooltip title={<>{autoLevelIssues.map(issue => <div key={issue.message}>{issue.message}</div>)}</>}>
+            <ErrorOutlineIcon color={hasErrors(autoLevelIssues) ? "error" : "warning"} aria-label="Problems with this auto" />
+          </Tooltip>}
           <Tooltip title={auto.isDefault ? "Default auto (selected when the robot starts)" : "Make this the default auto"}>
             <IconButton aria-label="Default auto" color={auto.isDefault ? "primary" : "default"} onClick={() => setDefault(auto.id, !auto.isDefault)}>
               {auto.isDefault ? <StarIcon /> : <StarBorderIcon />}
@@ -574,21 +635,27 @@ export function AutoBuilderPanel() {
           <div className="ab-stage">
             {view === "code"
               ? <pre className="ab-code" aria-label="Generated Java">{generated}</pre>
-              : <AutoField auto={shownAuto} field={field} layout={layout} robot={files.robot} stateColor={stateColor} selectedStepId={selectedStepId} pose={fieldPose}
-                onSelectStep={setSelectedStepId} onAddPoint={fieldAddPoint} onChangePoint={fieldChangePoint} onChangeSubpoint={changeSubpoint} />}
+              : <AutoField auto={shownAuto} field={field} layout={layout} robot={files.robot} stateColor={stateColor} selectedStepIds={selection}
+                replay={replay} pose={fieldPose} onSelectSteps={selectSteps} onAddPoint={fieldAddPoint} onMovePoints={movePoints}
+                onChangeHeading={(stepId, heading) => fieldChangePoint(stepId, { heading })} onChangeSubpoint={changeSubpoint}
+                replaying={replayTime !== null} />}
             {view === "field" && frame && <Chip className="ab-replay-pill" size="small" color="primary"
               label={`Replay · ${frame.speed.toFixed(1)} m/s${replayState ? ` · ${replayState}` : ""}`} />}
           </div>
           <Divider />
           <AutoReplayBar replay={replay} time={replayTime} playing={playing} speed={replaySpeed} stateColor={stateColor} activeStepId={activeStepId}
+            period={document.periodSeconds} onPeriod={seconds => change(current => ({ ...current, periodSeconds: seconds }))}
+            stepColor={stepId => { const step = auto?.steps.find(candidate => candidate.id === stepId); return step && (step.type === "requestState" || step.type === "waitForState") ? stateColor(step.state) : undefined; }}
             onPlay={startReplay}
             onPause={() => setPlaying(false)} onStop={stopReplay}
             onSeek={time => { setPlaying(false); setReplayTime(time); }} onSpeed={setReplaySpeed} onSelectStep={setSelectedStepId} />
         </div>
       </section>
 
+      <ColumnSplitter side="right" layout={columns} onChange={setColumns} />
+
       {/* Steps in run order, and the selected step's settings. */}
-      <section className="ab-pane">
+      <section className={`ab-pane${columns.rightOpen ? "" : " collapsed"}`}>
         <div className="ab-pane-header">
           <Typography sx={{ fontWeight: 600, flex: 1 }}>Steps{auto ? ` (${auto.steps.length})` : ""}</Typography>
           <Button size="small" variant="outlined" startIcon={<AddIcon />} disabled={!auto} onClick={event => setAddMenu(event.currentTarget)}>Add step</Button>
@@ -600,21 +667,23 @@ export function AutoBuilderPanel() {
           </Menu>
         </div>
         {!auto ? <div className="ab-pane-body"><Typography color="text.secondary" variant="body2">Pick an auto to see its steps.</Typography></div> : <>
-          <div className="ab-pane-body" style={{ flex: "0 1 auto", maxHeight: "45%" }}>
+          <div className="ab-pane-body" style={selection.length ? { flex: "0 1 auto", maxHeight: "45%" } : undefined}>
             {auto.steps.length === 0
               ? <Typography variant="body2" color="text.secondary">Click the field to add drive points, or use Add step.</Typography>
-              : <StepList steps={auto.steps} selectedStepId={selectedStepId} activeStepId={activeStepId} durations={durations} issues={autoIssues}
-                stateColor={stateColor} onSelect={setSelectedStepId} onMove={moveStep} onDelete={deleteStep} />}
+              : <StepList steps={auto.steps} selectedStepIds={selection} activeStepId={activeStepId} durations={durations} issues={autoIssues}
+                stateColor={stateColor} onSelect={(stepId, toggle) => selectSteps([stepId], toggle ? "toggle" : "replace")} onReorder={moveStepsTo} onDelete={deleteStep} />}
           </div>
-          <div className="ab-pane-body ab-inspector">
-            {selectedStep
+          {selection.length > 0 && <div className="ab-pane-body ab-inspector">
+            {selection.length > 1
+              ? <MultiStepInspector steps={stepsInOrder(selection)} onApplyLimits={limits => applyLimits(selection, limits)} onAlign={alignSelected}
+                onDuplicate={() => insertSteps(stepsInOrder(selection).map(cloneStep))} onDelete={() => deleteSteps(selection)} />
+              : selectedStep
               ? <StepInspector key={selectedStep.id} step={selectedStep} states={files.states} mirrored={viewingMirror}
                 driveNumber={auto.steps.slice(0, selectedIndex + 1).filter(step => step.type === "drive").length}
                 issues={autoIssues.filter(issue => issue.stepId === selectedStep.id)} legInfo={legInfo}
                 onChange={patch => updateStep(selectedStep.id, patch)} onApplyLimitsToAll={applyLimitsToAll} />
-              : <AutoOverview auto={auto} legCount={legCount} duration={replay.duration}
-                issues={autoIssues} onSelectStep={setSelectedStepId} />}
-          </div>
+              : null}
+          </div>}
         </>}
       </section>
 
@@ -625,38 +694,6 @@ export function AutoBuilderPanel() {
       </Snackbar>
     </div>
   );
-}
-
-/** Shown when no step is selected: totals, problems and a short how-to. */
-function AutoOverview({ auto, legCount, duration, issues, onSelectStep }: {
-  auto: AutoRoutine;
-  legCount: number;
-  duration: number;
-  issues: ReturnType<typeof validateAutos>;
-  onSelectStep: (stepId: string) => void;
-}) {
-  return <Stack spacing={2}>
-    <Stack direction="row" spacing={3}>
-      <Stat label="Drive legs" value={String(legCount)} />
-      <Stat label="Replay time" value={`${duration.toFixed(1)} s`} warn={duration > 15} />
-    </Stack>
-    {issues.length > 0 && <Stack spacing={1}>
-      <Typography variant="overline" color="text.secondary">Problems</Typography>
-      {issues.map(issue => <Alert key={`${issue.stepId ?? ""}${issue.message}`} severity={issue.severity} sx={{ py: 0, cursor: issue.stepId ? "pointer" : undefined }}
-        onClick={() => issue.stepId && onSelectStep(issue.stepId)}>{issue.message}</Alert>)}
-    </Stack>}
-    <Stack spacing={0.5}>
-      <Typography variant="overline" color="text.secondary">Editing</Typography>
-      {[
-        "Click the field to add a drive point after the selected step.",
-        "Drag a point to move it; drag its ring to aim it (Shift snaps to 15°).",
-        "Each drive step has its own speed, acceleration and finish tolerances.",
-        "Ctrl+Z undoes, arrow keys nudge the selected point, Q/E turn it, and Space plays the replay. Press ? for all shortcuts.",
-        "Right-click an auto in the list to duplicate, flip or delete it."
-      ].map(line => <Typography key={line} variant="body2" color="text.secondary">{line}</Typography>)}
-    </Stack>
-    {!auto.steps.length && <Typography variant="body2">Start by clicking where the robot begins the auto. The replay starts from point 1.</Typography>}
-  </Stack>;
 }
 
 /** Right-click menu for an auto in the list. */
@@ -697,11 +734,3 @@ function AutoContextMenu({ menu, auto, onClose, onDuplicate, onFlip, onDelete, o
     </MenuItem>
   </Menu>;
 }
-
-function Stat({ label, value, warn = false }: { label: string; value: string; warn?: boolean }) {
-  return <Stack>
-    <Typography variant="caption" color="text.secondary">{label}</Typography>
-    <Typography variant="h6" color={warn ? "error" : undefined}>{value}</Typography>
-  </Stack>;
-}
-

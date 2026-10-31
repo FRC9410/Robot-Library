@@ -11,6 +11,7 @@ const load = async (relative) => {
   return import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].contents).toString("base64")}`);
 };
 const model = await load("../src/features/autos/autoModel.ts");
+const snap = await load("../src/features/autos/autoSnap.ts");
 const replay = await load("../src/features/autos/autoReplay.ts");
 const files = await load("../electron/autoFiles.ts");
 
@@ -38,6 +39,10 @@ assert.match(java, /\.withAlliance\(Alliance\.Blue\)/);
 assert.match(java, /\.addCommand\(\(\) -> new RequestState\(RobotState\.INTAKE, OWNER, robot\)\)/);
 assert.match(java, /\.addCommand\(\(\) -> new DriveToPose\(robot\.drivetrain, new Pose2d\(2\.0, 3\.5, Rotation2d\.fromDegrees\(90\.0\)\), new DriveConstraints\(2\.5, 3\.0, 0\.05, 0\.1\)\)\)/);
 assert.doesNotMatch(java, /addDriveToPoint/);
+// Simulation has no vision, so autos with a drive step start the simulated robot at point 1.
+assert.match(java, /\.withAlliance\(Alliance\.Blue\)\n {8}\.addCommand\(\(\) -> startInSimulation\(robot, new Pose2d\(2\.0, 3\.5, Rotation2d\.fromDegrees\(90\.0\)\)\)\)/);
+assert.match(java, /if \(RobotBase\.isSimulation\(\)\) robot\.drivetrain\.resetPose\(start\);/);
+assert.equal((java.match(/\.addCommand\(\(\) -> startInSimulation/g) ?? []).length, 1, "Autos without a drive step get no start pose");
 assert.match(java, /Commands\.waitUntil\(\(\) -> robot\.getActualState\(\) == RobotState\.SHOOT\)\.withTimeout\(1\.5\)/);
 assert.match(java, /Commands\.waitSeconds\(0\.0\)/);
 assert.equal((java.match(/robot\.clearRequest\(OWNER\)/g) ?? []).length, 1, "Only autos that request states clear requests");
@@ -97,6 +102,9 @@ assert.deepEqual(legacy.autos[0].steps[0], { id: "d", type: "drive", x: 1, y: 2,
 assert.equal(legacy.autos[0].steps[1].replaySeconds, 0.5);
 assert.deepEqual(legacy.autos[0].symmetry, { flipX: false, flipY: false });
 assert.deepEqual(model.parseAutoDocument(null), model.emptyDocument());
+assert.equal(model.emptyDocument().periodSeconds, 20, "REBUILT autonomous is 20 s");
+assert.equal(model.parseAutoDocument({ autos: [], periodSeconds: 15 }).periodSeconds, 15, "A saved period is kept");
+assert.equal(model.parseAutoDocument({ autos: [], periodSeconds: -3 }).periodSeconds, 20, "An invalid period falls back to 20 s");
 assert.deepEqual(model.requestedStateAtSteps(auto), ["INTAKE", "INTAKE", "INTAKE", "INTAKE"]);
 assert.equal(model.normalizeHeading(270), -90);
 assert.equal(model.normalizeHeading(-180), 180);
@@ -220,5 +228,33 @@ try {
 } finally {
   await fs.rm(robotRoot, { recursive: true, force: true });
 }
+
+// Smart snapping: aligned X/Y, 45° lines from neighbors, and combinations of both.
+const targets = { xs: [{ value: 3, label: "X of point 1", at: 2 }], ys: [{ value: 2, label: "Y of point 1", at: 3 }],
+  anchors: [{ point: { x: 3, y: 2 }, label: "point 1" }] };
+const near = (a, b) => Math.abs(a - b) < 1e-9;
+let snapped = snap.snapPosition({ x: 3.04, y: 5 }, targets, 0.1, field);
+assert.ok(near(snapped.point.x, 3) && near(snapped.point.y, 5), "Snaps to the same X");
+assert.equal(snapped.guides[0].label, "X of point 1");
+assert.deepEqual(snapped.guides[0].from, { x: 3, y: 2 }, "The guide starts at the aligned point");
+snapped = snap.snapPosition({ x: 6, y: 2.05 }, targets, 0.1, field);
+assert.ok(near(snapped.point.y, 2) && near(snapped.point.x, 6), "Snaps to the same Y");
+snapped = snap.snapPosition({ x: 5.03, y: 3.98 }, targets, 0.1, field);
+assert.ok(near(snapped.point.x - 3, snapped.point.y - 2), "Snaps onto the 45° line from the previous point");
+assert.match(snapped.guides[0].label, /^45° from point 1$/);
+snapped = snap.snapPosition({ x: 5.5, y: 4.2 }, targets, 0.1, field);
+assert.deepEqual(snapped, { point: { x: 5.5, y: 4.2 }, guides: [] }, "Far from every target, the point stays put");
+// A 45° line crossing an aligned X wins over either alone.
+snapped = snap.snapPosition({ x: 4.98, y: 4.03 }, { xs: [{ value: 5, label: "X of point 3", at: 0 }], ys: [], anchors: targets.anchors }, 0.1, field);
+assert.ok(near(snapped.point.x, 5) && near(snapped.point.y, 4) && snapped.guides.length === 2, "45° line and same X together");
+snapped = snap.snapPosition({ x: 8.3, y: 1 }, { xs: [{ value: field.length / 2, label: "center line" }], ys: [], anchors: [] }, 0.1, field);
+assert.ok(near(snapped.point.x, 8.27) && near(snapped.guides[0].from.y, 0) && near(snapped.guides[0].to.y, field.width), "Center line guides span the field");
+
+assert.deepEqual(snap.snapHeading(87, [], 7), { heading: 90, label: "90°" });
+assert.deepEqual(snap.snapHeading(-133, [], 7), { heading: -135, label: "-135°" });
+assert.deepEqual(snap.snapHeading(178, [], 7), { heading: 180, label: "180°" });
+assert.deepEqual(snap.snapHeading(30, [], 7), { heading: 30, label: null }, "No snap far from every target");
+assert.deepEqual(snap.snapHeading(32, [{ value: 33.7, label: "along the path" }], 7), { heading: 33.7, label: "along the path" });
+assert.deepEqual(snap.snapHeading(45, [{ value: 45, label: "same as point 2" }], 7), { heading: 45, label: "same as point 2" }, "Named headings win ties");
 
 console.log("Auto builder checks passed.");

@@ -1,20 +1,59 @@
 /* Auto Builder panel layout. Field drawing styles live in autos.css. */
 .ab-root {
   display: grid;
-  gap: 12px;
-  grid-template-columns: minmax(170px, 220px) minmax(0, 1fr) minmax(280px, 360px);
+  /* Columns come from the resizable layout (AutoColumns.tsx); handles sit between them. */
   height: calc(100vh - 150px);
   min-height: 560px;
   overflow: hidden;
 }
 
-/* Narrow windows: give the field the space and keep both side columns usable. */
-@media (max-width: 1180px) {
-  .ab-root {
-    gap: 8px;
-    grid-template-columns: 172px minmax(0, 1fr) 280px;
-  }
+.ab-pane.collapsed {
+  visibility: hidden;
+  border: 0;
 }
+
+/* Column handle: a thin line on hover, and a pull tab while its column is hidden. */
+.ab-splitter {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.ab-splitter::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+
+.ab-splitter:hover::after { background: rgba(250, 204, 21, 0.45); }
+
+.ab-splitter-grip {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 36px;
+  border-radius: 6px;
+  color: #71717a;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.ab-splitter:hover .ab-splitter-grip { opacity: 1; background: #27272a; }
+.ab-splitter.closed { cursor: pointer; }
+.ab-splitter.closed .ab-splitter-grip { opacity: 1; background: #27272a; color: #facc15; }
 
 .ab-pane {
   display: flex;
@@ -141,15 +180,33 @@
 }
 
 .ab-replay-time {
-  min-width: 92px;
+  min-width: 44px;
   color: #b8b8aa;
   font-variant-numeric: tabular-nums;
 }
 
-.ab-timeline {
+.ab-timeline-wrap {
   position: relative;
   flex: 1 1 180px;
   min-width: 180px;
+  padding-top: 15px;
+}
+
+.ab-timeline-total {
+  position: absolute;
+  top: 0;
+  color: #b8b8aa;
+  font-size: 11px;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.ab-timeline-total.over { color: #f87171; }
+
+.ab-timeline {
+  position: relative;
   height: 26px;
   overflow: hidden;
   border-radius: 4px;
@@ -303,3 +360,39 @@
   color: #f8fafc;
   font: 12px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace;
 }
+
+/* Autonomous period at the end of the timeline: quiet text that edits on click. */
+.ab-period {
+  padding: 0 2px;
+  border: 0;
+  border-bottom: 1px dashed transparent;
+  background: none;
+  color: #71717a;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+  cursor: text;
+}
+
+.ab-period:hover {
+  border-bottom-color: #71717a;
+  color: #b8b8aa;
+}
+
+.ab-period-input {
+  width: 44px;
+  padding: 1px 4px;
+  border: 1px solid #facc15;
+  border-radius: 4px;
+  background: #0f0f12;
+  color: #f8fafc;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* Drag-and-drop reordering in the step list */
+.ab-step[draggable="true"] { cursor: grab; }
+.ab-step.drop-above { box-shadow: 0 -3px 0 #facc15; }
+.ab-step.drop-below { box-shadow: 0 3px 0 #facc15; }

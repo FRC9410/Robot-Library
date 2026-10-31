@@ -49,6 +49,7 @@ import { RobotPanel } from "./features/robot/RobotPanel";
 import { DashboardPanel } from "../dashboard";
 import { LimelightsPanel } from "./features/limelights/LimelightsPanel";
 import { AutoBuilderPanel } from "./features/autos/AutoBuilderPanel";
+import { writeGeneratedAutos } from "./features/autos/autoCode";
 import { getFieldLayoutId, setFieldLayoutId } from "./features/field/fieldLayouts";
 import { detectLimelights } from "./features/limelights/limelightUtils";
 import type { AppView } from "./types/app";
@@ -323,6 +324,9 @@ function AppContent() {
     setSubsystemUpdatingCode(true);
     setSubsystemDocument((current) => ({ ...current, error: null }));
 
+    // Subsystems and autos are written separately, so a problem in one still updates the other.
+    const messages: string[] = [];
+    let failed = false;
     try {
       if (!window.powerlib?.updateSubsystemCode) {
         throw new Error("PowerLib update bridge is not available.");
@@ -330,11 +334,20 @@ function AppContent() {
 
       const result = await window.powerlib.updateSubsystemCode();
       const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
-      showToast(output ? summarizeUpdateOutput(output) : "Updated generated subsystem code.", "success");
+      messages.push(output ? summarizeUpdateOutput(output) : "Updated generated subsystem code.");
       await loadSubsystems();
     } catch (caught) {
-      showToast(caught instanceof Error ? caught.message : "Could not update generated subsystem code.", "error");
+      failed = true;
+      messages.push(caught instanceof Error ? caught.message : "Could not update generated subsystem code.");
+    }
+    try {
+      const autos = await writeGeneratedAutos();
+      if (autos) messages.push(autos);
+    } catch (caught) {
+      failed = true;
+      messages.push(caught instanceof Error ? caught.message : "Could not write generated autos.");
     } finally {
+      showToast(messages.join(" "), failed ? "error" : "success");
       setSubsystemUpdatingCode(false);
     }
   }

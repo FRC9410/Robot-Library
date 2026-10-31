@@ -1997,10 +1997,35 @@ function Update-SubsystemsFromJson {
     Write-Host "Updated Constants.java, StateMachine.java, and PowerDashboard.java from $JsonPath"
 }
 
+# Gradle needs Java. Power Tool may have started before JAVA_HOME was set, so fall back to the
+# saved user or machine setting, then to the JDK that ships with WPILib (newest year first).
+function Set-JavaHomeIfMissing {
+    if ($env:JAVA_HOME -and (Test-Path (Join-Path $env:JAVA_HOME 'bin'))) {
+        return
+    }
+    $candidates = @(
+        [Environment]::GetEnvironmentVariable('JAVA_HOME', 'User'),
+        [Environment]::GetEnvironmentVariable('JAVA_HOME', 'Machine')
+    )
+    $wpilibRoot = if ($env:PUBLIC) { Join-Path $env:PUBLIC 'wpilib' } else { Join-Path $HOME 'wpilib' }
+    if (Test-Path $wpilibRoot) {
+        $candidates += Get-ChildItem -LiteralPath $wpilibRoot -Directory | Sort-Object Name -Descending |
+            ForEach-Object { Join-Path $_.FullName 'jdk' }
+    }
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path (Join-Path $candidate 'bin'))) {
+            $env:JAVA_HOME = $candidate
+            Write-Host "Using Java from $candidate"
+            return
+        }
+    }
+}
+
 function Invoke-BuildIfNeeded {
     if ($SkipBuild) {
         return
     }
+    Set-JavaHomeIfMissing
 
     $isWindowsHost = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
     $gradlew = if ($isWindowsHost) { ".\gradlew.bat" } else { "./gradlew" }

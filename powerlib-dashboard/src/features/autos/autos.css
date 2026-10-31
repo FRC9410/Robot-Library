@@ -1,38 +1,4 @@
-.auto-builder {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: 240px minmax(0, 1fr) 380px;
-  height: calc(100vh - 150px);
-  min-height: 520px;
-  overflow: hidden;
-}
-
-.auto-builder-column {
-  min-height: 0;
-  overflow: hidden;
-}
-
-.auto-builder-scroll {
-  height: 100%;
-  overflow-y: auto;
-  box-sizing: border-box;
-}
-
-.auto-list-item {
-  justify-content: flex-start;
-  gap: 4px;
-  text-transform: none;
-}
-
-.auto-field-card {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px;
-}
-
+/* Auto Builder field drawing. Panel layout lives in autoBuilder.css. */
 .auto-field {
   width: 100%;
   height: 100%;
@@ -44,43 +10,79 @@
   cursor: crosshair;
 }
 
-.auto-point > g {
+.ab-node > g {
   cursor: grab;
 }
 
-.auto-point-label {
-  fill: #f8fafc;
-  font-size: 18px;
+/* The aim handle shows on hover and while selected, keeping idle poses clean. */
+.ab-node-handle {
+  cursor: alias;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.ab-node:hover .ab-node-handle,
+.ab-node.selected .ab-node-handle {
+  opacity: 1;
+}
+
+.ab-node-label {
+  fill: #cbd5e1;
+  font-size: 13px;
   font-weight: 700;
+  text-anchor: end;
+  paint-order: stroke;
+  stroke: #0b1220;
+  stroke-width: 3px;
   pointer-events: none;
 }
 
-.auto-heading-handle {
-  fill: #18181b;
-  stroke: #facc15;
-  stroke-width: 3;
-  cursor: alias;
+.ab-node.selected .ab-node-label {
+  fill: #facc15;
 }
 
-.auto-code {
-  align-self: stretch;
-  width: 100%;
-  margin: 0;
-  overflow: auto;
-  font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
-  color: #e2e8f0;
-  white-space: pre;
+.ab-subpoint {
+  cursor: grab;
 }
 
-.auto-step {
-  border: 1px solid rgba(250, 204, 21, 0.18);
-  border-left: 4px solid rgba(148, 163, 184, 0.5);
-  border-radius: 8px;
-  padding: 8px;
-  cursor: pointer;
+.ab-guide-label {
+  fill: #22d3ee;
+  font-size: 12px;
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: #0b1220;
+  stroke-width: 3px;
 }
 
-.auto-step.selected {
-  border-color: #facc15;
-  background: rgba(250, 204, 21, 0.06);
+.ab-guide-hint {
+  fill: #a8bbca;
+  font-size: 12px;
+  paint-order: stroke;
+  stroke: #0b1220;
+  stroke-width: 3px;
+}
+
+.ab-field-prompt {
+  fill: #f8fafc;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Unselected robots recede to gray so the route and the selection stand out. */
+.ab-node {
+  opacity: 0.38;
+  filter: grayscale(1);
+  transition: opacity 150ms ease, filter 150ms ease;
+}
+
+.ab-node:hover,
+.ab-node.selected {
+  opacity: 1;
+  filter: none;
+}
+
+/* During a replay every waypoint stays soft, selected or not, so the moving robot stands out. */
+.auto-field.replaying .ab-node {
+  opacity: 0.3;
+  filter: grayscale(1);
 }

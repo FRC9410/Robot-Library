@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { Alert, Box, Button, IconButton, MenuItem, Stack, TextField, Tooltip, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
-import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
-import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import DeleteIcon from "@mui/icons-material/DeleteOutlined";
 import FlagIcon from "@mui/icons-material/Flag";
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
@@ -76,34 +75,59 @@ function stepSummary(step: AutoStep) {
   }
 }
 
-export function StepList({ steps, selectedStepId, activeStepId, durations, issues, stateColor, onSelect, onMove, onDelete }: {
+export function StepList({ steps, selectedStepIds, activeStepId, durations, issues, stateColor, onSelect, onReorder, onDelete }: {
   steps: AutoStep[];
-  selectedStepId: string | null;
+  selectedStepIds: string[];
   activeStepId: string | null;
   durations: Map<string, number>;
   issues: AutoIssue[];
   stateColor: (state: string | null) => string;
-  onSelect: (stepId: string) => void;
-  onMove: (stepId: string, offset: number) => void;
+  /** `toggle` adds or removes the step from the selection (Shift- or Ctrl-click). */
+  onSelect: (stepId: string, toggle: boolean) => void;
+  /** Moves the steps so they sit before the step now at `beforeIndex` (steps.length for the end). */
+  onReorder: (stepIds: string[], beforeIndex: number) => void;
   onDelete: (stepId: string) => void;
 }) {
   const listRef = useRef<HTMLOListElement>(null);
-  // Keep the selected step visible when it is picked on the field.
+  // Dragging a selected step carries the whole selection; the drop line shows where it lands.
+  const dragging = useRef<string[] | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const endDrag = () => { dragging.current = null; setDropIndex(null); };
+  const primary = selectedStepIds[selectedStepIds.length - 1];
+  // Keep the most recently selected step visible when it is picked on the field.
   useEffect(() => {
-    listRef.current?.querySelector(".ab-step.selected")?.scrollIntoView({ block: "nearest" });
-  }, [selectedStepId]);
+    listRef.current?.querySelector(`[data-step-id="${primary}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [primary]);
   let driveNumber = 0;
-  return <ol className="ab-steps" ref={listRef}>
+  return <ol className="ab-steps" ref={listRef} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDropIndex(null); }}>
     {steps.map((step, index) => {
       if (step.type === "drive") driveNumber++;
       const stepIssues = issues.filter(issue => issue.stepId === step.id);
       const severity = stepIssues.some(issue => issue.severity === "error") ? "error" : stepIssues.length ? "warning" : null;
       const accent = step.type === "requestState" || step.type === "waitForState" ? stateColor(step.state) : undefined;
       const duration = durations.get(step.id);
-      return <li key={step.id}
-        className={`ab-step${step.id === selectedStepId ? " selected" : ""}${step.id === activeStepId ? " active" : ""}${severity ? ` ${severity}` : ""}`}
+      return <li key={step.id} data-step-id={step.id}
+        className={`ab-step${selectedStepIds.includes(step.id) ? " selected" : ""}${step.id === activeStepId ? " active" : ""}${severity ? ` ${severity}` : ""}${dropIndex === index ? " drop-above" : ""}${dropIndex === steps.length && index === steps.length - 1 ? " drop-below" : ""}`}
+        draggable
+        onDragStart={event => {
+          dragging.current = selectedStepIds.includes(step.id) ? selectedStepIds : [step.id];
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", dragging.current.join(","));
+        }}
+        onDragOver={event => {
+          if (!dragging.current) return;
+          event.preventDefault();
+          const box = event.currentTarget.getBoundingClientRect();
+          setDropIndex(index + (event.clientY < box.top + box.height / 2 ? 0 : 1));
+        }}
+        onDrop={event => {
+          event.preventDefault();
+          if (dragging.current && dropIndex !== null) onReorder(dragging.current, dropIndex);
+          endDrag();
+        }}
+        onDragEnd={endDrag}
         style={accent ? { borderLeftColor: accent } : undefined}
-        onClick={() => onSelect(step.id)}>
+        onClick={event => onSelect(step.id, event.shiftKey || event.ctrlKey || event.metaKey)}>
         <span className="ab-step-index">{index + 1}</span>
         <span className="ab-step-icon" style={accent ? { color: accent } : undefined}>{stepIcons[step.type]}</span>
         <span className="ab-step-text">
@@ -112,8 +136,6 @@ export function StepList({ steps, selectedStepId, activeStepId, durations, issue
         </span>
         {duration !== undefined && <span className="ab-step-time">{format(duration, 1)} s</span>}
         <span className="ab-step-actions" onClick={event => event.stopPropagation()}>
-          <IconButton size="small" aria-label="Move step up" disabled={index === 0} onClick={() => onMove(step.id, -1)}><ArrowUpwardIcon fontSize="inherit" /></IconButton>
-          <IconButton size="small" aria-label="Move step down" disabled={index === steps.length - 1} onClick={() => onMove(step.id, 1)}><ArrowDownwardIcon fontSize="inherit" /></IconButton>
           <IconButton size="small" aria-label="Delete step" onClick={() => onDelete(step.id)}><DeleteIcon fontSize="inherit" /></IconButton>
         </span>
       </li>;
@@ -121,11 +143,51 @@ export function StepList({ steps, selectedStepId, activeStepId, durations, issue
   </ol>;
 }
 
+/** Settings shared by several selected steps; a blank field means the steps differ. */
+export function MultiStepInspector({ steps, onApplyLimits, onAlign, onDuplicate, onDelete }: {
+  steps: AutoStep[];
+  onApplyLimits: (limits: Partial<LegConstraints>) => void;
+  /** Lines the selected points up with the last selected point. */
+  onAlign: (axis: "x" | "y") => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}) {
+  const drives = steps.filter((step): step is DriveStep => step.type === "drive");
+  const shared = (key: keyof LegConstraints) => drives.every(drive => drive[key] === drives[0][key]) ? drives[0][key] : null;
+  const limitField = (label: string, key: keyof LegConstraints, unit: string) =>
+    <NumberField label={label} unit={unit} allowEmpty placeholder="Mixed" value={shared(key)}
+      onChange={value => { if (value !== null) onApplyLimits({ [key]: value }); }} />;
+  return <Stack spacing={2}>
+    <Typography sx={{ fontWeight: 600 }}>{steps.length} steps selected</Typography>
+    {drives.length > 0 && <>
+      <Section title={`Motion limits (${drives.length} drive step${drives.length === 1 ? "" : "s"})`}>
+        <Stack direction="row" spacing={1}>{limitField("Max velocity", "maxVelocity", "m/s")}{limitField("Max accel", "maxAcceleration", "m/s²")}</Stack>
+      </Section>
+      <Section title="Finish when">
+        <Stack direction="row" spacing={1}>{limitField("Within", "endDistanceTolerance", "m")}{limitField("Slower than", "endVelocityTolerance", "m/s")}</Stack>
+      </Section>
+      {drives.length > 1 && <Section title="Align" hint="Lines the selected points up with the last one you selected.">
+        <Stack direction="row" spacing={1}>
+          <Button size="small" variant="outlined" onClick={() => onAlign("x")}>Same X</Button>
+          <Button size="small" variant="outlined" onClick={() => onAlign("y")}>Same Y</Button>
+        </Stack>
+      </Section>}
+    </>}
+    <Stack direction="row" spacing={1}>
+      <Button size="small" variant="outlined" onClick={onDuplicate}>Duplicate</Button>
+      <Button size="small" color="error" startIcon={<DeleteIcon />} onClick={onDelete}>Delete</Button>
+    </Stack>
+  </Stack>;
+}
+
+/** A titled group of settings; its explanation sits behind an info icon instead of in the panel. */
 function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return <Stack spacing={1}>
-    <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1.6 }}>{title}</Typography>
+    <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+      <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1.6 }}>{title}</Typography>
+      {hint && <Tooltip title={hint} placement="left"><InfoOutlinedIcon sx={{ fontSize: 15, color: "text.secondary", cursor: "help" }} /></Tooltip>}
+    </Stack>
     {children}
-    {hint && <Typography variant="caption" color="text.secondary">{hint}</Typography>}
   </Stack>;
 }
 
