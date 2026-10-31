@@ -76,6 +76,13 @@
         "a": 1,
         "rgb": 10741301
       }
+    },
+    {
+      "query": "path:11-Ideas  ",
+      "color": {
+        "a": 1,
+        "rgb": 16478595
+      }
     }
   ],
   "collapse-display": true,
@@ -88,6 +95,6 @@
   "repelStrength": 10,
   "linkStrength": 1,
   "linkDistance": 250,
-  "scale": 0.6721213213883377,
+  "scale": 0.6721213213883358,
   "close": true
 }

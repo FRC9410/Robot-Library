@@ -20,6 +20,7 @@ frontmatter has a `status`: `proposed` (talked about, not chosen), `decided` (we
 - [Reading wpilog and hoot](Reading%20wpilog%20and%20hoot.md): one `.wpilog` reader, `.hoot` converted through Owlet.
 
 **Proposed**
+- [Mechanism Picker](Mechanism%20Picker.md): fixed layout; a dropdown on the graph picks which mechanism every mechanism widget shows.
 - [Standardize Setpoint Keys](Standardize%20Setpoint%20Keys.md): one `<Signal>Setpoint` naming rule across subsystem types.
 - [Match List](Match%20List.md): split a log into enable periods you can click.
 - [Problem Markers](Problem%20Markers.md): brownouts, CAN spikes, setpoint misses and vision rejects on the timeline.
