@@ -47,6 +47,7 @@ import { tuningModeRequestTopicName, tuningModeTopicName } from "./features/netw
 import { RobotPanel } from "./features/robot/RobotPanel";
 import { DashboardPanel } from "../dashboard";
 import { LimelightsPanel } from "./features/limelights/LimelightsPanel";
+import { getFieldLayoutId, setFieldLayoutId } from "./features/field/fieldLayouts";
 import { detectLimelights } from "./features/limelights/limelightUtils";
 import type { AppView } from "./types/app";
 import { TuningModeSync } from "./networktables/TuningModeSync";
@@ -496,12 +497,19 @@ function AppContent() {
     const removeUpdatePowerTool = window.powerlib?.onMenuUpdatePowerTool?.(() => {
       void updatePowerToolRef.current();
     });
+    const removeFieldLayout = window.powerlib?.onMenuFieldLayout?.((_event, id) => {
+      setFieldLayoutId(id);
+    });
+    // The menu starts on "None"; check the saved layout instead.
+    window.powerlib?.setFieldLayoutMenu?.(getFieldLayoutId());
+
 
     return () => {
       removeConnectionSettings?.();
       removeUpdateSubsystemCode?.();
       removeUpdateInstallSection?.();
       removeUpdatePowerTool?.();
+      removeFieldLayout?.();
     };
   }, []);
 

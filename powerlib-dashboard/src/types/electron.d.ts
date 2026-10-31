@@ -35,6 +35,8 @@ declare global {
       onMenuUpdateSubsystemCode: (callback: () => void) => () => void;
       onMenuUpdateInstallSection: (callback: (_event: unknown, section: string) => void) => () => void;
       onMenuUpdatePowerTool: (callback: () => void) => () => void;
+      onMenuFieldLayout: (callback: (_event: unknown, id: string) => void) => () => void;
+      setFieldLayoutMenu: (id: string) => void;
     };
   }
 }

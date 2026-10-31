@@ -8,6 +8,9 @@ import { startCameraStream } from "./cameraStream";
 import type { GeneratedSubsystem } from "../subsystems/types";
 import type { ReactNode } from "react";
 import type { NtTopicSnapshot } from "../../networktables/nt4Client";
+import { FieldBackdrop } from "../field/FieldBackdrop";
+import { useFieldLayout } from "../field/fieldLayouts";
+import type { FieldLayout } from "../field/fieldLayouts";
 import "./drive.css";
 
 type DisplaySettings = { length: number; width: number; flip: boolean; urls: Record<string, string> };
@@ -24,22 +27,24 @@ function readSettings(): DisplaySettings {
   } catch { return defaults; }
 }
 
-function Field({ pose, settings }: { pose?: { x: number; y: number; heading: number }; settings: DisplaySettings }) {
+function Field({ pose, field, flip, layout }: { pose?: { x: number; y: number; heading: number }; field: { length: number; width: number }; flip: boolean; layout: FieldLayout | null }) {
   const gridId = `drive-grid-${useId().replaceAll(":", "")}`;
   const height = 480;
-  const width = height * settings.length / settings.width;
-  const outOfBounds = pose && (pose.x < 0 || pose.x > settings.length || pose.y < 0 || pose.y > settings.width);
+  const width = height * field.length / field.width;
+  const outOfBounds = pose && (pose.x < 0 || pose.x > field.length || pose.y < 0 || pose.y > field.width);
   return <svg viewBox={`-12 -12 ${width + 24} ${height + 24}`} role="img" aria-label="Field and robot position" preserveAspectRatio="xMidYMid meet">
     <defs><pattern id={gridId} width={width / 16} height={height / 8} patternUnits="userSpaceOnUse">
       <path d={`M ${width / 16} 0 H 0 V ${height / 8}`} fill="none" stroke="#355060" strokeWidth="1" />
     </pattern></defs>
-    <g transform={settings.flip ? `translate(${width} ${height}) rotate(180)` : undefined}>
+    <g transform={flip ? `translate(${width} ${height}) rotate(180)` : undefined}>
       <rect width={width} height={height} rx="5" fill="#101e29" stroke="#7993a5" strokeWidth="3" />
-      <rect width={width} height={height} fill={`url(#${gridId})`} />
-      <rect width="16" height={height} fill="#307de0" opacity=".55" />
-      <rect x={width - 16} width="16" height={height} fill="#ec4d5d" opacity=".55" />
-      <path d={`M ${width / 2} 0 V ${height}`} stroke="#698191" strokeDasharray="10 9" />
-      {pose && !outOfBounds && <g transform={`translate(${pose.x / settings.length * width} ${height - pose.y / settings.width * height}) rotate(${-pose.heading})`}>
+      {layout ? <FieldBackdrop layout={layout} width={width} height={height} /> : <>
+        <rect width={width} height={height} fill={`url(#${gridId})`} />
+        <rect width="16" height={height} fill="#307de0" opacity=".55" />
+        <rect x={width - 16} width="16" height={height} fill="#ec4d5d" opacity=".55" />
+        <path d={`M ${width / 2} 0 V ${height}`} stroke="#698191" strokeDasharray="10 9" />
+      </>}
+      {pose && !outOfBounds && <g transform={`translate(${pose.x / field.length * width} ${height - pose.y / field.width * height}) rotate(${-pose.heading})`}>
         <rect x="-15" y="-15" width="30" height="30" rx="4" fill="#ffdc00" stroke="#fff" strokeWidth="2" />
         <path d="M -5 -7 L 9 0 L -5 7" fill="none" stroke="#14212c" strokeWidth="4" />
       </g>}
@@ -113,6 +118,9 @@ export function DrivePanel({ subsystems = [], renderTopCards, renderSidebar }: {
   const { status, clientRef } = useNetworkTables();
   const topics = useTopics("drive");
   const [settings, setSettings] = useState(readSettings);
+  const layout = useFieldLayout();
+  // A selected field layout supplies its official dimensions; otherwise the crew tools values apply.
+  const field = layout ? { length: layout.length, width: layout.width } : { length: settings.length, width: settings.width };
   const [tools, setTools] = useState(false);
   const [now, setNow] = useState(performance.now());
   const [selectedView, setSelectedView] = useState("field");
@@ -211,7 +219,7 @@ export function DrivePanel({ subsystems = [], renderTopCards, renderSidebar }: {
       <div className={`drive-rail ${cameras.length ? "" : "without-cameras"}`}>
         <small className="drive-select-label">Select view</small>
         <button className={`drive-thumb drive-field-thumb ${selectedView === "field" ? "selected" : ""}`} onClick={() => setSelectedView("field")} aria-label="Show field view">
-          <div className="drive-thumb-preview drive-field-preview" style={{ aspectRatio: `${settings.length} / ${settings.width}` }}><Field pose={model.pose} settings={settings} /></div><b>FIELD</b>
+          <div className="drive-thumb-preview drive-field-preview" style={{ aspectRatio: `${field.length} / ${field.width}` }}><Field pose={model.pose} field={field} flip={settings.flip} layout={layout} /></div><b>FIELD</b>
         </button>
         {cameras.length > 0 && <div className="drive-camera-list" ref={cameraList} role="region" aria-label="Camera views" tabIndex={0}>
         {cameras.map(camera => <button key={camera.id} data-camera-id={camera.id} className={`drive-thumb ${selectedView === camera.id ? "selected" : ""}`}
@@ -223,7 +231,7 @@ export function DrivePanel({ subsystems = [], renderTopCards, renderSidebar }: {
         {!cameras.length && <div className="drive-no-cameras">Cameras appear here when published to NetworkTables.</div>}
       </div>
       <div className="drive-stage">{selectedCamera ? <CameraCanvas camera={selectedCamera} images={images} failed={!!failed[selectedCamera.id] || selectedCamera.connected === false} />
-        : <Field pose={model.pose} settings={settings} />}</div>
+        : <Field pose={model.pose} field={field} flip={settings.flip} layout={layout} />}</div>
       <aside className="drive-sidebar">
         {chooser && <section className="drive-auto"><div className="drive-auto-choice"><label htmlFor="drive-auto">AUTONOMOUS</label>
           <select id="drive-auto" value={pending?.path === chooser.path && chooser.options.includes(pending.name) ? pending.name :
@@ -265,8 +273,9 @@ export function DrivePanel({ subsystems = [], renderTopCards, renderSidebar }: {
       camera={camera} override={settings.urls[camera.id]} images={images} onFailed={updateCameraFailure} />)}</div>
     <Dialog open={tools} onClose={() => setTools(false)} maxWidth="sm" fullWidth><DialogTitle>Crew tools</DialogTitle><DialogContent className="drive-tool-fields">
       <p>Display settings stay on this laptop. Field coordinates use the blue origin.</p>
-      <TextField label="Field length (m)" type="number" value={settings.length} onChange={e => { const length = Number(e.target.value); if (length > 0 && Number.isFinite(length)) setSettings(v => ({ ...v, length })); }} />
-      <TextField label="Field width (m)" type="number" value={settings.width} onChange={e => { const width = Number(e.target.value); if (width > 0 && Number.isFinite(width)) setSettings(v => ({ ...v, width })); }} />
+      {layout && <p>Field size comes from {layout.label}. Choose View → Field Layout → None to set it by hand.</p>}
+      <TextField label="Field length (m)" type="number" disabled={!!layout} value={field.length} onChange={e => { const length = Number(e.target.value); if (length > 0 && Number.isFinite(length)) setSettings(v => ({ ...v, length })); }} />
+      <TextField label="Field width (m)" type="number" disabled={!!layout} value={field.width} onChange={e => { const width = Number(e.target.value); if (width > 0 && Number.isFinite(width)) setSettings(v => ({ ...v, width })); }} />
       <Button onClick={() => setSettings(v => ({ ...v, flip: !v.flip }))}>Flip field {settings.flip ? "(flipped)" : ""}</Button>
       {cameras.map(camera => <CameraUrlSetting key={camera.id} camera={camera} url={settings.urls[camera.id] ?? camera.urls[0]}
         onSave={url => setSettings(v => { const urls = { ...v.urls }; if (url) urls[camera.id] = url; else delete urls[camera.id]; return { ...v, urls }; })} />)}

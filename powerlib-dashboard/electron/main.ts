@@ -14,6 +14,14 @@ const execFileAsync = promisify(execFile);
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 
+// Mirrors the ids in src/features/field/fieldLayouts.ts; the renderer owns the saved choice.
+const fieldLayoutMenuItems = [
+  { id: "none", label: "None (grid)" },
+  { id: "2026-rebuilt-simplified", label: "2026 REBUILT (Simplified)" },
+  { id: "2026-rebuilt", label: "2026 REBUILT (Field image)" },
+  { id: "2025-reefscape", label: "2025 REEFSCAPE (Field image)" }
+];
+
 function createAppMenu(window: BrowserWindow) {
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(process.platform === "darwin"
@@ -67,7 +75,20 @@ function createAppMenu(window: BrowserWindow) {
     },
     {
       label: "View",
-      submenu: [{ role: "reload" }, { role: "forceReload" }, { role: "toggleDevTools" }, { type: "separator" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }]
+      submenu: [
+        {
+          label: "Field Layout",
+          submenu: fieldLayoutMenuItems.map(({ id, label }) => ({
+            id: `field-layout:${id}`,
+            label,
+            type: "radio" as const,
+            checked: id === "none",
+            click: () => window.webContents.send("powerlib:menu-field-layout", id)
+          }))
+        },
+        { type: "separator" },
+        { role: "reload" }, { role: "forceReload" }, { role: "toggleDevTools" }, { type: "separator" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }
+      ]
     },
     {
       label: "Window",
@@ -81,6 +102,11 @@ function createAppMenu(window: BrowserWindow) {
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
+
+ipcMain.on("powerlib:set-field-layout-menu", (_event, id: unknown) => {
+  const item = Menu.getApplicationMenu()?.getMenuItemById(`field-layout:${id}`);
+  if (item) item.checked = true;
+});
 
 async function getSubsystemJsonCandidates() {
   return [await generatedJsonPath(getDetectedRobotRoot(), "powerlib-subsystems.json")];

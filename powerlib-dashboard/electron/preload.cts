@@ -26,5 +26,10 @@ contextBridge.exposeInMainWorld("powerlib", {
   onMenuUpdatePowerTool: (callback: () => void) => {
     ipcRenderer.on("powerlib:menu-update-power-tool", callback);
     return () => ipcRenderer.removeListener("powerlib:menu-update-power-tool", callback);
-  }
+  },
+  onMenuFieldLayout: (callback: (_event: unknown, id: string) => void) => {
+    ipcRenderer.on("powerlib:menu-field-layout", callback);
+    return () => ipcRenderer.removeListener("powerlib:menu-field-layout", callback);
+  },
+  setFieldLayoutMenu: (id: string) => ipcRenderer.send("powerlib:set-field-layout-menu", id)
 });
