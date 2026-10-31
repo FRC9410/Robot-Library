@@ -76,8 +76,10 @@ Writes directly to SignalLogger at 50 Hz under `PowerLib/RobotStatus/`:
 - Phoenix itself auto-logs device signals into the same `.hoot` files.
 
 ## Facts that matter for the log viewer
-- **Nothing in `templates/` calls `SignalLogger.start()` or `setPath()`.** Recording follows Phoenix defaults: it auto-starts when an FMS match is detected, and logs land on the roboRIO (USB stick if present, otherwise `/home/lvuser/logs`). So **practice sessions without an FMS record nothing** unless code calls `SignalLogger.start()`. PowerLib's 50 Hz `write*` calls are dropped while the logger isn't running. Confirm on the robot (see the check in [First Robot Walkthrough](../10-Guides/First%20Robot%20Walkthrough.md)).
-- The logs are **CTRE `.hoot`** files. Owlet (CTRE's CLI) or Phoenix Tuner can export them to `.wpilog`/CSV; AdvantageScope reads `.wpilog`.
+- **Nothing in `templates/` calls `SignalLogger.start()`, `setPath()` or `enableAutoLogging()`.** (Only the generated SysId routines in `generate-subsystem.ps1` call `start()`/`stop()`.) Recording follows Phoenix defaults. Per CTRE's signal-logging docs, auto-logging is on by default on a **roboRIO 2**, or a **roboRIO 1 with a USB drive**. It starts once the robot has run ≥1 s and is enabled, or has run ≥5 s with the Driver Station connected. So **practice sessions should record too**; no FMS is needed. On a roboRIO 1 without a USB drive, nothing is recorded unless code calls `SignalLogger.start()`. PowerLib's 50 Hz `write*` calls are dropped while the logger isn't running. Confirm on the robot (see the check in [First Robot Walkthrough](../10-Guides/First%20Robot%20Walkthrough.md)).
+- **Log layout:** one `.hoot` file **per CAN bus**, in a subfolder named for the date and time the program started. The docs don't name a default folder; `setPath()` overrides it. Which file the custom PowerLib signals land in still needs to be checked on a real log.
+- The logs are **CTRE `.hoot`** files. Owlet (CTRE's CLI, `owlet -f wpilog in.hoot out.wpilog`) or Phoenix Tuner X can export them to `.wpilog`; AdvantageScope reads `.wpilog`.
+- **Export licensing:** custom signals (all of PowerLib's `write*` calls) always export. Device signals export in full only if the log contains a Pro-licensed device; otherwise only CTRE's list of free status signals is exported.
 - Power Tool keeps **no history**; it only shows the latest NT value. The only export is the Drive tab's one-shot JSON snapshot.
 - The NT frame (10 Hz) is a lighter, lower-rate copy of the same map, so a viewer could also record NT live.
 

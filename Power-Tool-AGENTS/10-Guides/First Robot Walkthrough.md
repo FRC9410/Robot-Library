@@ -64,7 +64,7 @@ Deploy with WPILib (*Deploy Robot Code*). In Power Tool, connect to `10.94.10.2`
 **Expect:**
 - **Drive tab:** live heartbeat, battery and state. An `IntakeRoller` mechanism card shows Velocity and setpoint (rps).
 - **Robot tab:** an `IntakeRoller` card with live `Velocity`/`VelocitySetpoint`, plus its tunables (`PID/kP`, `Feedforward/kV`, `MotionMagic/Acceleration`, `Motors/20/BrakeMode`…).
-- **On the robot:** PowerLib *sends* `PowerLib/Subsystems/IntakeRoller/Data/Velocity` to SignalLogger at 50 Hz. It's **recorded only while SignalLogger is running**. The templates never call `SignalLogger.start()`, so Phoenix's defaults decide: auto-start when an FMS match is detected. At practice, with no FMS, **expect no `.hoot` file** unless you start the logger yourself, e.g. `SignalLogger.start()` in `Robot.robotInit()`.
+- **On the robot:** PowerLib *sends* `PowerLib/Subsystems/IntakeRoller/Data/Velocity` to SignalLogger at 50 Hz. It's **recorded only while SignalLogger is running**. The templates never call `SignalLogger.start()`, so Phoenix's defaults decide. On a roboRIO 2, or a roboRIO 1 with a USB drive, logging auto-starts once the robot is enabled (or the Driver Station has been connected for 5 s), so practice should record without an FMS. On a roboRIO 1 without a USB drive, **expect no `.hoot` file** unless you start the logger yourself, e.g. `SignalLogger.start()` in `Robot.robotInit()`.
 
   **To confirm recording during practice:**
   1. Enable the robot for a minute, then disable it.
