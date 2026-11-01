@@ -15,8 +15,44 @@ export type AutoFilesState = {
   driveCommandInstalled: boolean;
   robotAutosHooked: boolean | null;
   robotAutosStrings: string[];
+  /** StateMachine's public boolean methods with no arguments, which branches can check. */
+  checks: string[];
+  /** GeneratedAutos.java as it is now, or null when it doesn't exist. */
+  generatedSource: string | null;
   robot: { width: number; length: number };
+  /** Drivetrain numbers for the Auto Builder's speed checks, or null without TunerConstants. */
+  drivetrain: DrivetrainFiles | null;
+  /** Limelight names and measurement limits for the tag-visibility view, or null without VisionConstants. */
+  vision: VisionFiles | null;
   error?: string;
+};
+
+// Keep in sync with VisionLimits and CameraMount in src/features/autos/autoVision.ts.
+export type VisionFiles = {
+  /** LimelightVisionConfig's first two arguments, which set how far the robot trusts a tag. */
+  basePositionStdDev: number;
+  maxTagDistance: number;
+  /** The Limelight table names the robot reads, in order. */
+  cameraNames: string[];
+};
+
+type Point = { x: number; y: number };
+
+// Keep in sync with DrivetrainConstants in src/features/autos/autoLimits.ts.
+export type DrivetrainFiles = {
+  /** From TunerConstants, the code the robot runs; SI units. */
+  speedAt12Volts: number;
+  driveGearRatio: number;
+  wheelRadius: number;
+  slipCurrent: number;
+  frictionVoltage: number;
+  modules: Point[];
+  /** From PathPlanner's settings, the only place they appear; null when missing. */
+  mass: number | null;
+  wheelCOF: number | null;
+  motor: string | null;
+  /** PathPlanner's copy of the TunerConstants numbers, so the Auto Builder can point out where they disagree. */
+  pathPlanner: { maxDriveSpeed: number | null; driveGearing: number | null; driveWheelRadius: number | null; modules: Point[] | null } | null;
 };
 
 async function readOptional(filePath: string) {
@@ -35,6 +71,12 @@ export function parseRobotStates(source: string) {
   const match = /\benum\s+RobotState\s*\{([^;}]*)/.exec(stripComments(source));
   if (!match) return [];
   return match[1].split(",").map(part => /^\s*([A-Za-z_$][\w$]*)/.exec(part)?.[1]).filter((name): name is string => Boolean(name));
+}
+
+/** StateMachine's public, non-static boolean methods with no arguments, such as hasFuel(). */
+export function parseRobotChecks(source: string) {
+  const methods = [...stripComments(source).matchAll(/\bpublic\s+(?:final\s+)?boolean\s+([A-Za-z_$][\w$]*)\s*\(\s*\)/g)].map(match => match[1]);
+  return [...new Set(methods)];
 }
 
 const registerSignature = /public\s+static\s+void\s+register\s*\(\s*(?:final\s+)?(?:frc\.powerlib\.auto\.)?AutoBuilder\s+([A-Za-z_$][\w$]*)\s*,\s*(?:final\s+)?(?:frc\.robot\.subsystems\.)?StateMachine\s+([A-Za-z_$][\w$]*)\s*\)\s*\{/;
@@ -59,16 +101,94 @@ export function addGeneratedAutosHook(source: string) {
   return `${source.slice(0, end)}${newline}    GeneratedAutos.register(${match[1]}, ${match[2]});${source.slice(end)}`;
 }
 
-async function readRobotSize(robotRoot: string) {
-  const fallback = { width: 0.914, length: 0.914 };
+/** PathPlanner's settings.json, or an empty object when it is missing or unreadable. */
+async function readPathPlannerSettings(robotRoot: string): Promise<Record<string, unknown>> {
   try {
-    const settings = JSON.parse((await readOptional(path.join(robotRoot, "src", "main", "deploy", "pathplanner", "settings.json"))) ?? "{}");
-    const valid = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value > 0;
-    return { width: valid(settings.robotWidth) ? settings.robotWidth : fallback.width,
-      length: valid(settings.robotLength) ? settings.robotLength : fallback.length };
+    const settings = JSON.parse((await readOptional(path.join(robotRoot, "src", "main", "deploy", "pathplanner", "settings.json")))?.replace(/^﻿/, "") ?? "{}");
+    return settings && typeof settings === "object" ? settings : {};
   } catch {
-    return fallback;
+    return {};
   }
+}
+
+const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
+
+function robotSize(settings: Record<string, unknown>) {
+  return { width: positive(settings.robotWidth) ? settings.robotWidth : 0.914, length: positive(settings.robotLength) ? settings.robotLength : 0.914 };
+}
+
+/** Meters, meters per second, amps and volts for the WPILib units TunerConstants uses. */
+const unitScale: Record<string, number> = { Meters: 1, Centimeters: 0.01, Millimeters: 0.001, Inches: 0.0254, Feet: 0.3048,
+  MetersPerSecond: 1, FeetPerSecond: 0.3048, Amps: 1, Volts: 1 };
+
+/** A numeric constant such as `kWheelRadius = Inches.of(2)` or `kDriveGearRatio = 5.4`, in SI units. */
+function javaNumber(source: string, name: string) {
+  const match = new RegExp(String.raw`\b${name}\s*=\s*(?:(?:Units\.)?([A-Za-z]+)\.of\(\s*)?(-?\d+(?:\.\d+)?(?:[eE]-?\d+)?)`).exec(source);
+  if (!match) return null;
+  const scale = match[1] === undefined ? 1 : unitScale[match[1]];
+  return scale === undefined ? null : Number(match[2]) * scale;
+}
+
+/**
+ * Reads the drivetrain numbers the speed checks need from CTRE's generated TunerConstants and
+ * PathPlanner's settings. Returns null when TunerConstants lacks the basics.
+ */
+export function parseDrivetrain(tunerSource: string, settings: Record<string, unknown>): DrivetrainFiles | null {
+  const source = stripComments(tunerSource);
+  const number = (name: string) => javaNumber(source, name);
+  const speedAt12Volts = number("kSpeedAt12Volts");
+  const driveGearRatio = number("kDriveGearRatio");
+  const wheelRadius = number("kWheelRadius");
+  const slipCurrent = number("kSlipCurrent");
+  const modules = ["FrontLeft", "FrontRight", "BackLeft", "BackRight"].map(corner => ({ x: number(`k${corner}XPos`), y: number(`k${corner}YPos`) }));
+  if (!positive(speedAt12Volts) || !positive(driveGearRatio) || !positive(wheelRadius) || !positive(slipCurrent)
+    || modules.some(module => module.x === null || module.y === null)) return null;
+  const setting = (key: string) => positive(settings[key]) ? settings[key] as number : null;
+  const pathPlannerModules = ["fl", "fr", "bl", "br"].map(corner => ({ x: settings[`${corner}ModuleX`], y: settings[`${corner}ModuleY`] }));
+  const hasPathPlanner = Object.keys(settings).length > 0;
+  return {
+    speedAt12Volts, driveGearRatio, wheelRadius, slipCurrent,
+    frictionVoltage: number("kDriveFrictionVoltage") ?? 0,
+    modules: modules as Point[],
+    mass: setting("robotMass"),
+    wheelCOF: setting("wheelCOF"),
+    motor: typeof settings.driveMotorType === "string" ? settings.driveMotorType : null,
+    pathPlanner: hasPathPlanner ? {
+      maxDriveSpeed: setting("maxDriveSpeed"),
+      driveGearing: setting("driveGearing"),
+      driveWheelRadius: setting("driveWheelRadius"),
+      modules: pathPlannerModules.every(module => typeof module.x === "number" && typeof module.y === "number") ? pathPlannerModules as Point[] : null
+    } : null
+  };
+}
+
+/**
+ * Reads the Limelight names and the MegaTag2 limits the robot applies, from VisionConstants:
+ * `new LimelightVisionConfig(basePositionStdDev, maxTagDistanceMeters, maxMeasurementAgeSeconds)`
+ * and the LIMELIGHT_NAMES array. Returns null when neither is there.
+ */
+export function parseVision(source: string): VisionFiles | null {
+  const text = stripComments(source);
+  const config = /\bnew\s+LimelightVisionConfig\s*\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,/.exec(text);
+  const names = /\bLIMELIGHT_NAMES\s*=\s*\{([^}]*)\}/.exec(text);
+  const cameraNames = names ? [...names[1].matchAll(/"([^"]+)"/g)].map(match => match[1]) : [];
+  if (!config && cameraNames.length === 0) return null;
+  const base = config ? Number(config[1]) : Number.NaN;
+  const distance = config ? Number(config[2]) : Number.NaN;
+  return {
+    basePositionStdDev: positive(base) ? base : 0.07,
+    maxTagDistance: positive(distance) ? distance : 6.25,
+    cameraNames
+  };
+}
+
+/** CTRE's generator writes TunerConstants to frc/robot/generated; PowerLib projects keep it in constants. */
+async function readTunerConstants(robotRoot: string) {
+  for (const folder of ["constants", "generated"]) {
+    const source = await readOptional(path.join(javaRoot(robotRoot), folder, "TunerConstants.java"));
+    if (source !== null) return source;
+  }
+  return null;
 }
 
 export async function readAutoFiles(robotRoot: string): Promise<AutoFilesState> {
@@ -76,12 +196,15 @@ export async function readAutoFiles(robotRoot: string): Promise<AutoFilesState> 
   // Generated drive legs need the DriveToPose command and PowerLib's DriveConstraints.
   const driveCommandFiles = [path.join(javaRoot(robotRoot), "commands", "DriveToPose.java"),
     path.join(robotRoot, "src", "main", "java", "frc", "powerlib", "auto", "DriveConstraints.java")];
-  const [json, stateMachine, driveCommandInstalled, robotAutos, robot] = await Promise.all([
+  const [json, stateMachine, driveCommandInstalled, robotAutos, generatedSource, settings, tunerConstants, visionConstants] = await Promise.all([
     readOptional(jsonPath),
     readOptional(path.join(javaRoot(robotRoot), "subsystems", "StateMachine.java")),
     Promise.all(driveCommandFiles.map(file => fs.access(file).then(() => true, () => false))).then(found => found.every(Boolean)),
     readOptional(path.join(javaRoot(robotRoot), "autos", "RobotAutos.java")),
-    readRobotSize(robotRoot)
+    readOptional(path.join(javaRoot(robotRoot), "autos", "GeneratedAutos.java")),
+    readPathPlannerSettings(robotRoot),
+    readTunerConstants(robotRoot),
+    readOptional(path.join(javaRoot(robotRoot), "constants", "VisionConstants.java"))
   ]);
   const state: AutoFilesState = {
     path: jsonPath,
@@ -90,7 +213,11 @@ export async function readAutoFiles(robotRoot: string): Promise<AutoFilesState> 
     driveCommandInstalled,
     robotAutosHooked: robotAutos ? hasGeneratedAutosHook(robotAutos) : null,
     robotAutosStrings: robotAutos ? parseStringLiterals(robotAutos) : [],
-    robot
+    checks: stateMachine ? parseRobotChecks(stateMachine) : [],
+    generatedSource,
+    robot: robotSize(settings),
+    drivetrain: tunerConstants ? parseDrivetrain(tunerConstants, settings) : null,
+    vision: visionConstants ? parseVision(visionConstants) : null
   };
   if (json !== null) {
     try {

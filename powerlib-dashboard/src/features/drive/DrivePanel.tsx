@@ -11,6 +11,9 @@ import type { NtTopicSnapshot } from "../../networktables/nt4Client";
 import { FieldBackdrop } from "../field/FieldBackdrop";
 import { useFieldLayout } from "../field/fieldLayouts";
 import type { FieldLayout } from "../field/fieldLayouts";
+import { PreMatchList, usePlannedAutos } from "./PreMatchList";
+import { codeCheck, preMatchChecks } from "./preMatch";
+import type { StartPose } from "./preMatch";
 import "./drive.css";
 
 type DisplaySettings = { length: number; width: number; flip: boolean; urls: Record<string, string> };
@@ -27,8 +30,11 @@ function readSettings(): DisplaySettings {
   } catch { return defaults; }
 }
 
-/** `image` is a blue-left top-down field picture cropped to the field boundary; a chosen field layout takes priority. */
-function Field({ pose, field, flip, layout, image }: { pose?: { x: number; y: number; heading: number }; field: { length: number; width: number }; flip: boolean; layout: FieldLayout | null; image?: string }) {
+/**
+ * `image` is a blue-left top-down field picture cropped to the field boundary; a chosen field layout takes priority.
+ * `start` is the selected auto's first point, outlined so the robot can be placed on it.
+ */
+function Field({ pose, start, field, flip, layout, image }: { pose?: { x: number; y: number; heading: number }; start?: StartPose; field: { length: number; width: number }; flip: boolean; layout: FieldLayout | null; image?: string }) {
   const gridId = `drive-grid-${useId().replaceAll(":", "")}`;
   const height = 480;
   const width = height * field.length / field.width;
@@ -46,7 +52,12 @@ function Field({ pose, field, flip, layout, image }: { pose?: { x: number; y: nu
         <rect x={width - 16} width="16" height={height} fill="#ec4d5d" opacity=".55" />
         <path d={`M ${width / 2} 0 V ${height}`} stroke="#698191" strokeDasharray="10 9" />
       </>}
-      {pose && !outOfBounds && <g transform={`translate(${pose.x / field.length * width} ${height - pose.y / field.width * height}) rotate(${-pose.heading})`}>
+      {start && <g transform={`translate(${start.x / field.length * width} ${height - start.y / field.width * height}) rotate(${-start.heading})`} pointerEvents="none">
+        <rect x="-15" y="-15" width="30" height="30" rx="4" fill="rgba(74, 222, 128, 0.12)" stroke="#4ade80" strokeWidth="2" strokeDasharray="5 4" />
+        <path d="M -5 -7 L 9 0 L -5 7" fill="none" stroke="#4ade80" strokeWidth="3" />
+        <title>Point 1 of the selected auto</title>
+      </g>}
+      {pose && !outOfBounds &&<g transform={`translate(${pose.x / field.length * width} ${height - pose.y / field.width * height}) rotate(${-pose.heading})`}>
         <rect x="-15" y="-15" width="30" height="30" rx="4" fill="#ffdc00" stroke="#fff" strokeWidth="2" />
         <path d="M -5 -7 L 9 0 L -5 7" fill="none" stroke="#14212c" strokeWidth="4" />
       </g>}
@@ -151,6 +162,11 @@ export function DrivePanel({ subsystems = [], fieldImage, renderTopCards, render
   const actualState = model.live ? model.text("actualState") : undefined;
   const number = (key: Parameters<typeof model.number>[0]) => model.live ? model.number(key) : undefined;
   const metric = (value: number | undefined, places = 1) => value === undefined ? "—" : value.toFixed(places);
+  // Before the match (robot disabled): the selected auto against the alliance, point 1 and robot code.
+  const planned = usePlannedAutos();
+  const code = useMemo(() => codeCheck(planned), [planned]);
+  const preMatch = chooser && model.canSelectAuto ? preMatchChecks({ selected: chooser.active ?? chooser.selected, alliance: model.text("alliance"),
+    pose: model.pose, planned, code }) : null;
 
   useEffect(() => { const timer = setInterval(() => setNow(performance.now()), 100); return () => clearInterval(timer); }, []);
   useEffect(() => { try { localStorage.setItem(settingsKey, JSON.stringify(settings)); } catch { /* Keep session settings if storage is unavailable. */ } }, [settings]);
@@ -223,7 +239,7 @@ export function DrivePanel({ subsystems = [], fieldImage, renderTopCards, render
       <div className={`drive-rail ${cameras.length ? "" : "without-cameras"}`}>
         <small className="drive-select-label">Select view</small>
         <button className={`drive-thumb drive-field-thumb ${selectedView === "field" ? "selected" : ""}`} onClick={() => setSelectedView("field")} aria-label="Show field view">
-          <div className="drive-thumb-preview drive-field-preview" style={{ aspectRatio: `${field.length} / ${field.width}` }}><Field pose={model.pose} field={field} flip={settings.flip} layout={layout} image={fieldImage} /></div><b>FIELD</b>
+          <div className="drive-thumb-preview drive-field-preview" style={{ aspectRatio: `${field.length} / ${field.width}` }}><Field pose={model.pose} start={preMatch?.start} field={field} flip={settings.flip} layout={layout} image={fieldImage} /></div><b>FIELD</b>
         </button>
         {cameras.length > 0 && <div className="drive-camera-list" ref={cameraList} role="region" aria-label="Camera views" tabIndex={0}>
         {cameras.map(camera => <button key={camera.id} data-camera-id={camera.id} className={`drive-thumb ${selectedView === camera.id ? "selected" : ""}`}
@@ -235,7 +251,7 @@ export function DrivePanel({ subsystems = [], fieldImage, renderTopCards, render
         {!cameras.length && <div className="drive-no-cameras">Cameras appear here when published to NetworkTables.</div>}
       </div>
       <div className="drive-stage">{selectedCamera ? <CameraCanvas camera={selectedCamera} images={images} failed={!!failed[selectedCamera.id] || selectedCamera.connected === false} />
-        : <Field pose={model.pose} field={field} flip={settings.flip} layout={layout} image={fieldImage} />}</div>
+        : <Field pose={model.pose} start={preMatch?.start} field={field} flip={settings.flip} layout={layout} image={fieldImage} />}</div>
       <aside className="drive-sidebar">
         {chooser && <section className="drive-auto"><div className="drive-auto-choice"><label htmlFor="drive-auto">AUTONOMOUS</label>
           <select id="drive-auto" value={pending?.path === chooser.path && chooser.options.includes(pending.name) ? pending.name :
@@ -245,6 +261,7 @@ export function DrivePanel({ subsystems = [], fieldImage, renderTopCards, render
           </select></div>
           {(autoError || pending) && <small className={autoError ? "drive-warning" : ""}>{autoError || "Waiting for robot…"}</small>}
           {!model.canSelectAuto && <small>{model.live ? "Locked while enabled" : "Waiting for live disabled state"}</small>}
+          {preMatch && <PreMatchList checks={preMatch.checks} />}
         </section>}
         {renderSidebar?.({ topics, drive: model, now })}
       </aside>

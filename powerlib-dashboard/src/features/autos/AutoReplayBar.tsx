@@ -4,10 +4,40 @@ import { Chip, IconButton, MenuItem, TextField, Tooltip, Typography } from "@mui
 import PauseIcon from "@mui/icons-material/Pause";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import StopIcon from "@mui/icons-material/Stop";
-import type { Replay } from "./autoReplay";
+import type { StrainRange } from "./autoLimits";
+import type { Replay, RobotLimit } from "./autoReplay";
 import { stateAt } from "./autoReplay";
+import type { RouteVision, VisionQuality } from "./autoVision";
 
-export function AutoReplayBar({ replay, time, playing, speed, stateColor, stepColor, activeStepId, period, onPeriod, onPlay, onPause, onStop, onSeek, onSpeed, onSelectStep }: {
+/** The tag strip's colors, from a fix the robot would trust to none at all. */
+const visionColors: Record<VisionQuality, string> = {
+  good: "#22c55e",
+  fair: "#eab308",
+  poor: "#f97316",
+  blind: "#52525b"
+};
+
+/** How the robot's drivetrain compares with the ideal replay. */
+export type RobotCheck = {
+  /** What the drivetrain can do, such as "about 5.4 m/s and 6.7 m/s²". */
+  summary: string;
+  extraSeconds: number;
+  robotDuration: number;
+  strain: StrainRange[];
+  /** Where the robot's files disagree or leave something out. */
+  notes: string[];
+};
+
+const strainTitles: Record<RobotLimit, string> = {
+  speed: "Close to top speed: the robot falls behind the replay here",
+  acceleration: "The robot can't speed up or slow down this hard here",
+  turn: "Turning uses up wheel speed here, so the robot slows down"
+};
+
+/** Below this the robot and the replay agree well enough to say nothing. */
+const noticeableSeconds = 0.05;
+
+export function AutoReplayBar({ replay, time, playing, speed, stateColor, stepColor, stepNumber, activeStepId, period, robotCheck, vision, onPeriod, onPlay, onPause, onStop, onSeek, onSpeed, onSelectStep }: {
   replay: Replay;
   time: number | null;
   playing: boolean;
@@ -15,9 +45,15 @@ export function AutoReplayBar({ replay, time, playing, speed, stateColor, stepCo
   stateColor: (state: string | null) => string;
   /** Color for a non-drive step, matching the step list (its state for state steps). */
   stepColor?: (stepId: string) => string | undefined;
+  /** The step's number in the step list; its place in the replay when missing. */
+  stepNumber?: (stepId: string) => number | undefined;
   activeStepId: string | null;
   /** Autonomous period in seconds; the timeline always shows it so overruns are obvious. */
   period: number;
+  /** Set when the robot project's drivetrain is known. */
+  robotCheck?: RobotCheck;
+  /** AprilTag coverage along the route; set when the tag view is on and a camera is set up. */
+  vision?: RouteVision;
   onPeriod: (seconds: number) => void;
   onPlay: () => void;
   onPause: () => void;
@@ -69,7 +105,7 @@ export function AutoReplayBar({ replay, time, playing, speed, stateColor, stepCo
       onPointerMove={event => { if (event.buttons & 1) seekFromPointer(event); }}>
       {replay.segments.map(segment => <div key={`${segment.stepId}-${segment.start}`}
         className={`ab-timeline-block ${segment.type}${segment.stepId === activeStepId ? " active" : ""}`}
-        title={`Step ${segment.stepIndex + 1}: ${(segment.end - segment.start).toFixed(2)} s`}
+        title={`${segment.type === "clearRequests" ? "Clear state requests" : `Step ${stepNumber?.(segment.stepId) ?? segment.stepIndex + 1}`}: ${(segment.end - segment.start).toFixed(2)} s`}
         style={{ left: percent(segment.start), width: percent(segment.end - segment.start),
           background: segment.type === "drive" ? statePieces(segment.start, segment.end)
             : segment.type === "waitForState" && stepColor?.(segment.stepId) ? `repeating-linear-gradient(135deg, ${stepColor(segment.stepId)} 0 4px, #3f3f46 4px 8px)`
@@ -78,12 +114,35 @@ export function AutoReplayBar({ replay, time, playing, speed, stateColor, stepCo
       {replay.stateChanges.filter(change => change.subpointId).map(change => <div key={change.subpointId}
         className="ab-timeline-tick" style={{ left: percent(change.t), background: stateColor(change.state) }}
         title={`${change.state} requested at ${change.t.toFixed(2)} s`} />)}
+      {robotCheck?.strain.map(range => <div key={`${range.stepId}-${range.limit}-${range.start}`} className="ab-timeline-strain"
+        style={{ left: percent(range.start), width: percent(range.end - range.start) }} title={strainTitles[range.limit]} />)}
       <div className="ab-timeline-limit" style={{ left: percent(period) }} title={`${period} s autonomous period`} />
       {time !== null && <div className="ab-timeline-head" style={{ left: percent(time) }} />}
     </div>
+    {/* AprilTag coverage along the route, lined up with the timeline above it. */}
+    {vision && vision.spans.length > 0 && <div className="ab-vision-strip" aria-label="AprilTag coverage">
+      {vision.spans.map(span => <div key={span.start} className={`ab-vision-span ${span.quality}`}
+        style={{ left: percent(span.start), width: percent(span.end - span.start), background: visionColors[span.quality] }}
+        title={span.quality === "blind"
+          ? `No usable tags from ${span.start.toFixed(1)} s to ${span.end.toFixed(1)} s`
+          : `${span.tagCount} tag${span.tagCount === 1 ? "" : "s"}, to within ${((span.stdDev ?? 0) * 100).toFixed(1)} cm`} />)}
+    </div>}
     </div>
 
     {replay.duration > period && <Chip size="small" color="error" variant="outlined" label={`Over ${period} s`} />}
+    {robotCheck && robotCheck.extraSeconds >= noticeableSeconds && <Tooltip title={<>
+      <div>This drivetrain ({robotCheck.summary}) needs about {robotCheck.extraSeconds.toFixed(2)} s more than the replay shows:
+        {` ${robotCheck.robotDuration.toFixed(1)} s in all`}{robotCheck.robotDuration > period ? `, past the ${period} s period` : ""}. Orange marks where it falls behind.</div>
+      {robotCheck.notes.map(note => <div key={note} style={{ marginTop: 4 }}>{note}</div>)}
+    </>}>
+      <Chip size="small" variant="outlined" color={robotCheck.robotDuration > period ? "error" : "warning"} label={`+${robotCheck.extraSeconds.toFixed(1)} s on the robot`} />
+    </Tooltip>}
+    {vision && vision.spans.length > 0 && <Tooltip title={vision.longestBlind
+      ? `The robot has no AprilTag to place itself with for ${vision.blindSeconds.toFixed(1)} s in all, the longest from ${vision.longestBlind.start.toFixed(1)} s to ${vision.longestBlind.end.toFixed(1)} s. It coasts on the gyro and wheels there.`
+      : "Every moment of this auto has a tag the robot could place itself with."}>
+      <Chip size="small" variant="outlined" color={vision.longestBlind && vision.longestBlind.end - vision.longestBlind.start >= 1 ? "warning" : "success"}
+        label={vision.blindSeconds > 0 ? `${vision.blindSeconds.toFixed(1)} s without tags` : "Tags throughout"} />
+    </Tooltip>}
     <PeriodLabel period={period} onChange={onPeriod} />
     {replay.unfinishedStepIds.length > 0 && <Chip size="small" color="warning" variant="outlined" label={`${replay.unfinishedStepIds.length} leg${replay.unfinishedStepIds.length === 1 ? "" : "s"} never finish`} />}
     <TextField select size="small" value={speed} onChange={event => onSpeed(Number(event.target.value))} aria-label="Replay speed"

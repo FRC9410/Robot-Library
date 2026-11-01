@@ -48,6 +48,13 @@
 .drive-auto-choice option { background: #182330; }
 .drive-auto small { display: block; font-size: 11px; color: #9baabd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .drive-auto .drive-warning { color: #ffaf77; }
+.drive-prematch { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.drive-prematch li { display: flex; align-items: flex-start; gap: 6px; font-size: 11px; line-height: 15px; color: #c9d5e1; }
+.drive-prematch li svg { flex-shrink: 0; width: 15px; height: 15px; }
+.drive-prematch .ok svg { color: #4ade80; }
+.drive-prematch .warning { color: #ffcf9e; }
+.drive-prematch .warning svg { color: #ffaf77; }
+.drive-prematch .info svg { color: #9baabd; }
 .drive-top-metric.drive-danger { background: #352129; border-color: #84505c; color: #ff7986; }
 .drive-card .drive-warning { color: #ffaf77; }
 .drive-subsystems { flex: 0 0 110px; display: flex; gap: 8px; min-width: 0; min-height: 0; overflow-x: auto; scrollbar-width: thin; }

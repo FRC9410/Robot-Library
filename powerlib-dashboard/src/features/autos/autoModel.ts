@@ -17,13 +17,47 @@ export type LegConstraints = {
  */
 export type Subpoint = { id: string; progress: number; state: string };
 
-export type DriveStep = { id: string; type: "drive"; x: number; y: number; heading: number; subpoints: Subpoint[] } & LegConstraints;
+/**
+ * How a leg turns (frc.powerlib.auto.LegHeading): toward its heading right away, only once the leg
+ * is `startProgress` (0 to 1) done, or facing a field point (such as a goal) the whole time.
+ */
+export type LegTurn =
+  | { mode: "now" }
+  | { mode: "later"; startProgress: number }
+  | { mode: "face"; x: number; y: number; pointId: string | null };
+
+/**
+ * `pointId` links the pose to a named point; moving either moves both. `maxTurnRate` is in degrees
+ * per second; null uses the robot's drive-to-point rate.
+ */
+export type DriveStep = { id: string; type: "drive"; x: number; y: number; heading: number; subpoints: Subpoint[];
+  turn: LegTurn; maxTurnRate: number | null; pointId: string | null } & LegConstraints;
+
+/** A pose saved once and reused across autos, such as a shooting spot. */
+export type NamedPoint = { id: string; name: string; x: number; y: number; heading: number };
 export type RequestStateStep = { id: string; type: "requestState"; state: string };
 /** replaySeconds only paces the replay; the robot waits for the real state. */
 export type WaitForStateStep = { id: string; type: "waitForState"; state: string; timeoutSeconds: number | null; replaySeconds: number };
 export type WaitStep = { id: string; type: "wait"; seconds: number };
-export type AutoStep = DriveStep | RequestStateStep | WaitForStateStep | WaitStep;
+
+/**
+ * What a branch checks when the robot reaches it: the actual state, a yes/no method on
+ * StateMachine (such as hasFuel()), or the time left in the autonomous period. State and method
+ * checks can first wait up to `waitSeconds` for the answer to become yes.
+ */
+export type BranchCondition =
+  | { kind: "state"; state: string; waitSeconds: number }
+  | { kind: "check"; method: string; waitSeconds: number }
+  | { kind: "timeLeft"; seconds: number };
+export type BranchArm = "then" | "otherwise";
+/** Runs `then` when the condition holds and `otherwise` when it doesn't; the auto carries on after either. Branches don't nest. */
+export type BranchStep = { id: string; type: "branch"; condition: BranchCondition; then: AutoStep[]; otherwise: AutoStep[] };
+export type AutoStep = DriveStep | RequestStateStep | WaitForStateStep | WaitStep | BranchStep;
 export type AutoStepType = AutoStep["type"];
+/** A list of steps: the auto's own (null) or one side of a branch. */
+export type ListRef = { branchId: string; arm: BranchArm } | null;
+/** Which side of each branch the field and replay follow, by branch id; Then when missing. */
+export type BranchChoices = Record<string, BranchArm>;
 
 /** Flips that produce the auto's mirrored copy for the other side of the field. */
 export type Symmetry = { flipX: boolean; flipY: boolean };
@@ -38,9 +72,29 @@ export type AutoRoutine = {
   steps: AutoStep[];
 };
 
+/**
+ * A Limelight on the robot, for the tag-visibility view. `x`, `y` and `z` are the lens in robot
+ * coordinates (x forward, y left, z up from the carpet); `yaw` is degrees left of straight ahead and
+ * `pitch` degrees above level, the same frame as the Limelight's own robot-space camera pose.
+ */
+export type CameraMount = {
+  id: string;
+  name: string;
+  x: number; y: number; z: number;
+  yaw: number; pitch: number;
+  /** Field of view in degrees and the detector's image width in pixels. */
+  hFov: number; vFov: number;
+  imageWidth: number;
+  enabled: boolean;
+};
+
 /** `periodSeconds` is the autonomous period the replay timeline marks (20 s in 2026 REBUILT). */
-export type AutoDocument = { version: 1; periodSeconds: number; autos: AutoRoutine[] };
+export type AutoDocument = { version: 1; periodSeconds: number; points: NamedPoint[]; cameras: CameraMount[]; autos: AutoRoutine[] };
 export const defaultPeriodSeconds = 20;
+
+/** A new camera, pointed straight ahead. The field of view matches a Limelight 3G or 4 (80° × 56°). */
+export const newCamera = (name: string): CameraMount =>
+  ({ id: createId(), name, x: 0.25, y: 0, z: 0.35, yaw: 0, pitch: 15, hFov: 80, vFov: 56, imageWidth: 1280, enabled: true });
 
 /** What the builder knows about the robot project it generates for. */
 export type AutoProject = {
@@ -50,6 +104,8 @@ export type AutoProject = {
   field: { length: number; width: number };
   /** String literals in RobotAutos.java, which include the names of hand-written autos. */
   handWrittenNames?: string[];
+  /** StateMachine's public boolean methods with no arguments, which branches can check; undefined when unknown. */
+  checks?: string[];
 };
 
 export type AutoIssue = { autoId: string; stepId?: string; severity: "error" | "warning"; message: string };
@@ -58,7 +114,8 @@ export const stepLabels: Record<AutoStepType, string> = {
   drive: "Drive to point",
   requestState: "Request state",
   waitForState: "Wait for state",
-  wait: "Wait"
+  wait: "Wait",
+  branch: "Branch"
 };
 
 /** Same values as DriveConstraints.DEFAULT on the robot. */
@@ -66,7 +123,9 @@ export const defaultConstraints: LegConstraints = { maxVelocity: 3, maxAccelerat
 export const constraintKeys = Object.keys(defaultConstraints) as (keyof LegConstraints)[];
 export const noSymmetry: Symmetry = { flipX: false, flipY: false };
 
-export const emptyDocument = (): AutoDocument => ({ version: 1, periodSeconds: defaultPeriodSeconds, autos: [] });
+export const emptyDocument = (): AutoDocument => ({ version: 1, periodSeconds: defaultPeriodSeconds, points: [], cameras: [], autos: [] });
+/** The robot's default drive-to-point turn rate (π rad/s), used when a leg has no limit of its own. */
+export const defaultTurnRate = 180;
 
 export function createId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -81,12 +140,137 @@ export function createAuto(name: string): AutoRoutine {
 export function createStep(type: AutoStepType, project: Pick<AutoProject, "states" | "field">): AutoStep {
   const state = project.states[0] ?? "";
   switch (type) {
-    case "drive": return { id: createId(), type, x: round(project.field.length / 4), y: round(project.field.width / 2), heading: 0, subpoints: [], ...defaultConstraints };
+    case "drive": return { id: createId(), type, x: round(project.field.length / 4), y: round(project.field.width / 2), heading: 0, subpoints: [], turn: { mode: "now" }, maxTurnRate: null, pointId: null, ...defaultConstraints };
     case "requestState": return { id: createId(), type, state };
     case "waitForState": return { id: createId(), type, state, timeoutSeconds: null, replaySeconds: 0.5 };
     case "wait": return { id: createId(), type, seconds: 0.5 };
+    case "branch": return { id: createId(), type, condition: state ? { kind: "state", state, waitSeconds: 0 } : { kind: "timeLeft", seconds: 5 },
+      then: [], otherwise: [] };
   }
 }
+
+/** Every step, including the steps inside branches, in list order (a branch, its Then side, its Otherwise side). */
+export function allSteps(steps: AutoStep[]): AutoStep[] {
+  return steps.flatMap(step => step.type === "branch" ? [step, ...allSteps(step.then), ...allSteps(step.otherwise)] : [step]);
+}
+
+/** Maps every step, including the steps inside branches. Lists nothing changed in are kept as they were. */
+export function mapSteps(steps: AutoStep[], map: (step: AutoStep) => AutoStep): AutoStep[] {
+  let changed = false;
+  const next = steps.map(step => {
+    let inner = step;
+    if (step.type === "branch") {
+      const then = mapSteps(step.then, map);
+      const otherwise = mapSteps(step.otherwise, map);
+      if (then !== step.then || otherwise !== step.otherwise) inner = { ...step, then, otherwise };
+    }
+    const mapped = map(inner);
+    if (mapped !== step) changed = true;
+    return mapped;
+  });
+  return changed ? next : steps;
+}
+
+/** Removes the steps that fail `keep`, wherever they are; removing a branch removes its sides too. */
+export function filterSteps(steps: AutoStep[], keep: (step: AutoStep) => boolean): AutoStep[] {
+  let changed = false;
+  const next = steps.flatMap((step): AutoStep[] => {
+    if (!keep(step)) { changed = true; return []; }
+    if (step.type !== "branch") return [step];
+    const then = filterSteps(step.then, keep);
+    const otherwise = filterSteps(step.otherwise, keep);
+    if (then === step.then && otherwise === step.otherwise) return [step];
+    changed = true;
+    return [{ ...step, then, otherwise }];
+  });
+  return changed ? next : steps;
+}
+
+/** The steps one run takes: each branch is followed by the side `choices` picks (Then when unset). */
+export function routeSteps(steps: AutoStep[], choices: BranchChoices = {}): AutoStep[] {
+  return steps.flatMap(step => step.type === "branch" ? [step, ...routeSteps(step[choices[step.id] ?? "then"], choices)] : [step]);
+}
+
+/** The list a step is in and its index there, or null when it isn't in the auto. */
+export function locateStep(steps: AutoStep[], id: string, list: ListRef = null): { list: ListRef; index: number } | null {
+  for (const [index, step] of steps.entries()) {
+    if (step.id === id) return { list, index };
+    if (step.type !== "branch") continue;
+    for (const arm of ["then", "otherwise"] as const) {
+      const found = locateStep(step[arm], id, { branchId: step.id, arm });
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/** Applies `update` to one list of steps: the auto's own, or one side of a branch. */
+export function updateList(steps: AutoStep[], list: ListRef, update: (items: AutoStep[]) => AutoStep[]): AutoStep[] {
+  if (list === null) return update(steps);
+  return mapSteps(steps, step => {
+    if (step.type !== "branch" || step.id !== list.branchId) return step;
+    const items = update(step[list.arm]);
+    return items === step[list.arm] ? step : { ...step, [list.arm]: items };
+  });
+}
+
+/** Where new steps go: after a step, in its own list (the end of the auto when null), or at the end of one side of a branch. */
+export type InsertTarget = { after: string | null } | { into: { branchId: string; arm: BranchArm } };
+
+/** Inserts steps; branches can't hold branches, so a branch added inside one goes right after it. */
+export function insertStepsAt(steps: AutoStep[], target: InsertTarget, added: AutoStep[]): AutoStep[] {
+  const nesting = added.some(step => step.type === "branch");
+  if ("into" in target) {
+    return nesting ? insertStepsAt(steps, { after: target.into.branchId }, added) : updateList(steps, target.into, items => [...items, ...added]);
+  }
+  let place = target.after === null ? null : locateStep(steps, target.after);
+  if (place?.list && nesting) place = locateStep(steps, place.list.branchId);
+  if (!place) return [...steps, ...added];
+  const { list, index } = place;
+  return updateList(steps, list, items => [...items.slice(0, index + 1), ...added, ...items.slice(index + 1)]);
+}
+
+/** The selected steps that aren't inside a selected branch (which carries them), in list order. */
+export function outermostSteps(steps: AutoStep[], ids: string[]): AutoStep[] {
+  const carried = new Set(allSteps(steps).flatMap(step => step.type === "branch" && ids.includes(step.id)
+    ? allSteps([...step.then, ...step.otherwise]).map(inner => inner.id) : []));
+  return allSteps(steps).filter(step => ids.includes(step.id) && !carried.has(step.id));
+}
+
+/**
+ * Moves steps (kept in order) so they sit before the step now at `index` of `list` (its length for
+ * the end). Steps inside a moving branch travel with it, and branches can't move into a branch.
+ */
+export function moveStepsInto(steps: AutoStep[], ids: string[], list: ListRef, index: number): AutoStep[] {
+  const moving = outermostSteps(steps, ids);
+  const movingIds = new Set(moving.map(step => step.id));
+  if (!moving.length) return steps;
+  if (list && (moving.some(step => step.type === "branch") || !locateStep(steps, list.branchId) || allSteps(moving).some(step => step.id === list.branchId))) return steps;
+  const target = list === null ? steps : (allSteps(steps).find(step => step.id === list.branchId) as BranchStep)[list.arm];
+  const anchor = target.slice(index).find(step => !movingIds.has(step.id));
+  const next = updateList(filterSteps(steps, step => !movingIds.has(step.id)), list, items => {
+    const at = anchor ? items.findIndex(step => step.id === anchor.id) : items.length;
+    return [...items.slice(0, at), ...moving, ...items.slice(at)];
+  });
+  return JSON.stringify(next) === JSON.stringify(steps) ? steps : next;
+}
+
+/** Moves steps that share one list a place earlier or later together, keeping their order; blocked at the ends. */
+export function shiftSteps(steps: AutoStep[], ids: string[], offset: -1 | 1): AutoStep[] {
+  const places = ids.flatMap(id => locateStep(steps, id) ?? []);
+  const key = (list: ListRef) => list ? `${list.branchId}:${list.arm}` : "";
+  if (!places.length || places.some(place => key(place.list) !== key(places[0].list))) return steps;
+  return updateList(steps, places[0].list, items => {
+    const indexes = places.map(place => place.index).sort((a, b) => a - b);
+    if (offset < 0 ? indexes[0] === 0 : indexes[indexes.length - 1] === items.length - 1) return items;
+    const next = [...items];
+    for (const index of offset < 0 ? indexes : [...indexes].reverse()) [next[index], next[index + offset]] = [next[index + offset], next[index]];
+    return next;
+  });
+}
+
+/** Seconds a branch waits for its condition first; 0 when it checks once. */
+export const branchWaitSeconds = (step: BranchStep) => step.condition.kind === "timeLeft" ? 0 : step.condition.waitSeconds;
 
 export function round(value: number, digits = 2) {
   const scale = 10 ** digits;
@@ -114,8 +298,74 @@ export function flipPoint<T extends { x: number; y: number; heading: number }>(p
   return { ...point, x: round(x, 4), y: round(y, 4), heading: round(normalizeHeading(heading), 4) };
 }
 
+/** Flipped steps no longer match their named points, so they are unlinked. */
 export function flipSteps(steps: AutoStep[], flips: Symmetry, field: AutoProject["field"]) {
-  return steps.map(step => step.type === "drive" ? flipPoint(step, flips, field) : step);
+  return mapSteps(steps, step => {
+    if (step.type !== "drive") return step;
+    const facing = step.turn.mode === "face" ? flipPoint({ x: step.turn.x, y: step.turn.y, heading: 0 }, flips, field) : null;
+    const turn: LegTurn = facing ? { mode: "face", x: facing.x, y: facing.y, pointId: null } : step.turn;
+    return { ...flipPoint(step, flips, field), turn, pointId: null };
+  });
+}
+
+/** The heading the robot ends the leg at: facing its point, or the leg's own heading. */
+export function legEndHeading(step: DriveStep) {
+  if (step.turn.mode !== "face") return step.heading;
+  const dx = step.turn.x - step.x;
+  const dy = step.turn.y - step.y;
+  return Math.hypot(dx, dy) < 1e-3 ? step.heading : round(Math.atan2(dy, dx) * 180 / Math.PI, 2);
+}
+
+/**
+ * Saves a named point and moves every step linked to it, in every auto, so the rest of the
+ * builder only ever reads plain coordinates.
+ */
+export function setNamedPoint(document: AutoDocument, point: NamedPoint): AutoDocument {
+  const exists = document.points.some(candidate => candidate.id === point.id);
+  return {
+    ...document,
+    points: exists ? document.points.map(candidate => candidate.id === point.id ? point : candidate) : [...document.points, point],
+    autos: document.autos.map(auto => ({ ...auto, steps: mapSteps(auto.steps, step => {
+      if (step.type !== "drive") return step;
+      let next = step;
+      if (step.pointId === point.id) next = { ...next, x: point.x, y: point.y, heading: point.heading };
+      if (step.turn.mode === "face" && step.turn.pointId === point.id) next = { ...next, turn: { ...step.turn, x: point.x, y: point.y } };
+      return next;
+    }) }))
+  };
+}
+
+/** After an auto's steps change, moves each named point a linked step was moved off of, which moves every other step linked to it. */
+export function syncNamedPoints(document: AutoDocument, autoId: string): AutoDocument {
+  const auto = document.autos.find(candidate => candidate.id === autoId);
+  if (!auto) return document;
+  return allSteps(auto.steps).reduce((next, step) => {
+    if (step.type !== "drive" || !step.pointId) return next;
+    const point = next.points.find(candidate => candidate.id === step.pointId);
+    return point && (point.x !== step.x || point.y !== step.y || point.heading !== step.heading)
+      ? setNamedPoint(next, { ...point, x: step.x, y: step.y, heading: step.heading }) : next;
+  }, document);
+}
+
+/** Removes a named point; steps that used it keep its coordinates but are no longer linked. */
+export function deleteNamedPoint(document: AutoDocument, pointId: string): AutoDocument {
+  return {
+    ...document,
+    points: document.points.filter(point => point.id !== pointId),
+    autos: document.autos.map(auto => ({ ...auto, steps: mapSteps(auto.steps, step => step.type !== "drive" ? step : {
+      ...step,
+      pointId: step.pointId === pointId ? null : step.pointId,
+      turn: step.turn.mode === "face" && step.turn.pointId === pointId ? { ...step.turn, pointId: null } : step.turn
+    }) }))
+  };
+}
+
+/** A name not already used by a named point, such as "Point 3". */
+export function uniquePointName(document: AutoDocument) {
+  const names = new Set(document.points.map(point => point.name.trim()));
+  let number = document.points.length + 1;
+  while (names.has(`Point ${number}`)) number++;
+  return `Point ${number}`;
 }
 
 export const hasSymmetry = (symmetry: Symmetry) => symmetry.flipX || symmetry.flipY;
@@ -152,7 +402,64 @@ export function parseAutoDocument(value: unknown): AutoDocument {
     });
   }
   const period = (value as { periodSeconds?: unknown }).periodSeconds;
-  return { version: 1, periodSeconds: typeof period === "number" && Number.isFinite(period) && period > 0 ? period : defaultPeriodSeconds, autos };
+  const rawPoints = (value as { points?: unknown }).points;
+  const points: NamedPoint[] = (Array.isArray(rawPoints) ? rawPoints : []).flatMap((raw: unknown) => {
+    if (!raw || typeof raw !== "object") return [];
+    const point = raw as Record<string, unknown>;
+    const coordinate = (key: string) => typeof point[key] === "number" ? point[key] as number : Number.NaN;
+    // A point without a usable spot would move its linked steps off the field, so it is dropped.
+    if (!Number.isFinite(coordinate("x")) || !Number.isFinite(coordinate("y"))) return [];
+    return [{ id: typeof point.id === "string" && point.id ? point.id : createId(), name: typeof point.name === "string" ? point.name : "Point",
+      x: coordinate("x"), y: coordinate("y"), heading: typeof point.heading === "number" ? point.heading : 0 }];
+  });
+  // Links to a missing point are dropped; linked steps are brought in line with their point.
+  const ids = new Set(points.map(point => point.id));
+  const linked = autos.map(auto => ({ ...auto, steps: mapSteps(auto.steps, step => step.type !== "drive" ? step : {
+    ...step,
+    pointId: step.pointId && ids.has(step.pointId) ? step.pointId : null,
+    turn: step.turn.mode === "face" && step.turn.pointId && !ids.has(step.turn.pointId) ? { ...step.turn, pointId: null } : step.turn
+  }) }));
+  const document: AutoDocument = { version: 1, periodSeconds: typeof period === "number" && Number.isFinite(period) && period > 0 ? period : defaultPeriodSeconds,
+    points, cameras: parseCameras((value as { cameras?: unknown }).cameras), autos: linked };
+  return points.reduce(setNamedPoint, document);
+}
+
+/** Saved camera mounts; anything missing falls back to a new camera's value so a hand edit can't break the view. */
+function parseCameras(value: unknown): CameraMount[] {
+  return (Array.isArray(value) ? value : []).flatMap((raw: unknown) => {
+    if (!raw || typeof raw !== "object") return [];
+    const saved = raw as Record<string, unknown>;
+    const fallback = newCamera(typeof saved.name === "string" ? saved.name : "Camera");
+    const number = (key: keyof CameraMount) =>
+      typeof saved[key] === "number" && Number.isFinite(saved[key]) ? saved[key] as number : fallback[key] as number;
+    return [{
+      ...fallback,
+      id: typeof saved.id === "string" && saved.id ? saved.id : fallback.id,
+      x: number("x"), y: number("y"), z: number("z"), yaw: number("yaw"), pitch: number("pitch"),
+      // A zero or negative field of view would see nothing at all, so it falls back too.
+      hFov: number("hFov") > 0 ? number("hFov") : fallback.hFov,
+      vFov: number("vFov") > 0 ? number("vFov") : fallback.vFov,
+      imageWidth: number("imageWidth") > 0 ? Math.round(number("imageWidth")) : fallback.imageWidth,
+      enabled: saved.enabled !== false
+    }];
+  });
+}
+
+function parseTurn(value: unknown): LegTurn {
+  if (!value || typeof value !== "object") return { mode: "now" };
+  const turn = value as Record<string, unknown>;
+  const number = (key: string) => typeof turn[key] === "number" ? turn[key] as number : Number.NaN;
+  if (turn.mode === "later") return { mode: "later", startProgress: number("startProgress") };
+  if (turn.mode === "face") return { mode: "face", x: number("x"), y: number("y"), pointId: typeof turn.pointId === "string" && turn.pointId ? turn.pointId : null };
+  return { mode: "now" };
+}
+
+function parseCondition(value: unknown): BranchCondition {
+  const condition = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const number = (key: string, fallback = Number.NaN) => typeof condition[key] === "number" ? condition[key] as number : fallback;
+  if (condition.kind === "timeLeft") return { kind: "timeLeft", seconds: number("seconds") };
+  if (condition.kind === "check") return { kind: "check", method: typeof condition.method === "string" ? condition.method : "", waitSeconds: number("waitSeconds", 0) };
+  return { kind: "state", state: typeof condition.state === "string" ? condition.state : "", waitSeconds: number("waitSeconds", 0) };
 }
 
 function parseStep(value: unknown): AutoStep | null {
@@ -170,11 +477,17 @@ function parseStep(value: unknown): AutoStep | null {
           progress: typeof subpoint.progress === "number" ? subpoint.progress : Number.NaN,
           state: typeof subpoint.state === "string" ? subpoint.state : "" }];
       }),
+      turn: parseTurn(step.turn), pointId: typeof step.pointId === "string" && step.pointId ? step.pointId : null,
+      maxTurnRate: typeof step.maxTurnRate === "number" ? step.maxTurnRate : null,
       ...Object.fromEntries(constraintKeys.map(key => [key, number(key, defaultConstraints[key])])) as LegConstraints };
     case "requestState": return { id, type: "requestState", state };
     case "waitForState": return { id, type: "waitForState", state, replaySeconds: number("replaySeconds", 0.5),
       timeoutSeconds: step.timeoutSeconds === null || step.timeoutSeconds === undefined ? null : number("timeoutSeconds") };
     case "wait": return { id, type: "wait", seconds: number("seconds") };
+    case "branch": {
+      const arm = (key: string) => (Array.isArray(step[key]) ? step[key] as unknown[] : []).flatMap(raw => parseStep(raw) ?? []);
+      return { id, type: "branch", condition: parseCondition(step.condition), then: arm("then"), otherwise: arm("otherwise") };
+    }
     default: return null;
   }
 }
@@ -211,12 +524,12 @@ export function validateAutos(document: AutoDocument, project: AutoProject): Aut
     if (auto.isDefault && defaults.length > 1) error("Only one auto can be the default.");
     if (auto.steps.length === 0) warning("This auto has no steps and will do nothing.");
 
-    const hasDrive = auto.steps.some(step => step.type === "drive");
+    const hasDrive = allSteps(auto.steps).some(step => step.type === "drive");
     if (hasDrive && project.driveCommandInstalled === false) {
       error("This robot project is missing the DriveToPose command that drive steps use. Install PowerLib templates to add it.");
     }
 
-    for (const step of auto.steps) {
+    for (const step of allSteps(auto.steps)) {
       if (step.type === "drive") {
         if (![step.x, step.y, step.heading].every(Number.isFinite)) error("Enter a finite X, Y and heading.", step.id);
         else if (step.x < 0 || step.x > project.field.length || step.y < 0 || step.y > project.field.width) {
@@ -224,6 +537,16 @@ export function validateAutos(document: AutoDocument, project: AutoProject): Aut
         }
         for (const key of constraintKeys) {
           if (!Number.isFinite(step[key]) || step[key] <= 0) error(`${constraintNames[key]} must be a positive number.`, step.id);
+        }
+        if (step.turn.mode === "later" && !(step.turn.startProgress >= 0 && step.turn.startProgress <= 1)) {
+          error("The turn must start between 0% and 100% of the leg.", step.id);
+        }
+        if (step.turn.mode === "face") {
+          if (!Number.isFinite(step.turn.x) || !Number.isFinite(step.turn.y)) error("Enter a finite point to face.", step.id);
+          else if (Math.hypot(step.turn.x - step.x, step.turn.y - step.y) < 0.3) warning("The point to face is on top of this target, so the robot can't aim at it there.", step.id);
+        }
+        if (step.maxTurnRate !== null && !(Number.isFinite(step.maxTurnRate) && step.maxTurnRate > 0)) {
+          error("Max turn rate must be a positive number of degrees per second.", step.id);
         }
         for (const subpoint of step.subpoints) {
           if (!Number.isFinite(subpoint.progress) || subpoint.progress < 0 || subpoint.progress > 1) {
@@ -241,8 +564,28 @@ export function validateAutos(document: AutoDocument, project: AutoProject): Aut
           }
           if (!Number.isFinite(step.replaySeconds) || step.replaySeconds < 0) error("The replay estimate must be zero or more seconds.", step.id);
         }
-      } else if (!Number.isFinite(step.seconds) || step.seconds < 0) {
-        error("The wait must be a finite, non-negative number of seconds.", step.id);
+      } else if (step.type === "wait") {
+        if (!Number.isFinite(step.seconds) || step.seconds < 0) error("The wait must be a finite, non-negative number of seconds.", step.id);
+      } else {
+        const condition = step.condition;
+        if (condition.kind === "state") {
+          if (!condition.state) error("Choose the robot state to check.", step.id);
+          else if (!states.has(condition.state)) error(`RobotState.${condition.state} does not exist in StateMachine.`, step.id);
+        } else if (condition.kind === "check") {
+          if (!condition.method) error("Choose the robot check.", step.id);
+          else if (!/^[A-Za-z_$][\w$]*$/.test(condition.method) || (project.checks && !project.checks.includes(condition.method))) {
+            error(`StateMachine has no public boolean ${condition.method}() method to check.`, step.id);
+          }
+        } else if (!Number.isFinite(condition.seconds) || condition.seconds <= 0) {
+          error("The time left must be a positive number of seconds.", step.id);
+        } else if (condition.seconds >= document.periodSeconds) {
+          warning(`Autonomous lasts ${document.periodSeconds} s, so ${condition.seconds} s are never left here; this always runs Otherwise.`, step.id);
+        }
+        if (condition.kind !== "timeLeft" && !(Number.isFinite(condition.waitSeconds) && condition.waitSeconds >= 0)) {
+          error("The wait must be zero or more seconds.", step.id);
+        }
+        if ([...step.then, ...step.otherwise].some(inner => inner.type === "branch")) error("A branch can't hold another branch. Move the inner one out.", step.id);
+        if (!step.then.length && !step.otherwise.length) warning("This branch has no steps on either side, so it does nothing.", step.id);
       }
     }
   }
@@ -276,7 +619,7 @@ export function requestedStateAtSteps(auto: AutoRoutine) {
 
 /** Whether the auto makes any state request, directly or from a subpoint. */
 export const requestsStates = (auto: AutoRoutine) =>
-  auto.steps.some(step => step.type === "requestState" || (step.type === "drive" && step.subpoints.length > 0));
+  allSteps(auto.steps).some(step => step.type === "requestState" || (step.type === "drive" && step.subpoints.length > 0));
 
 export const generatedAutosClass = "GeneratedAutos";
 export const generatedAutosHeader = "// POWERLIB GENERATED AUTOS - DO NOT EDIT";
@@ -290,33 +633,123 @@ const javaDouble = (value: number) => {
   return /[.eE]/.test(text) ? text : `${text}.0`;
 };
 
-function stepCall(step: AutoStep) {
-  switch (step.type) {
-    case "drive": {
-      const pose = `new Pose2d(${javaDouble(step.x)}, ${javaDouble(step.y)}, Rotation2d.fromDegrees(${javaDouble(step.heading)}))`;
-      const limits = `new DriveConstraints(${constraintKeys.map(key => javaDouble(step[key])).join(", ")})`;
-      const subpoints = orderedSubpoints(step).map(subpoint =>
-        `\n            .atProgress(${javaDouble(subpoint.progress)}, () -> robot.requestState(RobotState.${subpoint.state}, OWNER))`).join("");
-      return `.addCommand(() -> new DriveToPose(robot.drivetrain, ${pose}, ${limits})${subpoints})`;
-    }
-    case "requestState":
-      return `.addCommand(() -> new RequestState(RobotState.${step.state}, OWNER, robot))`;
-    case "waitForState": {
-      const wait = `Commands.waitUntil(() -> robot.getActualState() == RobotState.${step.state})`;
-      return `.addCommand(() -> ${wait}${step.timeoutSeconds === null ? "" : `.withTimeout(${javaDouble(step.timeoutSeconds)})`})`;
-    }
-    case "wait":
-      return `.addCommand(() -> Commands.waitSeconds(${javaDouble(step.seconds)}))`;
+/**
+ * True for a state request that runs straight into a move (only other requests in between).
+ * It is made as that move starts, so the robot keeps moving instead of stopping for a cycle.
+ */
+export function requestJoinsNextMove(steps: AutoStep[], index: number) {
+  if (steps[index]?.type !== "requestState") return false;
+  let next = index + 1;
+  while (steps[next]?.type === "requestState") next++;
+  return steps[next]?.type === "drive";
+}
+
+/** Ids of the state requests that run straight into a move in their own list (see requestJoinsNextMove). */
+export function joiningRequests(steps: AutoStep[]) {
+  const ids = new Set<string>();
+  const visit = (list: AutoStep[]) => list.forEach((step, index) => {
+    if (requestJoinsNextMove(list, index)) ids.add(step.id);
+    if (step.type === "branch") { visit(step.then); visit(step.otherwise); }
+  });
+  visit(steps);
+  return ids;
+}
+
+/** Java constant names for the named points generated code uses, keyed by point id. */
+type PointNames = Map<string, string>;
+
+function pointConstantNames(points: NamedPoint[]): PointNames {
+  const used = new Set(["OWNER"]);
+  return new Map(points.map(point => {
+    let base = point.name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "POINT";
+    if (/^[0-9]/.test(base)) base = `POINT_${base}`;
+    let name = base;
+    for (let suffix = 2; used.has(name); suffix++) name = `${base}_${suffix}`;
+    used.add(name);
+    return [point.id, name];
+  }));
+}
+
+/** Indents every line after the first, so a multi-line expression can sit inside another. */
+const indent = (source: string, spaces: number) => source.replace(/\n/g, `\n${" ".repeat(spaces)}`);
+/** A Java call with one argument per line. */
+const javaCall = (name: string, args: string[]) => `${name}(\n    ${args.map(arg => indent(arg, 4)).join(",\n    ")})`;
+
+/** What a branch checks, as a Java boolean expression. */
+function conditionJava(condition: BranchCondition) {
+  switch (condition.kind) {
+    case "state": return `robot.getActualState() == RobotState.${condition.state}`;
+    case "check": return `robot.${condition.method}()`;
+    case "timeLeft": return `secondsLeft() >= ${javaDouble(condition.seconds)}`;
   }
 }
 
-function autoRegistration(auto: AutoRoutine) {
-  const start = auto.steps.find((step): step is DriveStep => step.type === "drive");
+/** The command expressions a step runs; `leadingStates` are requests made as this move starts (requests placed just before it). */
+function stepCommands(step: AutoStep, leadingStates: string[], names: PointNames): string[] {
+  switch (step.type) {
+    case "drive": {
+      // A pose linked to a named point uses its constant, unless the leg faces a point instead.
+      const linked = step.pointId ? names.get(step.pointId) : undefined;
+      const pose = linked && step.turn.mode !== "face" ? linked
+        : `new Pose2d(${javaDouble(step.x)}, ${javaDouble(step.y)}, Rotation2d.fromDegrees(${javaDouble(legEndHeading(step))}))`;
+      const facePoint = step.turn.mode === "face" ? (step.turn.pointId && names.get(step.turn.pointId)
+        ? `${names.get(step.turn.pointId)}.getTranslation()` : `new Translation2d(${javaDouble(step.turn.x)}, ${javaDouble(step.turn.y)})`) : null;
+      const turning = step.turn.mode === "later" ? `\n    .turningAfter(${javaDouble(step.turn.startProgress)})`
+        : facePoint ? `\n    .facing(${facePoint})` : "";
+      const turnRate = step.maxTurnRate !== null ? `\n    .withMaxTurnRate(Math.toRadians(${javaDouble(step.maxTurnRate)}))` : "";
+      const limits = `new DriveConstraints(${constraintKeys.map(key => javaDouble(step[key])).join(", ")})`;
+      const subpoints = [...leadingStates.map(state => ({ progress: 0, state })), ...orderedSubpoints(step)].map(subpoint =>
+        `\n    .atProgress(${javaDouble(subpoint.progress)}, () -> robot.requestState(RobotState.${subpoint.state}, OWNER))`).join("");
+      return [`new DriveToPose(robot.drivetrain, ${pose}, ${limits})${turning}${turnRate}${subpoints}`];
+    }
+    case "requestState":
+      return [`new RequestState(RobotState.${step.state}, OWNER, robot)`];
+    case "waitForState": {
+      const wait = `Commands.waitUntil(() -> robot.getActualState() == RobotState.${step.state})`;
+      return [`${wait}${step.timeoutSeconds === null ? "" : `.withTimeout(${javaDouble(step.timeoutSeconds)})`}`];
+    }
+    case "wait":
+      return [`Commands.waitSeconds(${javaDouble(step.seconds)})`];
+    case "branch": {
+      // Commands.either decides when the branch starts, after any wait for the condition.
+      const condition = conditionJava(step.condition);
+      const wait = branchWaitSeconds(step) > 0 ? [`Commands.waitUntil(() -> ${condition}).withTimeout(${javaDouble(branchWaitSeconds(step))})`] : [];
+      return [...wait, javaCall("Commands.either", [sequenceJava(step.then, names), sequenceJava(step.otherwise, names), `() -> ${condition}`])];
+    }
+  }
+}
+
+/** The commands a list of steps runs, with requests that run into a move attached to that move. */
+function listCommands(steps: AutoStep[], names: PointNames) {
+  const commands: string[] = [];
+  let leading: string[] = [];
+  steps.forEach((step, index) => {
+    if (requestJoinsNextMove(steps, index)) leading.push((step as RequestStateStep).state);
+    else {
+      commands.push(...stepCommands(step, step.type === "drive" ? leading : [], names));
+      leading = [];
+    }
+  });
+  return commands;
+}
+
+/** One side of a branch as a single command. */
+function sequenceJava(steps: AutoStep[], names: PointNames) {
+  const commands = listCommands(steps, names);
+  return commands.length === 0 ? "Commands.none()" : commands.length === 1 ? commands[0] : javaCall("Commands.sequence", commands);
+}
+
+const timesAuto = (auto: AutoRoutine) => allSteps(auto.steps).some(step => step.type === "branch" && step.condition.kind === "timeLeft");
+
+function autoRegistration(auto: AutoRoutine, names: PointNames) {
+  const start = routeSteps(auto.steps).find((step): step is DriveStep => step.type === "drive");
   const calls = [
     ...(auto.alliance ? [`.withAlliance(Alliance.${auto.alliance})`] : []),
+    // Branches on the time left count from when this auto starts.
+    ...(timesAuto(auto) ? [".addCommand(() -> Commands.runOnce(AUTO_TIMER::restart))"] : []),
     // Simulation has no vision, so the simulated robot starts at point 1 (the replay's start).
-    ...(start ? [`.addCommand(() -> startInSimulation(robot, new Pose2d(${javaDouble(start.x)}, ${javaDouble(start.y)}, Rotation2d.fromDegrees(${javaDouble(start.heading)}))))`] : []),
-    ...auto.steps.map(stepCall),
+    ...(start ? [`.addCommand(() -> startInSimulation(robot, new Pose2d(${javaDouble(start.x)}, ${javaDouble(start.y)}, Rotation2d.fromDegrees(${javaDouble(legEndHeading(start))}))))`] : []),
+    ...listCommands(auto.steps, names).map(command => `.addCommand(() -> ${indent(command, 8)})`),
     ...(auto.clearRequestsAtEnd && requestsStates(auto)
       ? [".addCommand(() -> Commands.runOnce(() -> robot.clearRequest(OWNER), robot))"] : [])
   ];
@@ -327,19 +760,27 @@ function autoRegistration(auto: AutoRoutine) {
 /** Generates GeneratedAutos.java. Callers must validate first; invalid documents throw. */
 export function generateAutosJava(document: AutoDocument, project: AutoProject) {
   if (hasErrors(validateAutos(document, project))) throw new Error("Fix the auto errors before updating code.");
+  // Only named points that generated autos use become constants (mirrored copies use plain poses).
+  const usedPoints = new Set(document.autos.flatMap(auto => allSteps(auto.steps).flatMap(step => step.type !== "drive" ? []
+    : [step.pointId, step.turn.mode === "face" ? step.turn.pointId : null].filter((id): id is string => id !== null))));
+  const points = document.points.filter(point => usedPoints.has(point.id));
+  const names = pointConstantNames(points);
+  const constants = points.map(point => `  private static final Pose2d ${names.get(point.id)} = new Pose2d(${javaDouble(point.x)}, ${javaDouble(point.y)}, Rotation2d.fromDegrees(${javaDouble(point.heading)}));`);
   const autos = document.autos.flatMap(auto => {
     const mirror = mirroredAuto(auto, project.field);
-    return mirror ? [autoRegistration(auto), autoRegistration(mirror)] : [autoRegistration(auto)];
+    return mirror ? [autoRegistration(auto, names), autoRegistration(mirror, names)] : [autoRegistration(auto, names)];
   });
+  const translationImport = autos.some(source => source.includes("new Translation2d(")) ? "\nimport edu.wpi.first.math.geometry.Translation2d;" : "";
+  const timed = document.autos.some(timesAuto);
   return `${generatedAutosHeader}
 // Power Tool writes this file from power-tool/generated/powerlib-autos.json.
 // Edit autos in the Power Tool Auto Builder; hand-written autos belong in RobotAutos.java.
 package frc.robot.autos;
 
 import edu.wpi.first.math.geometry.Pose2d;
-import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.geometry.Rotation2d;${translationImport}
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
-import edu.wpi.first.wpilibj.RobotBase;
+import edu.wpi.first.wpilibj.RobotBase;${timed ? "\nimport edu.wpi.first.wpilibj.Timer;" : ""}
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
 import frc.powerlib.auto.Auto;
@@ -353,8 +794,10 @@ import frc.robot.subsystems.StateMachine.RobotState;
 /** Autos built in the Power Tool Auto Builder. */
 public final class ${generatedAutosClass} {
   /** Owns the state requests made by generated autos. */
-  private static final Object OWNER = new Object();
-
+  private static final Object OWNER = new Object();${timed ? `
+  /** Restarted by each generated auto that branches on the time left. */
+  private static final Timer AUTO_TIMER = new Timer();` : ""}
+${constants.length ? `\n  // Named points from the Auto Builder; moving one there moves it in every auto.\n${constants.join("\n")}\n` : ""}
   private ${generatedAutosClass}() {}
 
   /** In simulation only, puts the robot at the auto's first point; a real robot keeps its vision pose. */
@@ -363,7 +806,12 @@ public final class ${generatedAutosClass} {
       if (RobotBase.isSimulation()) robot.drivetrain.resetPose(start);
     });
   }
-
+${timed ? `
+  /** Seconds left in the ${document.periodSeconds} s autonomous period, counted from when the running auto started. */
+  private static double secondsLeft() {
+    return ${javaDouble(document.periodSeconds)} - AUTO_TIMER.get();
+  }
+` : ""}
   public static void register(AutoBuilder autoBuilder, StateMachine robot) {
 ${autos.length ? autos.join("\n\n") : "    // No autos yet. Build one in the Power Tool Auto Builder."}
   }

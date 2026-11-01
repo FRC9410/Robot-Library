@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import type { AutoRoutine, DriveStep } from "./autoModel";
-import { normalizeHeading, round } from "./autoModel";
+import type { ActualPoint } from "./autoActual";
+import type { AutoRoutine, DriveStep, NamedPoint } from "./autoModel";
+import { legEndHeading, normalizeHeading, round } from "./autoModel";
 import type { Replay } from "./autoReplay";
 import { frameAt, legProgress, loopPeriodSeconds } from "./autoReplay";
 import { snapHeading, snapPosition } from "./autoSnap";
@@ -25,7 +26,8 @@ type Drag =
   | { kind: "surface"; clientX: number; clientY: number; start: Point; additive: boolean; moved: boolean }
   | { kind: "move"; stepId: string; ids: string[]; origins: Map<string, Point>; grab: Point; clientX: number; clientY: number; moved: boolean; reselect: boolean }
   | { kind: "rotate"; stepId: string; clientX: number; clientY: number; moved: boolean }
-  | { kind: "subpoint"; stepId: string; subpointId: string; clientX: number; clientY: number; moved: boolean };
+  | { kind: "subpoint"; stepId: string; subpointId: string; clientX: number; clientY: number; moved: boolean }
+  | { kind: "face"; stepId: string; clientX: number; clientY: number; moved: boolean };
 
 type Overlay = { guides: SnapGuide[]; marquee?: { a: Point; b: Point }; note?: { at: Point; text: string }; hint?: string };
 
@@ -48,6 +50,32 @@ type AutoFieldProps = {
   onChangeSubpoint?: (stepId: string, subpointId: string, progress: number) => void;
   /** While replaying, every waypoint stays soft so the moving robot stands out. */
   replaying?: boolean;
+  /** Named points; the ones this auto doesn't use show as pins that add a linked step. */
+  points?: NamedPoint[];
+  onAddFromPoint?: (pointId: string) => void;
+  /** Moves the point a leg faces; `pointId` is set when it snapped onto a named point. */
+  onChangeFace?: (stepId: string, x: number, y: number, pointId: string | null) => void;
+  /** Where the robot actually went the last time it ran this auto. */
+  actual?: ActualPoint[];
+  /** Point numbers by step id, counted over every drive step (both sides of each branch); route order when missing. */
+  driveNumbers?: Map<string, number>;
+  /** The sides of branches the field isn't showing, drawn faintly; click one of their points to show that side. */
+  ghosts?: GhostRoute[];
+  /** Camera coverage at the pose being shown; left out when the tag view is off. */
+  vision?: VisionOverlay;
+};
+
+/** The other side of a branch: from the point before it, through its points, to the point after the branch. */
+export type GhostRoute = { from: Point | null; points: { stepId: string; x: number; y: number }[]; to: Point | null };
+
+/**
+ * What each camera covers at one moment: a wedge for its field of view, and a line to every tag it
+ * can use there. The wedge is the raw field of view, so a tag inside it with no line is one the
+ * field blocks, is too far, or is turned too far away.
+ */
+export type VisionOverlay = {
+  cones: { id: string; name: string; color: string; x: number; y: number; yaw: number; hFov: number; range: number }[];
+  lines: { key: string; color: string; from: Point; to: Point; title: string }[];
 };
 
 /**
@@ -57,7 +85,8 @@ type AutoFieldProps = {
  * headings. Hold Ctrl to place freely; Shift-click toggles selection.
  */
 export function AutoField({ auto, field, layout, robot, stateColor, selectedStepIds, replay, pose,
-  onSelectSteps, onAddPoint, onMovePoints, onChangeHeading, onChangeSubpoint, replaying = false }: AutoFieldProps) {
+  onSelectSteps, onAddPoint, onMovePoints, onChangeHeading, onChangeSubpoint, replaying = false,
+  points = [], onAddFromPoint, onChangeFace, actual, driveNumbers, ghosts = [], vision }: AutoFieldProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<Drag | null>(null);
   const [overlay, setOverlay] = useState<Overlay | null>(null);
@@ -153,6 +182,12 @@ export function AutoField({ auto, field, layout, robot, stateColor, selectedStep
       onChangeHeading(step.id, normalizeHeading(heading));
       setOverlay({ guides: [], note: { at: point, text: label ?? `${normalizeHeading(heading)}°` },
         hint: snapping ? "Ctrl: rotate freely · Shift: 15° steps" : "Snapping off" });
+    } else if (drag.kind === "face") {
+      // Dropping the face point near a named point links to it, such as the hub.
+      const near = snapping ? points.find(named => Math.hypot(named.x - point.x, named.y - point.y) <= snapPixels * metersPerPixel()) : undefined;
+      onChangeFace?.(drag.stepId, near ? near.x : round(clampX(point.x)), near ? near.y : round(clampY(point.y)), near?.id ?? null);
+      setOverlay({ guides: [], note: near ? { at: { x: near.x, y: near.y }, text: `Face ${near.name}` } : undefined,
+        hint: snapping ? "Drop on a named point to face it" : "Snapping off" });
     } else if (drag.kind === "subpoint") {
       // Subpoints slide along the planned straight line from the previous point.
       const index = drives.findIndex(drive => drive.step.id === drag.stepId);
@@ -281,6 +316,21 @@ export function AutoField({ auto, field, layout, robot, stateColor, selectedStep
         <path d={`M ${viewWidth / 2} 0 V ${viewHeight}`} stroke="#698191" strokeDasharray="10 9" pointerEvents="none" />
       </>}
 
+      {/* What the cameras cover, under the route so it never hides the path. */}
+      {vision && <g className="ab-vision" pointerEvents="none">
+        {vision.cones.map(cone => {
+          const half = cone.hFov / 2 * Math.PI / 180, aim = cone.yaw * Math.PI / 180;
+          const edge = (sign: number) => `${px(cone.x + Math.cos(aim + sign * half) * cone.range)},${py(cone.y + Math.sin(aim + sign * half) * cone.range)}`;
+          // Large-arc is never needed: a field of view at or past 180° isn't a lens this model describes.
+          return <path key={cone.id} fill={cone.color} fillOpacity=".07" stroke={cone.color} strokeOpacity=".3" strokeWidth="1"
+            d={`M ${px(cone.x)},${py(cone.y)} L ${edge(1)} A ${cone.range * scale} ${cone.range * scale} 0 0 1 ${edge(-1)} Z`}>
+            <title>{`${cone.name}: ${cone.hFov}° wide, out to ${cone.range.toFixed(1)} m`}</title>
+          </path>;
+        })}
+        {vision.lines.map(line => <line key={line.key} x1={px(line.from.x)} y1={py(line.from.y)} x2={px(line.to.x)} y2={py(line.to.y)}
+          stroke={line.color} strokeOpacity=".85" strokeWidth="1.4"><title>{line.title}</title></line>)}
+      </g>}
+
       <g pointerEvents="none">
         {/* Straight lines to each target, under the route the robot actually takes. */}
         {drives.slice(1).map((drive, index) => <line key={drive.step.id} x1={px(drives[index].step.x)} y1={py(drives[index].step.y)}
@@ -291,6 +341,36 @@ export function AutoField({ auto, field, layout, robot, stateColor, selectedStep
         {route.arrows.map((arrow, index) => <path key={index} transform={`translate(${arrow.x} ${arrow.y}) rotate(${arrow.angle})`}
           d="M -5 -5 L 3 0 L -5 5" fill="none" stroke={arrow.color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />)}
       </g>
+
+      {/* The sides of branches not shown, faint and dotted, rejoining the route after the branch. */}
+      {ghosts.map((ghost, index) => {
+        const line = [...(ghost.from ? [ghost.from] : []), ...ghost.points, ...(ghost.to ? [ghost.to] : [])];
+        return <g key={index} className="ab-ghost">
+          {line.length > 1 && <polyline points={line.map(point => `${px(point.x)},${py(point.y)}`).join(" ")} fill="none" stroke="#c4b5fd"
+            strokeOpacity=".45" strokeWidth="1.6" strokeDasharray="2 6" strokeLinecap="round" pointerEvents="none" />}
+          {ghost.points.map(point => <circle key={point.stepId} cx={px(point.x)} cy={py(point.y)} r="6" fill="#0b1220" stroke="#c4b5fd" strokeOpacity=".7" strokeWidth="1.6"
+            onPointerDown={event => { event.stopPropagation(); if (event.button === 0) onSelectSteps([point.stepId], "replace"); }}>
+            <title>{`Point ${driveNumbers?.get(point.stepId) ?? ""} on the other side of a branch. Click to show that side.`}</title>
+          </circle>)}
+        </g>;
+      })}
+
+      {/* Where the robot actually went last time, over the ideal route. */}
+      {actual && actual.length > 1 && <g pointerEvents="none" className="ab-actual">
+        <polyline points={actual.map(point => `${px(point.x)},${py(point.y)}`).join(" ")} fill="none" stroke="#f8fafc" strokeOpacity=".85"
+          strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx={px(actual[actual.length - 1].x)} cy={py(actual[actual.length - 1].y)} r="5" fill="none" stroke="#f8fafc" strokeWidth="1.8" />
+      </g>}
+
+      {/* Named points this auto doesn't use; click one to drive there. */}
+      {points.filter(point => !drives.some(({ step }) => step.pointId === point.id)).map(point =>
+        <g key={point.id} className="ab-pin" transform={`translate(${px(point.x)} ${py(point.y)})`}
+          onPointerDown={event => { event.stopPropagation(); if (event.button === 0) onAddFromPoint?.(point.id); }}>
+          <circle r="6" fill="#0b1220" stroke="#c084fc" strokeWidth="2" />
+          <circle r="2" fill="#c084fc" />
+          <text className="ab-pin-label" y="-10" textAnchor="middle">{point.name}</text>
+          <title>{`${point.name}: click to add a drive step here, linked to this point`}</title>
+        </g>)}
 
       {subpointMarks.map(mark => <g key={mark.subpointId} className="ab-subpoint" transform={`translate(${mark.x} ${mark.y})`}
         onPointerDown={event => {
@@ -310,10 +390,21 @@ export function AutoField({ auto, field, layout, robot, stateColor, selectedStep
           : next ? Math.atan2(next.y - step.y, next.x - step.x) * 180 / Math.PI : step.heading;
         const stroke = isSelected ? selectedColor : nodeColor;
         const center = index === 0 ? "#4ade80" : index === drives.length - 1 ? "#f87171" : null;
+        const heading = legEndHeading(step);
+        const facing = step.turn.mode === "face" ? step.turn : null;
+        const linkedName = step.pointId ? points.find(point => point.id === step.pointId)?.name : undefined;
         return <g key={step.id} className={`ab-node${isSelected ? " selected" : ""}`} transform={`translate(${px(step.x)} ${py(step.y)})`}>
-          <g transform={`rotate(${-step.heading})`} onPointerDown={event => { if (event.button === 0) startMove(event, step); }}>
-            {robotShape(step, travel, stroke, isSelected ? "rgba(250, 204, 21, 0.14)" : "rgba(11, 18, 32, 0.55)", center)}
-            <g className="ab-node-handle" onPointerDown={event => {
+          {facing && isSelected && <g className="ab-face" transform={`translate(${px(facing.x) - px(step.x)} ${py(facing.y) - py(step.y)})`}
+            onPointerDown={event => { if (event.button === 0) begin(event, { kind: "face", stepId: step.id, clientX: event.clientX, clientY: event.clientY, moved: false }); }}>
+            <line x1={px(step.x) - px(facing.x)} y1={py(step.y) - py(facing.y)} x2="0" y2="0" stroke={selectedColor} strokeWidth="1.2" strokeDasharray="3 4" pointerEvents="none" />
+            <circle r="9" fill="rgba(11, 18, 32, 0.6)" stroke={selectedColor} strokeWidth="1.8" />
+            <path d="M -13 0 H -4 M 4 0 H 13 M 0 -13 V -4 M 0 4 V 13" stroke={selectedColor} strokeWidth="1.8" strokeLinecap="round" />
+            <circle r="15" fill="transparent" />
+            <title>The point this leg faces. Drag it; drop it on a named point to link them.</title>
+          </g>}
+          <g transform={`rotate(${-heading})`} onPointerDown={event => { if (event.button === 0) startMove(event, step); }}>
+            {robotShape({ ...step, heading }, travel, stroke, isSelected ? "rgba(250, 204, 21, 0.14)" : "rgba(11, 18, 32, 0.55)", center)}
+            {!facing && <g className="ab-node-handle" onPointerDown={event => {
               if (event.button !== 0) return;
               if (!isSelected) onSelectSteps([step.id], "replace");
               begin(event, { kind: "rotate", stepId: step.id, clientX: event.clientX, clientY: event.clientY, moved: false });
@@ -322,9 +413,10 @@ export function AutoField({ auto, field, layout, robot, stateColor, selectedStep
               <circle cx={handleDistance} cy="0" r="5.5" fill="#f8fafc" stroke="#0b1220" strokeWidth="1.5" />
               <circle cx={handleDistance} cy="0" r="12" fill="transparent" />
               <title>Drag to aim. Snaps to 45° and nearby headings; Shift for 15° steps, Ctrl to turn freely.</title>
-            </g>
+            </g>}
           </g>
-          <text className="ab-node-label" x={-robot.length * scale / 2 - 3} y={-robot.width * scale / 2 - 4}>{index + 1}</text>
+          <text className="ab-node-label" x={-robot.length * scale / 2 - 3} y={-robot.width * scale / 2 - 4}>{driveNumbers?.get(step.id) ?? index + 1}</text>
+          {linkedName && <text className="ab-node-link" x={0} y={robot.width * scale / 2 + 14} textAnchor="middle">{linkedName}</text>}
         </g>;
       })}
 

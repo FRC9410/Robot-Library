@@ -124,6 +124,47 @@
   font-size: 12px;
 }
 
+/* Named points, below the autos */
+.ab-points {
+  margin: 4px 6px 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(250, 204, 21, 0.12);
+}
+
+.ab-point {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 8px;
+  border-radius: 6px;
+}
+
+.ab-point:hover { background: rgba(255, 255, 255, 0.04); }
+
+.ab-point-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #c084fc;
+  border-radius: 50%;
+}
+
+.ab-point-name {
+  width: 100%;
+  padding: 1px 2px;
+  margin-left: -2px;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  outline: none;
+}
+
+.ab-point-name:hover { border-color: rgba(255, 255, 255, 0.12); }
+.ab-point-name:focus { border-color: #c084fc; background: rgba(0, 0, 0, 0.25); }
+
 /* Center column */
 .ab-main {
   display: flex;
@@ -246,6 +287,54 @@
   border: 1.5px solid #0f0f12;
   transform: rotate(45deg);
   pointer-events: auto;
+}
+
+/* AprilTag coverage along the route, under the timeline and on the same scale. */
+.ab-vision-strip {
+  position: relative;
+  height: 5px;
+  margin-top: 2px;
+  border-radius: 3px;
+  background: #27272a;
+  overflow: hidden;
+}
+
+.ab-vision-span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 1px;
+}
+
+.ab-vision-span.blind {
+  background-image: repeating-linear-gradient(135deg, rgba(0, 0, 0, .45) 0 3px, transparent 3px 6px);
+}
+
+/* A camera's color in the Cameras dialog, matching the field overlay. */
+.ab-camera {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(250, 204, 21, 0.12);
+  border-radius: 8px;
+}
+
+.ab-camera-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Where the robot's drivetrain falls behind the ideal replay. */
+.ab-timeline-strain {
+  position: absolute;
+  bottom: 1px;
+  height: 3px;
+  min-width: 2px;
+  border-radius: 2px;
+  background: #fb923c;
 }
 
 .ab-timeline-limit {
@@ -396,3 +485,38 @@
 .ab-step[draggable="true"] { cursor: grab; }
 .ab-step.drop-above { box-shadow: 0 -3px 0 #facc15; }
 .ab-step.drop-below { box-shadow: 0 3px 0 #facc15; }
+
+/* Branches: each side's steps sit indented under its label; the side the field isn't showing is dimmed. */
+.ab-step.nested { margin-left: 22px; }
+.ab-step.branch { border-left-color: #a78bfa; }
+.ab-step.branch .ab-step-icon { color: #a78bfa; }
+.ab-step.off-route { opacity: 0.5; }
+.ab-step.off-route:hover,
+.ab-step.off-route.selected { opacity: 0.85; }
+
+.ab-arm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  margin: 0 0 4px 22px;
+  padding: 0 2px 0 8px;
+  border-left: 2px solid #a78bfa;
+  border-radius: 0 6px 6px 0;
+  color: #c4b5fd;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.ab-arm:hover { background: rgba(167, 139, 250, 0.08); }
+.ab-arm.off-route { border-left-color: #52525b; color: #71717a; }
+.ab-arm-empty { flex: 1; color: #71717a; font-weight: 400; letter-spacing: 0; text-transform: none; }
+.ab-arm .MuiIconButton-root { margin-left: auto; color: inherit; }
+.ab-arm.drop-into { box-shadow: inset 0 0 0 2px #facc15; }
+
+/* Room below the last step to drop at the end of the auto. */
+.ab-steps-end { height: 10px; }
+.ab-steps-end.drop-here { box-shadow: 0 -3px 0 #facc15; }

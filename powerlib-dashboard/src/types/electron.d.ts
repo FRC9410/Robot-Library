@@ -1,4 +1,5 @@
 import type { ConstantRow, ConstantsFile } from "../features/constants/types";
+import type { DrivetrainConstants } from "../features/autos/autoLimits";
 export {};
 
 type AutoFilesState = {
@@ -8,7 +9,11 @@ type AutoFilesState = {
   driveCommandInstalled: boolean;
   robotAutosHooked: boolean | null;
   robotAutosStrings: string[];
+  checks: string[];
+  generatedSource: string | null;
   robot: { width: number; length: number };
+  drivetrain?: DrivetrainConstants | null;
+  vision?: { basePositionStdDev: number; maxTagDistance: number; cameraNames: string[] } | null;
   error?: string;
 };
 

@@ -2,6 +2,7 @@
 import { template } from "../drive/driveModel";
 import { fieldLayouts, getFieldLayoutId } from "../field/fieldLayouts";
 import { generateAutosJava, hasErrors, parseAutoDocument, validateAutos } from "./autoModel";
+import type { AutoProject } from "./autoModel";
 
 /** The field the Auto Builder uses: the View → Field Layout choice, else the Drive crew tools size. */
 export function autoFieldSize() {
@@ -17,6 +18,12 @@ export function autoFieldSize() {
   }
 }
 
+/** What the generator needs to know about the robot project, from what Power Tool read from it. */
+export function autoProject(state: { states: string[]; driveCommandInstalled: boolean | null; robotAutosStrings?: string[]; checks?: string[] },
+  field = autoFieldSize()): AutoProject {
+  return { states: state.states, driveCommandInstalled: state.driveCommandInstalled, field, handWrittenNames: state.robotAutosStrings ?? [], checks: state.checks };
+}
+
 // The Auto Builder autosaves after a short pause; Update Code flushes it first.
 let pendingSave: (() => Promise<void>) | null = null;
 export function setPendingAutoSave(flush: (() => Promise<void>) | null) { pendingSave = flush; }
@@ -29,8 +36,7 @@ export async function writeGeneratedAutos(): Promise<string | null> {
   const state = await api.readAutos();
   const document = parseAutoDocument(state.document);
   if (!document.autos.length && state.robotAutosHooked !== false) return null;
-  const project = { states: state.states, driveCommandInstalled: state.driveCommandInstalled, field: autoFieldSize(),
-    handWrittenNames: state.robotAutosStrings };
+  const project = autoProject(state);
   const issues = validateAutos(document, project);
   if (hasErrors(issues)) {
     const first = issues.find(issue => issue.severity === "error")!;

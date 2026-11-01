@@ -11,7 +11,7 @@ export const autoShortcuts: { group: string; keys: string[]; action: string }[] 
   { group: "Selecting", keys: ["Ctrl+A"], action: "Select every step in the auto" },
   { group: "Selecting", keys: ["[", "]"], action: "Select the previous or next step" },
   { group: "Selecting", keys: ["Esc"], action: "Clear the selection" },
-  { group: "Steps", keys: ["1", "2", "3", "4"], action: "Add drive, request state, wait for state, or wait after the selection" },
+  { group: "Steps", keys: ["1", "2", "3", "4", "5"], action: "Add drive, request state, wait for state, wait, or branch after the selection" },
   { group: "Steps", keys: ["Ctrl+C", "Ctrl+V"], action: "Copy the selected steps; paste them after the selection, in any auto" },
   { group: "Steps", keys: ["Ctrl+D"], action: "Duplicate the selected steps" },
   { group: "Steps", keys: ["Delete"], action: "Delete the selected steps" },

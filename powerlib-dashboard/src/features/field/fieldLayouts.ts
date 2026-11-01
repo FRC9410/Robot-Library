@@ -11,10 +11,11 @@ type WpilibField = {
   name: string;
   "field-image": { top: number; left: number; bottom: number; right: number };
   "field-dimensions": { length: number; width: number };
-  "field-tags": { ID: number; pose: { translation: { x: number; y: number }; rotation: { quaternion: { W: number; X: number; Y: number; Z: number } } } }[];
+  "field-tags": { ID: number; pose: { translation: { x: number; y: number; z: number }; rotation: { quaternion: { W: number; X: number; Y: number; Z: number } } } }[];
 };
 
-export type FieldTag = { id: number; x: number; y: number; yaw: number };
+/** `z` is the height of the tag's center and `yaw` the direction its face looks; every 2026 tag is vertical. */
+export type FieldTag = { id: number; x: number; y: number; z: number; yaw: number };
 export type FieldLayout = {
   id: string;
   label: string;
@@ -41,6 +42,7 @@ function layout(id: string, label: string, field: WpilibField, backdrop: Pick<Fi
       id: ID,
       x: translation.x,
       y: translation.y,
+      z: translation.z,
       yaw: Math.atan2(2 * (q.W * q.Z + q.X * q.Y), 1 - 2 * (q.Y * q.Y + q.Z * q.Z)) * 180 / Math.PI
     }))
   };

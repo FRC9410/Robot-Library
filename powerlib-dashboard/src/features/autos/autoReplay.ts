@@ -1,17 +1,28 @@
 // Ideal-motion replay of an auto: the robot moves exactly as commanded, using the same math as
 // frc.powerlib.auto.DriveToPoseController. Keep the two in sync.
-import type { AutoRoutine, AutoStep, LegConstraints } from "./autoModel";
-import { legConstraints, normalizeHeading, orderedSubpoints, requestsStates } from "./autoModel";
+import type { AutoRoutine, AutoStep, BranchChoices, LegConstraints } from "./autoModel";
+import { branchWaitSeconds, defaultTurnRate, joiningRequests, legConstraints, legEndHeading, normalizeHeading, orderedSubpoints, requestsStates, routeSteps } from "./autoModel";
 
 export const loopPeriodSeconds = 0.02;
 export const positionGain = 4.0;
 /** Matches the default SwerveConstants.DRIVE_TO_POINT_MAX_ANGULAR_RATE_RADIANS_PER_SECOND (π rad/s). */
-export const replayTurnRateDegreesPerSecond = 180;
+export const replayTurnRateDegreesPerSecond = defaultTurnRate;
 /** A leg that has not finished after this long is reported and the replay moves on. */
 export const legTimeoutSeconds = 10;
 
 type Vector = { x: number; y: number };
-export type ReplayFrame = { t: number; x: number; y: number; heading: number; speed: number; stepIndex: number };
+/** What held the robot back in a cycle: its top speed, its acceleration, or wheel speed used up by turning. */
+export type RobotLimit = "speed" | "acceleration" | "turn";
+/**
+ * A drivetrain that can't always do what it is commanded (see autoLimits.ts). Given the commanded
+ * velocity, the velocity it has now, its heading and the turn rate it is asked for (degrees per
+ * second), it returns the velocity and turn rate it actually reaches this cycle.
+ */
+export type RobotModel = {
+  follow: (command: Vector, actual: Vector, heading: number, turnRate: number) => { velocity: Vector; turnRate: number; limit: RobotLimit | null };
+};
+/** `limit` is set when a robot model held the robot back in that cycle. */
+export type ReplayFrame = { t: number; x: number; y: number; heading: number; speed: number; stepIndex: number; limit?: RobotLimit };
 export type ReplaySegment = { stepId: string; stepIndex: number; type: AutoStep["type"] | "clearRequests"; start: number; end: number; state: string | null };
 /** When the requested state changes; subpointId is set for requests made during a drive leg. */
 export type StateChange = { t: number; state: string | null; stepId: string; subpointId?: string };
@@ -45,15 +56,21 @@ export function legAtGoal(position: Vector, velocity: Vector, target: Vector, li
     && length(velocity) <= limits.endVelocityTolerance;
 }
 
-/** Runs one leg with ideal tracking, the same loop as DriveToPoseControllerTest. */
+/**
+ * Runs one leg, the same loop as DriveToPoseControllerTest. With ideal tracking the robot moves at
+ * the commanded velocity; `follow` instead gives the velocity a real drivetrain reaches.
+ */
 export function simulateLeg(start: Vector, velocity: Vector, target: Vector, limits: LegConstraints,
-  onCycle?: (position: Vector, velocity: Vector) => void) {
+  onCycle?: (position: Vector, velocity: Vector) => void, follow?: (command: Vector, actual: Vector) => Vector) {
   let position = start;
+  // Like DriveToPoseController.reset(): the command starts from the measured velocity.
+  let command = velocity;
   let cycles = 0;
   const maxCycles = Math.round(legTimeoutSeconds / loopPeriodSeconds);
   while (!legAtGoal(position, velocity, target, limits)) {
     if (cycles >= maxCycles) return { position, velocity, cycles, finished: false };
-    velocity = legCommand(position, target, velocity, limits);
+    command = legCommand(position, target, command, limits);
+    velocity = follow ? follow(command, velocity) : command;
     position = { x: position.x + velocity.x * loopPeriodSeconds, y: position.y + velocity.y * loopPeriodSeconds };
     cycles++;
     onCycle?.(position, velocity);
@@ -61,40 +78,74 @@ export function simulateLeg(start: Vector, velocity: Vector, target: Vector, lim
   return { position, velocity, cycles, finished: true };
 }
 
-function turnToward(heading: number, target: number) {
-  const step = replayTurnRateDegreesPerSecond * loopPeriodSeconds;
+function turnToward(heading: number, target: number, degreesPerSecond: number) {
+  const step = degreesPerSecond * loopPeriodSeconds;
   const error = normalizeHeading(target - heading);
   return Math.abs(error) <= step ? target : normalizeHeading(heading + Math.sign(error) * step);
 }
 
+/** The signed turn rate (degrees per second) turnToward uses this cycle. */
+function turnRateToward(heading: number, target: number, degreesPerSecond: number) {
+  const error = normalizeHeading(target - heading);
+  return Math.sign(error) * Math.min(degreesPerSecond, Math.abs(error) / loopPeriodSeconds);
+}
+
 /**
- * Replays the auto from its first drive point. Every command takes at least one robot cycle;
- * consecutive drive legs carry velocity, while any other step leaves the robot stopped.
+ * Replays the auto from its first drive point, taking the side of each branch that `choices`
+ * picks (Then by default). Every command takes at least one robot cycle; consecutive drive legs
+ * carry velocity, and so do state requests between them (they join the next move) and branches
+ * that go straight into a move; waits leave the robot stopped. With a `robot` model, drive legs
+ * move as that drivetrain can instead of exactly as commanded.
  */
-export function replayAuto(auto: AutoRoutine): Replay {
+export function replayAuto(auto: AutoRoutine, choices: BranchChoices = {}, robot?: RobotModel): Replay {
   const frames: ReplayFrame[] = [];
   const segments: ReplaySegment[] = [];
   const stateChanges: StateChange[] = [];
   const unfinishedStepIds: string[] = [];
-  const first = auto.steps.find(step => step.type === "drive");
+  const steps = routeSteps(auto.steps, choices);
+  const joins = joiningRequests(auto.steps);
+  // Commands.either starts its side the moment it starts, so a branch that doesn't wait first and
+  // has steps on the taken side takes no time of its own.
+  const passesThrough = (step: AutoStep | undefined) => step?.type === "branch" && branchWaitSeconds(step) === 0
+    && step[choices[step.id] ?? "then"].length > 0;
+  const nextCommand = (index: number) => {
+    let next = index + 1;
+    while (passesThrough(steps[next])) next++;
+    return steps[next];
+  };
+  const first = steps.find(step => step.type === "drive");
   if (!first) return { frames, segments, stateChanges, duration: 0, unfinishedStepIds };
   let position: Vector = { x: first.x, y: first.y };
   let velocity: Vector = { x: 0, y: 0 };
-  let heading = first.heading;
+  let heading = legEndHeading(first);
   let targetHeading = heading;
+  let turnRate = replayTurnRateDegreesPerSecond;
   let t = 0;
   let state: string | null = null;
-  const record = (stepIndex: number) => frames.push({ t, x: position.x, y: position.y, heading, speed: length(velocity), stepIndex });
+  const record = (stepIndex: number, limit?: RobotLimit | null) =>
+    frames.push({ t, x: position.x, y: position.y, heading, speed: length(velocity), stepIndex, ...(limit ? { limit } : {}) });
   const hold = (stepIndex: number, seconds: number) => {
     const cycles = Math.max(1, Math.round(seconds / loopPeriodSeconds));
-    for (let i = 0; i < cycles; i++) { t += loopPeriodSeconds; heading = turnToward(heading, targetHeading); record(stepIndex); }
+    for (let i = 0; i < cycles; i++) { t += loopPeriodSeconds; heading = turnToward(heading, targetHeading, turnRate); record(stepIndex); }
   };
   record(0);
 
-  auto.steps.forEach((step, stepIndex) => {
+  steps.forEach((step, stepIndex) => {
     const start = t;
     if (step.type === "drive") {
-      targetHeading = step.heading;
+      turnRate = step.maxTurnRate ?? replayTurnRateDegreesPerSecond;
+      // The heading to hold, like LegHeading.target(): face the point, or wait for the turn to start.
+      const legStartHeading = heading;
+      let facing: number | null = null;
+      const desiredHeading = (progress: number) => {
+        if (step.turn.mode === "face") {
+          const dx = step.turn.x - position.x;
+          const dy = step.turn.y - position.y;
+          if (Math.hypot(dx, dy) > 1e-3) facing = Math.atan2(dy, dx) * 180 / Math.PI;
+          return facing ?? step.heading;
+        }
+        return step.turn.mode === "later" && progress < step.turn.startProgress ? legStartHeading : step.heading;
+      };
       // Subpoints run like DriveToPose: once progress reaches them, and any left when the leg ends.
       const legStart = position;
       const subpoints = orderedSubpoints(step);
@@ -107,18 +158,41 @@ export function replayAuto(auto: AutoRoutine): Replay {
         }
       };
       runSubpoints(legProgress(legStart, position, step));
+      targetHeading = desiredHeading(legProgress(legStart, position, step));
+      // A robot model turns at the rate it can manage this cycle, toward last cycle's target heading.
+      let followed: ReturnType<RobotModel["follow"]> | null = null;
+      const follow = robot && ((command: Vector, actual: Vector) => {
+        followed = robot.follow(command, actual, heading, turnRateToward(heading, targetHeading, turnRate));
+        return followed.velocity;
+      });
       const result = simulateLeg(position, velocity, step, legConstraints(step), (next, nextVelocity) => {
         position = next;
         velocity = nextVelocity;
         t += loopPeriodSeconds;
-        heading = turnToward(heading, targetHeading);
-        record(stepIndex);
+        const turned: ReturnType<RobotModel["follow"]> | null = followed;
+        if (turned) heading = normalizeHeading(heading + turned.turnRate * loopPeriodSeconds);
+        targetHeading = desiredHeading(legProgress(legStart, position, step));
+        if (!turned) heading = turnToward(heading, targetHeading, turnRate);
+        record(stepIndex, turned?.limit);
         runSubpoints(legProgress(legStart, position, step));
-      });
+      }, follow);
       if (!result.finished) unfinishedStepIds.push(step.id);
       if (result.cycles === 0) hold(stepIndex, 0);
       if (result.finished) runSubpoints(1);
-      if (auto.steps[stepIndex + 1]?.type !== "drive") velocity = { x: 0, y: 0 };
+      // Motion carries into the next move, including across requests that join it.
+      const next = nextCommand(stepIndex);
+      if (next?.type !== "drive" && !(next && joins.has(next.id))) velocity = { x: 0, y: 0 };
+    } else if (step.type === "branch") {
+      if (!passesThrough(step)) {
+        // Waiting for the condition: the replay assumes it is already true on the Then side and
+        // never comes on the Otherwise side. An empty side still takes a cycle.
+        velocity = { x: 0, y: 0 };
+        hold(stepIndex, (choices[step.id] ?? "then") === "otherwise" ? branchWaitSeconds(step) : 0);
+      }
+    } else if (joins.has(step.id)) {
+      // Made as the next move starts (DriveToPose.atProgress(0)), so no cycle passes and the robot keeps moving.
+      state = (step as Extract<AutoStep, { type: "requestState" }>).state;
+      stateChanges.push({ t, state, stepId: step.id });
     } else {
       velocity = { x: 0, y: 0 };
       if (step.type === "requestState") {
@@ -134,8 +208,8 @@ export function replayAuto(auto: AutoRoutine): Replay {
   if (auto.clearRequestsAtEnd && requestsStates(auto)) {
     const start = t;
     stateChanges.push({ t, state: null, stepId: "clear" });
-    hold(auto.steps.length - 1, 0);
-    segments.push({ stepId: "clear", stepIndex: auto.steps.length, type: "clearRequests", start, end: t, state: null });
+    hold(steps.length - 1, 0);
+    segments.push({ stepId: "clear", stepIndex: steps.length, type: "clearRequests", start, end: t, state: null });
   }
   return { frames, segments, stateChanges, duration: t, unfinishedStepIds };
 }
