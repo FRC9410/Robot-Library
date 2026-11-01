@@ -28,7 +28,7 @@ try {
     $installLog = Join-Path $fixture 'install.log'
     & $GradleExecutable --offline --no-daemon --console=plain -g (Join-Path $root 'build/validation-gradle-cache') -I (Join-Path $root 'install.gradle') robotLibraryInstall -PpowerlibInteractive=false -PpowerlibInstall=true -PpowerlibInstallLib=true -PpowerlibInstallTemplates=true -PpowerlibInstallVendordeps=false -PpowerlibInstallTools=false -PpowerlibInstallDashboard=false -PpowerlibInstallSkills=false -PpowerlibSkipBuild=true *> $installLog
     if ($LASTEXITCODE -ne 0) { throw (Get-Content $installLog -Tail 35 | Out-String) }
-    foreach ($helper in @('health/HealthChecks.java', 'controls/ButtonBindings.java', 'auto/Auto.java', 'auto/DriveConstraints.java', 'auto/DriveToPoseController.java', 'auto/LegSubpoints.java',
+    foreach ($helper in @('health/HealthChecks.java', 'controls/ButtonBindings.java', 'auto/Auto.java', 'auto/DriveConstraints.java', 'auto/DriveToPoseController.java', 'auto/LegSubpoints.java', 'auto/LegHeading.java',
         'configs/LimelightHeadingConfig.java', 'configs/VisionHeadingInitializationConfig.java',
         'configs/VisionPoseFilterConfig.java', 'vision/VisionPoseFilter.java',
         'vision/LimelightVision.java', 'vision/VisionHeadingInitializer.java', 'vision/VisionHeadingReadiness.java',

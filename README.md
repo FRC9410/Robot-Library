@@ -132,7 +132,11 @@ Each leg starts from the robot's measured velocity, so looser end tolerances let
 legs round a corner instead of stopping. Pass `new DriveToPose(drivetrain, pose, constraints)`
 from `addCommand()` for a leg with its own limits. `atProgress(fraction, action)` runs an
 action, such as a state request, once the robot is that fraction (0 to 1) of the way along
-the leg, or when the leg finishes if that comes first (`frc.powerlib.auto.LegSubpoints`). You can replace the factory with any
+the leg, or when the leg finishes if that comes first (`frc.powerlib.auto.LegSubpoints`).
+`turningAfter(fraction)` holds the starting heading until the leg is that far along,
+`facing(point)` keeps the front aimed at a field point for the whole leg
+(`frc.powerlib.auto.LegHeading`), and `withMaxTurnRate(radiansPerSecond)` caps how fast the leg
+turns. You can replace the factory with any
 method that returns a fresh command which requires the drivetrain, finishes at the
 destination, and stops its outputs in `end()`. Coordinates are never flipped by alliance.
 

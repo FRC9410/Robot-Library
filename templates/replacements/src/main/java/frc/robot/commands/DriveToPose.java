@@ -4,10 +4,12 @@ import com.ctre.phoenix6.swerve.SwerveModule.DriveRequestType;
 import com.ctre.phoenix6.swerve.SwerveRequest;
 import com.ctre.phoenix6.swerve.SwerveRequest.ForwardPerspectiveValue;
 import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.wpilibj2.command.Command;
 import frc.powerlib.auto.DriveConstraints;
 import frc.powerlib.auto.DriveToPoseController;
+import frc.powerlib.auto.LegHeading;
 import frc.powerlib.auto.LegSubpoints;
 import frc.robot.subsystems.Swerve;
 import java.util.Objects;
@@ -23,7 +25,12 @@ public class DriveToPose extends Command {
   private final Pose2d target;
   private final DriveToPoseController controller;
   private final LegSubpoints subpoints = new LegSubpoints();
+  private final LegHeading heading = new LegHeading();
+  /** Max turn rate in radians per second; NaN uses the drivetrain's drive-to-point rate. */
+  private double maxTurnRate = Double.NaN;
   private Translation2d start = Translation2d.kZero;
+  private Rotation2d startHeading = Rotation2d.kZero;
+  private Rotation2d heldHeading = Rotation2d.kZero;
   private final SwerveRequest.FieldCentricFacingAngle request =
       new SwerveRequest.FieldCentricFacingAngle()
           .withForwardPerspective(ForwardPerspectiveValue.BlueAlliance)
@@ -51,9 +58,34 @@ public class DriveToPose extends Command {
     return this;
   }
 
+  /** Keep the robot's front pointed at this field point (such as a goal) for the whole leg. */
+  public DriveToPose facing(Translation2d point) {
+    heading.face(point);
+    return this;
+  }
+
+  /** Hold the starting heading until the leg is this fraction (0 to 1) done, then turn to the target heading. */
+  public DriveToPose turningAfter(double progress) {
+    heading.turnAfter(progress);
+    return this;
+  }
+
+  /** Limits how fast this leg turns, in radians per second. */
+  public DriveToPose withMaxTurnRate(double radiansPerSecond) {
+    if (!Double.isFinite(radiansPerSecond) || radiansPerSecond <= 0) {
+      throw new IllegalArgumentException("Max turn rate must be a finite, positive number.");
+    }
+    maxTurnRate = radiansPerSecond;
+    return this;
+  }
+
   @Override
   public void initialize() {
-    start = drivetrain.getState().Pose.getTranslation();
+    var pose = drivetrain.getState().Pose;
+    start = pose.getTranslation();
+    startHeading = pose.getRotation();
+    heldHeading = startHeading;
+    heading.reset();
     subpoints.reset();
     controller.reset(fieldVelocity());
     execute();
@@ -62,7 +94,9 @@ public class DriveToPose extends Command {
   @Override
   public void execute() {
     Translation2d position = drivetrain.getState().Pose.getTranslation();
-    subpoints.update(DriveToPoseController.progress(start, position, target.getTranslation()));
+    double progress = DriveToPoseController.progress(start, position, target.getTranslation());
+    subpoints.update(progress);
+    heldHeading = heading.target(position, progress, startHeading, target.getRotation());
     Translation2d velocity = controller.calculate(position, target.getTranslation());
     apply(velocity.getX(), velocity.getY());
   }
@@ -83,9 +117,9 @@ public class DriveToPose extends Command {
     drivetrain.applyRequest(request
         .withVelocityX(velocityX)
         .withVelocityY(velocityY)
-        .withTargetDirection(target.getRotation())
-        .withMaxAbsRotationalRate(drivetrain.MAX_DRIVE_TO_POINT_ANGULAR_RATE),
-        target.getRotation().getDegrees());
+        .withTargetDirection(heldHeading)
+        .withMaxAbsRotationalRate(Double.isNaN(maxTurnRate) ? drivetrain.MAX_DRIVE_TO_POINT_ANGULAR_RATE : maxTurnRate),
+        heldHeading.getDegrees());
   }
 
   private Translation2d fieldVelocity() {
