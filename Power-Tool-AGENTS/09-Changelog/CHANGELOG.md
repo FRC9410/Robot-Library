@@ -25,6 +25,39 @@ Entry format:
 
 ---
 
+## 2026-11-02: Logs tab shows current, power and voltage per mechanism
+- **What:**
+  - Opening a `.hoot` opens the whole match: every `.hoot` in the folder with the same session timestamp (one per CAN bus), merged on one clock.
+  - Owlet now exports only the signals the viewer uses (`--scan` then `-s`). A CANivore export dropped from ~1 GB to ~130 MB.
+  - Reads Phoenix's auto-logged Talon FX signals and **groups motors automatically** when a log opens:
+    - CAN IDs from `powerlib-subsystems.json`;
+    - swerve IDs from the robot's `TunerConstants.java` (new `powerlib:read-drive-motor-ids` IPC);
+    - otherwise matching each motor's motion to a mechanism (correlation ≥ 0.9);
+    - with a labeled guess of Drive for leftover IDs 1–8.
+
+    The **Assign motors** dialog shows how each motor was grouped and lets you fix it.
+  - Each mechanism graph has a view selector: value vs setpoint, supply current, power, applied voltage, stator current or temperature.
+  - New **power widget**: power stacked over time for **only the mechanisms picked in the Mechanisms dropdown**, with "Picked N W of M W robot total" and battery voltage. Colors stay the same whatever is picked, and the scale fits the picks.
+  - The status table gains current and power columns.
+  - **Steady motor displays:** motor current is noisy at ~100 Hz, and the first version bounced during playback. Now:
+    - the power widget stacks means of fixed 0.1 s slots, uses one y-scale for the whole log, and keeps its legend in a fixed order (by average power);
+    - motor-reading graphs draw means of fixed sample groups;
+    - amp, watt and battery readouts are 0.5 s averages, so the widget and the Battery tile agree.
+  - The parser can skip unused signals.
+- **Why:** See which mechanism draws the most current or power, e.g. during a brownout.
+- **Files:**
+  - new: `powerlib-dashboard/src/features/logs/PowerWidgets.tsx`;
+  - changed: `src/features/logs/logModel.ts`, `wpilog.ts`, `LogsPanel.tsx`, `LogWidgets.tsx`, `electron/owlet.ts`, `electron/main.ts`, `src/types/electron.d.ts`, `scripts/log-check.mjs`.
+- **Checks:**
+  - `node scripts/log-check.mjs` (two-file session, motor mapping, power math, overrides, motion matching with gearing/offsets/inverted followers, TunerConstants and guessed Drive, rule precedence, Owlet helpers), the four other dashboard checks, `npm run build`.
+  - Real 2026 MOSE Q8 rio + CANivore files, converted with the new Owlet code: all 18 motors grouped with no setup (10 by motion at 0.989–1.000, IDs 1–8 guessed as Drive). Load plus grouping took about 1 s. In the browser, the power widget filled in on open.
+  - Stepping one sample at a time on Q8: the legend order and the 2,500 W scale stayed fixed, chart points were identical between frames, and readouts changed smoothly.
+  - A reported "0 W while spinning" was real: the roller's applied voltage dropped to 0 V (turned off, coasting).
+  - Picked Shooter + Feeder: the widget showed only those two (1,500 W scale, "Picked 306 W of 907 W"). Adding Drive through the dropdown added it live with unchanged colors for the others.
+  - Not yet tested end to end in the Electron app.
+- **Notes updated:** [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [Power Tool Architecture](../05-Power-Tool/Power%20Tool%20Architecture.md), [Mechanism Power and Current](../11-Ideas/Mechanism%20Power%20and%20Current.md), [Reading wpilog and hoot](../11-Ideas/Reading%20wpilog%20and%20hoot.md), [Log Viewer Project](../11-Ideas/Log%20Viewer%20Project.md)
+- **Branch / commit:** feature/Log-Viewer (uncommitted)
+
 ## 2026-10-31: Logs tab shows several mechanisms at once, timeline on top, steady graphs
 - **What:**
   - The mechanism dropdown is now a multi-select. Each picked mechanism gets its own graph, stacked on the same time window with one cursor.

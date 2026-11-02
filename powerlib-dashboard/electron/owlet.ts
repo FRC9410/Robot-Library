@@ -9,6 +9,39 @@ export const owletDownloadUrl = "https://docs.ctr-electronics.com/cli-tools";
 type Owlet = { path: string; compliancy?: number };
 
 /**
+ * Motor signals the Logs tab uses: power readings to graph, and Position to match motors to mechanisms
+ * by motion. A full CANivore export is ~1 GB, so only these are exported per device.
+ */
+const motorSignalPattern = /^TalonFXS?-\d+\/(SupplyCurrent|SupplyVoltage|MotorVoltage|StatorCurrent|DeviceTemp|Position)$/;
+
+/** Signals worth exporting: every robot-written and Owlet status signal, plus the motor power signals. */
+export function isViewerSignal(name: string) {
+  return !/^[A-Za-z0-9]+-\d+\//.test(name) || motorSignalPattern.test(name);
+}
+
+/** Signal IDs from `owlet <hoot> --scan` output (`Name:   <hex id>` per line) that pass `keep`. */
+export function pickSignalIds(scanOutput: string, keep: (name: string) => boolean = isViewerSignal) {
+  const ids: string[] = [];
+  for (const line of scanOutput.split(/\r?\n/)) {
+    const match = /^(.+?):\s+([0-9a-f]+)\s*$/i.exec(line.trim());
+    if (match && keep(match[1])) ids.push(match[2]);
+  }
+  return ids;
+}
+
+/**
+ * All .hoot files from the same robot session as `fileName`: SignalLogger writes one per CAN bus,
+ * all ending in the same `_YYYY-MM-DD_HH-MM-SS.hoot`. The roboRIO bus's file comes first.
+ */
+export function sessionSiblings(fileName: string, directoryNames: string[]) {
+  const stamp = /_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})\.hoot$/i.exec(fileName)?.[1];
+  const siblings = stamp ? directoryNames.filter((name) => name.toLowerCase().endsWith(`_${stamp.toLowerCase()}.hoot`)) : [];
+  if (!siblings.includes(fileName)) siblings.push(fileName);
+  const isRio = (name: string) => /(^|_)rio_/i.test(name);
+  return siblings.sort((left, right) => Number(isRio(right)) - Number(isRio(left)) || left.localeCompare(right));
+}
+
+/**
  * Every Owlet we can find. CTRE changes the .hoot format between Phoenix releases, and each Owlet
  * reads one format version ("compliancy"). AdvantageScope's cache names them `owlet-<ver>-C<compliancy>.exe`.
  */
@@ -45,8 +78,12 @@ async function readCompliancy(owlet: string, hootPath: string) {
   return { owlet: own ? Number(own[1]) : undefined, hoot: hoot ? Number(hoot[1]) : undefined };
 }
 
-/** Converts a .hoot to .wpilog with the Owlet that matches the log's format version. */
-export async function convertHoot(hootPath: string, outputPath: string, directories: string[], explicit?: string) {
+/**
+ * Converts a .hoot to .wpilog with the Owlet that matches the log's format version, exporting only
+ * the signals `keep` accepts. If the scan fails, everything is exported.
+ */
+export async function convertHoot(hootPath: string, outputPath: string, directories: string[], explicit?: string,
+  keep: (name: string) => boolean = isViewerSignal) {
   const owlets = await findOwlets(directories, explicit);
   if (owlets.length === 0) {
     throw new Error(`Opening .hoot files needs CTRE's Owlet converter, which wasn't found. Opening any .hoot once in AdvantageScope downloads it, or get it from ${owletDownloadUrl} and put it in power-tool/tools/. .wpilog files open without it.`);
@@ -77,8 +114,17 @@ export async function convertHoot(hootPath: string, outputPath: string, director
     throw new Error(`This log uses .hoot format version ${needed}, but the Owlet versions found are ${versions}. Opening the log once in AdvantageScope downloads the matching Owlet, or get it from ${owletDownloadUrl}.`);
   }
 
+  let signalArgs: string[] = [];
   try {
-    await execFileAsync(chosen.path, [hootPath, outputPath, "-f", "wpilog"], { windowsHide: true, timeout: 180000, maxBuffer: 1024 * 1024 * 16 });
+    const { stdout } = await execFileAsync(chosen.path, [hootPath, "--scan"], { windowsHide: true, timeout: 60000, maxBuffer: 1024 * 1024 * 16 });
+    const ids = pickSignalIds(stdout, keep);
+    if (ids.length) signalArgs = ["-s", ids.join(",")];
+  } catch {
+    // Export everything if the scan isn't available.
+  }
+
+  try {
+    await execFileAsync(chosen.path, [hootPath, outputPath, "-f", "wpilog", ...signalArgs], { windowsHide: true, timeout: 180000, maxBuffer: 1024 * 1024 * 16 });
   } catch (error) {
     const detail = error && typeof error === "object" && "stderr" in error && String(error.stderr).trim()
       ? String(error.stderr).trim()

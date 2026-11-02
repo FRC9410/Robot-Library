@@ -31,6 +31,7 @@ Other ideas are listed in [Ideas](INDEX.md).
 
 - 2026-10-31: Opening a real `.hoot` from the Open log dialog works end to end in the Electron app.
 - 2026-10-31: Several mechanisms can be viewed at once (stacked graphs + a status table), and the selection is remembered. See [Mechanism Picker](Mechanism%20Picker.md).
+- 2026-11-02: Current, power, applied voltage and temperature per mechanism from Phoenix's motor logs. Opening a `.hoot` opens the whole match (every CAN bus). Adds a power widget and an Assign motors dialog. See [Mechanism Power and Current](Mechanism%20Power%20and%20Current.md).
 
 ## Not tested yet
 - A log from a PowerLib robot. The real logs so far predate PowerLib; PowerLib keys are only tested with the synthetic match.

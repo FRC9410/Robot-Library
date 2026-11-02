@@ -1,7 +1,7 @@
 import type { MouseEvent, ReactNode } from "react";
 import { Box, Checkbox, ListItemText, MenuItem, Paper, Select, Stack, Typography } from "@mui/material";
-import { indexAt, segments, stepStats, toleranceFor, valueAt } from "./logModel";
-import type { LogMarker, LogMechanism, LogPeriod, Series } from "./logModel";
+import { averageAt, indexAt, motorMetrics, segments, stepStats, toleranceFor, valueAt } from "./logModel";
+import type { GraphView, LogMarker, LogMechanism, LogPeriod, MotorMetric, Series } from "./logModel";
 import type { Pose } from "./wpilog";
 
 export const logColors = {
@@ -44,11 +44,14 @@ export function Card({ title, action, children }: { title: ReactNode; action?: R
  * One path through the visible samples; non-finite values break the line. When there are too many
  * samples to draw, it keeps every Nth sample of the whole log (not of the window), with N fixed by
  * the window length, so the same samples stay drawn while the window slides during playback.
+ * With `averageSeconds`, each group of samples is drawn as its mean, at least that long per point,
+ * which keeps noisy 100 Hz motor readings readable; the groups are also fixed positions in the log.
  */
-function seriesPath(series: Series<number>, from: number, to: number, x: (time: number) => number, y: (value: number) => number, stepped: boolean) {
+function seriesPath(series: Series<number>, from: number, to: number, x: (time: number) => number, y: (value: number) => number, stepped: boolean,
+  averageSeconds = 0) {
   const count = series.times.length;
   const spacing = count > 1 ? (series.times[count - 1] - series.times[0]) / (count - 1) : 1;
-  const stride = Math.max(1, Math.ceil((to - from) / Math.max(spacing, 1e-6) / 900));
+  const stride = Math.max(1, Math.ceil((to - from) / Math.max(spacing, 1e-6) / 900), Math.ceil(averageSeconds / Math.max(spacing, 1e-6)));
   let first = Math.max(0, indexAt(series.times, from));
   first -= first % stride;
   const last = Math.min(count - 1, indexAt(series.times, to) + stride);
@@ -57,9 +60,18 @@ function seriesPath(series: Series<number>, from: number, to: number, x: (time: 
   let drawing = false;
   let previousY = 0;
   for (let index = first; index <= last; index += stride) {
-    const value = series.values[index];
+    let value = series.values[index];
+    let time = series.times[index];
+    if (averageSeconds > 0) {
+      let sum = 0; let sumTime = 0; let samples = 0;
+      for (let offset = index; offset < Math.min(count, index + stride); offset += 1) {
+        if (Number.isFinite(series.values[offset])) { sum += series.values[offset]; sumTime += series.times[offset]; samples += 1; }
+      }
+      value = samples ? sum / samples : NaN;
+      time = samples ? sumTime / samples : time;
+    }
     if (!Number.isFinite(value)) { drawing = false; continue; }
-    const px = x(series.times[index]).toFixed(1);
+    const px = x(time).toFixed(1);
     const py = y(value).toFixed(1);
     if (!drawing) path += `M${px} ${py}`;
     else path += stepped ? `L${px} ${previousY.toFixed(1)}L${px} ${py}` : `L${px} ${py}`;
@@ -70,8 +82,9 @@ function seriesPath(series: Series<number>, from: number, to: number, x: (time: 
 }
 
 /** Each selected mechanism gets its own graph on the same time window, so different units never share an axis. */
-export function MechanismGraphs({ mechanisms, selected, onSelect, time, windowSeconds = 20 }: {
-  mechanisms: LogMechanism[]; selected: LogMechanism[]; onSelect: (ids: string[]) => void; time: number; windowSeconds?: number;
+export function MechanismGraphs({ mechanisms, selected, onSelect, views, onView, time, windowSeconds = 20 }: {
+  mechanisms: LogMechanism[]; selected: LogMechanism[]; onSelect: (ids: string[]) => void;
+  views: Record<string, GraphView>; onView: (id: string, view: GraphView) => void; time: number; windowSeconds?: number;
 }) {
   if (mechanisms.length === 0) {
     return <Card title="Mechanisms"><Typography variant="body2" color="text.secondary">No mechanisms (Velocity or Position data) in this log.</Typography></Card>;
@@ -86,7 +99,9 @@ export function MechanismGraphs({ mechanisms, selected, onSelect, time, windowSe
       {mechanisms.map(item => (
         <MenuItem key={item.id} value={item.id} dense>
           <Checkbox size="small" checked={selected.some(chosen => chosen.id === item.id)} sx={{ p: 0.5, mr: 1 }} />
-          <ListItemText primary={item.name} secondary={`${item.kind} · ${item.units}`} />
+          <ListItemText primary={item.name} secondary={item.kind === "motors"
+            ? item.id.startsWith("motor:") ? "unassigned motor" : `${item.motors.length} motor${item.motors.length === 1 ? "" : "s"}`
+            : `${item.kind} · ${item.units}${item.motors.length ? ` · ${item.motors.length} motor${item.motors.length === 1 ? "" : "s"}` : ""}`} />
         </MenuItem>
       ))}
     </Select>
@@ -94,7 +109,10 @@ export function MechanismGraphs({ mechanisms, selected, onSelect, time, windowSe
   return (
     <Card title={`Mechanisms · ${windowSeconds} s window`} action={picker}>
       {selected.length === 0 && <Typography variant="body2" color="text.secondary">Pick one or more mechanisms to graph.</Typography>}
-      {selected.map(mechanism => <MechanismPlot key={mechanism.id} mechanism={mechanism} time={time} height={height} windowSeconds={windowSeconds} />)}
+      {selected.map(mechanism => (
+        <MechanismPlot key={mechanism.id} mechanism={mechanism} view={views[mechanism.id]} onView={view => onView(mechanism.id, view)}
+          time={time} height={height} windowSeconds={windowSeconds} />
+      ))}
       {selected.length > 0 && (
         <Stack direction="row" sx={{ justifyContent: "space-between", pl: 5.5 }}>
           <Typography variant="caption" color="text.secondary">−{windowSeconds / 2} s</Typography>
@@ -106,26 +124,49 @@ export function MechanismGraphs({ mechanisms, selected, onSelect, time, windowSe
   );
 }
 
-function MechanismPlot({ mechanism, time, height, windowSeconds }: { mechanism: LogMechanism; time: number; height: number; windowSeconds: number }) {
+const valueLabel = (mechanism: LogMechanism) => mechanism.kind === "velocity" ? "Velocity" : mechanism.kind === "position" ? "Position" : "Power";
+
+function MechanismPlot({ mechanism, view, onView, time, height, windowSeconds }: {
+  mechanism: LogMechanism; view?: GraphView; onView: (view: GraphView) => void; time: number; height: number; windowSeconds: number;
+}) {
   const width = 600;
-  const span = Math.max(mechanism.max - mechanism.min, 1e-6);
-  const low = mechanism.min - span * 0.08;
-  const high = mechanism.max + span * 0.08;
+  const options: [GraphView, string][] = [
+    ...(mechanism.kind !== "motors" ? [["value", `${valueLabel(mechanism)} vs setpoint`] as [GraphView, string]] : []),
+    ...(Object.keys(motorMetrics) as MotorMetric[]).filter(metric => mechanism.metrics[metric]).map(metric => [metric, motorMetrics[metric].label] as [GraphView, string])
+  ];
+  // Motor groups have no PowerLib value; their "value" is power.
+  const shownView: GraphView = view && options.some(([option]) => option === view) ? view : options[0]?.[0] ?? "value";
+  const metric = shownView !== "value" ? mechanism.metrics[shownView] : undefined;
+  const series = metric ?? mechanism.value;
+  const setpoint = shownView === "value" ? mechanism.setpoint : undefined;
+  const range = metric ?? mechanism;
+  const units = shownView !== "value" ? motorMetrics[shownView].units : mechanism.units;
+  const span = Math.max(range.max - range.min, 1e-6);
+  const low = range.min - span * 0.08;
+  const high = range.max + span * 0.08;
   const from = time - windowSeconds / 2;
   const to = time + windowSeconds / 2;
   const x = (sample: number) => ((sample - from) / windowSeconds) * width;
   const y = (value: number) => height - ((value - low) / (high - low)) * height;
   const zero = low < 0 && high > 0 ? y(0) : null;
-  const places = mechanism.kind === "velocity" ? 1 : 2;
+  const places = shownView === "power" || shownView === "temp" ? 0 : mechanism.kind === "position" && shownView === "value" ? 2 : 1;
   return (
     <Box>
-      <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "baseline", gap: 1, pl: 5.5 }}>
-        <Typography variant="body2" sx={{ fontWeight: 700 }}>{mechanism.name}</Typography>
-        <Typography variant="caption" color="text.secondary">
-          <Box component="span" sx={{ color: logColors.value }}>━</Box> {mechanism.kind === "velocity" ? "Velocity" : "Position"}{" "}
-          <b>{formatNumber(valueAt(mechanism.value, time), places)}</b>
-          {mechanism.setpoint && <> · <Box component="span" sx={{ color: logColors.setpoint }}>┅</Box> Setpoint <b>{formatNumber(valueAt(mechanism.setpoint, time), places)}</b></>}
-          {" "}{mechanism.units}
+      <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", gap: 1, pl: 5.5 }}>
+        <Stack direction="row" sx={{ alignItems: "center", gap: 1, minWidth: 0 }}>
+          <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>{mechanism.name}</Typography>
+          {options.length > 1 && (
+            <Select variant="standard" disableUnderline size="small" value={shownView} onChange={event => onView(event.target.value as GraphView)}
+              inputProps={{ "aria-label": `What the ${mechanism.name} graph shows` }} sx={{ fontSize: 12, color: "text.secondary" }}>
+              {options.map(([option, label]) => <MenuItem key={option} value={option} dense>{label}</MenuItem>)}
+            </Select>
+          )}
+        </Stack>
+        <Typography variant="caption" color="text.secondary" noWrap>
+          <Box component="span" sx={{ color: logColors.value }}>━</Box> {shownView === "value" ? valueLabel(mechanism) : motorMetrics[shownView].label}{" "}
+          <b>{formatNumber(metric ? averageAt(series, time) : valueAt(series, time), places)}</b>
+          {setpoint && <> · <Box component="span" sx={{ color: logColors.setpoint }}>┅</Box> Setpoint <b>{formatNumber(valueAt(setpoint, time), places)}</b></>}
+          {" "}{units}
         </Typography>
       </Stack>
       <Stack direction="row" sx={{ gap: 0.75, minWidth: 0 }}>
@@ -140,11 +181,11 @@ function MechanismPlot({ mechanism, time, height, windowSeconds }: { mechanism: 
             <line key={fraction} x1={0} x2={width} y1={height * fraction} y2={height * fraction} stroke={logColors.grid} vectorEffect="non-scaling-stroke" />
           ))}
           {zero !== null && <line x1={0} x2={width} y1={zero} y2={zero} stroke="rgba(250,250,250,0.3)" vectorEffect="non-scaling-stroke" />}
-          {mechanism.setpoint && (
-            <path d={seriesPath(mechanism.setpoint, from, to, x, y, true)} fill="none" stroke={logColors.setpoint}
+          {setpoint && (
+            <path d={seriesPath(setpoint, from, to, x, y, true)} fill="none" stroke={logColors.setpoint}
               strokeWidth={1.5} strokeDasharray="6 4" vectorEffect="non-scaling-stroke" />
           )}
-          <path d={seriesPath(mechanism.value, from, to, x, y, false)} fill="none" stroke={logColors.value} strokeWidth={2} vectorEffect="non-scaling-stroke" />
+          <path d={seriesPath(series, from, to, x, y, false, metric ? 0.05 : 0)} fill="none" stroke={logColors.value} strokeWidth={2} vectorEffect="non-scaling-stroke" />
           <line x1={width / 2} x2={width / 2} y1={0} y2={height} stroke={logColors.cursor} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
         </Box>
       </Stack>
@@ -192,13 +233,13 @@ export function FieldView({ pose, time, field }: { pose?: Series<Pose>; time: nu
 
 /** One row per selected mechanism: on target, value, setpoint, error, and the last step's overshoot and settle time. */
 export function MechanismStatus({ mechanisms, time }: { mechanisms: LogMechanism[]; time: number }) {
-  const labels = ["Mechanism", "At setpoint", "Value", "Setpoint", "Error", "Overshoot", "Settle time"];
+  const labels = ["Mechanism", "At setpoint", "Value", "Setpoint", "Error", "Overshoot", "Settle time", "Current", "Power"];
   return (
-    <Card title="Mechanism status · last setpoint step">
+    <Card title="Mechanism status · overshoot and settle are for the last setpoint step · current and power are 0.5 s averages">
       {mechanisms.length === 0 ? (
         <Typography variant="body2" color="text.secondary">Pick mechanisms above to see their status.</Typography>
       ) : (
-        <Box sx={{ display: "grid", gridTemplateColumns: "minmax(110px, 1.4fr) repeat(6, minmax(0, 1fr))", columnGap: 1.5, rowGap: 0.75, alignItems: "center" }}>
+        <Box sx={{ display: "grid", gridTemplateColumns: "minmax(110px, 1.4fr) repeat(8, minmax(0, 1fr))", columnGap: 1.5, rowGap: 0.75, alignItems: "center" }}>
           {labels.map(label => <Typography key={label} variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>{label}</Typography>)}
           {mechanisms.map(mechanism => <StatusRow key={mechanism.id} mechanism={mechanism} time={time} />)}
         </Box>
@@ -208,7 +249,7 @@ export function MechanismStatus({ mechanisms, time }: { mechanisms: LogMechanism
 }
 
 function StatusRow({ mechanism, time }: { mechanism: LogMechanism; time: number }) {
-  const value = valueAt(mechanism.value, time);
+  const value = mechanism.kind === "motors" ? undefined : valueAt(mechanism.value, time);
   const target = valueAt(mechanism.setpoint, time);
   const logged = mechanism.atTarget ? valueAt(mechanism.atTarget, time) : undefined;
   const estimated = logged === undefined && target !== undefined && value !== undefined && Number.isFinite(target) && Number.isFinite(value)
@@ -222,10 +263,10 @@ function StatusRow({ mechanism, time }: { mechanism: LogMechanism; time: number 
     <>
       <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>{mechanism.name}</Typography>
       <Box component="span" title={logged === undefined && estimated !== undefined ? "Estimated from value and setpoint" : undefined}
-        sx={{ justifySelf: "start", px: 1, py: 0.25, borderRadius: 1, fontSize: 13, fontWeight: 700,
+        sx={{ justifySelf: "start", px: 1, py: 0.25, borderRadius: 1, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap",
           bgcolor: onTarget === undefined ? "action.hover" : onTarget ? "rgba(34,197,94,0.18)" : "rgba(239,68,68,0.18)",
           color: onTarget === undefined ? "text.secondary" : onTarget ? logColors.good : logColors.bad }}>
-        {onTarget === undefined ? "no setpoint" : `${onTarget}${logged === undefined ? " (est.)" : ""}`}
+        {onTarget === undefined ? "–" : `${onTarget}${logged === undefined ? " (est.)" : ""}`}
       </Box>
       {cell(units(formatNumber(value, places)))}
       {cell(units(formatNumber(target, places)))}
@@ -233,6 +274,8 @@ function StatusRow({ mechanism, time }: { mechanism: LogMechanism; time: number 
       {cell(stats ? `${stats.overshootPercent.toFixed(0)}%` : "–")}
       {cell(stats ? stats.settleSeconds !== null ? `${stats.settleSeconds.toFixed(2)} s` : stats.settling ? "settling…" : "not settled" : "–",
         stats && stats.settleSeconds === null ? "#f59e0b" : undefined)}
+      {cell(mechanism.metrics.current ? `${formatNumber(averageAt(mechanism.metrics.current, time), 1)} A` : "–")}
+      {cell(mechanism.metrics.power ? `${formatNumber(averageAt(mechanism.metrics.power, time), 0)} W` : "–")}
     </>
   );
 }

@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld("powerlib", {
   updatePowerTool: () => ipcRenderer.invoke("powerlib:update-power-tool"),
   openLog: () => ipcRenderer.invoke("powerlib:open-log"),
   openLogPath: (filePath: string) => ipcRenderer.invoke("powerlib:open-log-path", filePath),
+  readDriveMotorIds: () => ipcRenderer.invoke("powerlib:read-drive-motor-ids"),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   onMenuConnectionSettings: (callback: () => void) => {
     ipcRenderer.on("powerlib:menu-connection-settings", callback);

@@ -9,8 +9,12 @@ const result = await build({
     resolveDir: fileURLToPath(new URL("..", import.meta.url)), loader: "ts" },
   bundle: true, write: false, format: "esm", platform: "node"
 });
-const { parseWpilog, buildLogModel, busiestMechanism, metricKey, plainMechanismKey, stepStats, valueAt, indexAt, segments } =
+const { parseWpilog, buildLogModel, busiestMechanism, busName, isViewerSignal, metricKey, plainMechanismKey, stepStats, valueAt, indexAt, segments,
+  averageAt, slotMeans } =
   await import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].contents).toString("base64")}`);
+const owletBundle = await build({ entryPoints: [fileURLToPath(new URL("../electron/owlet.ts", import.meta.url))], bundle: true, write: false,
+  format: "esm", platform: "node" });
+const owlet = await import(`data:text/javascript;base64,${Buffer.from(owletBundle.outputFiles[0].contents).toString("base64")}`);
 
 /** Minimal .wpilog writer using the shortest field widths, so the reader's bitfield handling is exercised. */
 class LogWriter {
@@ -212,25 +216,25 @@ assert.deepEqual(plainMechanismKey("Intake Wrist Position"), { owner: "Intake Wr
 assert.deepEqual(plainMechanismKey("Shooter Velocity Setpoint"), { owner: "Shooter", key: "VelocitySetpoint" });
 assert.deepEqual(plainMechanismKey("Arm/Setpoint"), { owner: "Arm", key: "Setpoint" });
 for (const name of ["Voltage", "Phoenix6/TalonFX-20/Velocity", "TalonFX-20/Position", "CAN Utilization"]) assert.equal(plainMechanismKey(name), null, name);
-const owlet = new LogWriter();
+const owletLog = new LogWriter();
 for (const [name, type, metadata] of [["RobotMode", "string", "{}"], ["RobotEnable", "boolean", "{}"], ["Voltage", "double", '{"units": "V"}'],
   ["CAN Utilization", "double", '{"units": "%"}'], ["Shooter Velocity", "double", '{"units": "rotations per second"}'],
   ["Shooter Velocity Setpoint", "double", '{"units": "rotations per second"}'], ["Intake Wrist Position", "double", '{"units": "degrees"}'],
-  ["Feeder Velocity", "double", '{"units": "rotations per second"}']]) owlet.start(name, type, metadata, 700000);
+  ["Feeder Velocity", "double", '{"units": "rotations per second"}']]) owletLog.start(name, type, metadata, 700000);
 for (let step = 0; step <= 300; step += 1) {
   const t = step / 10;
   const micros = 700000 + step * 100000;
   const robotMode = t < 5 ? "Disabled" : t < 10 ? "Autonomous" : t < 12 ? "Disabled" : "Teleop";
-  owlet.string("RobotMode", micros, robotMode);
-  owlet.boolean("RobotEnable", micros, robotMode !== "Disabled");
-  owlet.double("Voltage", micros, t > 20 && t < 20.5 ? 6.5 : 12.3);
-  owlet.double("CAN Utilization", micros, t > 25 && t < 26 ? 95 : 40);
-  owlet.double("Shooter Velocity", micros, t > 12 ? 60 : 0);
-  owlet.double("Shooter Velocity Setpoint", micros, t > 12 ? 60 : 0);
-  owlet.double("Intake Wrist Position", micros, Math.round(t) % 4 === 0 ? 90 : 10);
-  owlet.double("Feeder Velocity", micros, 0);
+  owletLog.string("RobotMode", micros, robotMode);
+  owletLog.boolean("RobotEnable", micros, robotMode !== "Disabled");
+  owletLog.double("Voltage", micros, t > 20 && t < 20.5 ? 6.5 : 12.3);
+  owletLog.double("CAN Utilization", micros, t > 25 && t < 26 ? 95 : 40);
+  owletLog.double("Shooter Velocity", micros, t > 12 ? 60 : 0);
+  owletLog.double("Shooter Velocity Setpoint", micros, t > 12 ? 60 : 0);
+  owletLog.double("Intake Wrist Position", micros, Math.round(t) % 4 === 0 ? 90 : 10);
+  owletLog.double("Feeder Velocity", micros, 0);
 }
-const plainModel = buildLogModel(parseWpilog(owlet.bytes()));
+const plainModel = buildLogModel(parseWpilog(owletLog.bytes()));
 assert.deepEqual(plainModel.periods.map(item => [item.label, Math.round(item.start * 10) / 10, Math.round(item.end * 10) / 10]),
   [["Auto", 5, 10], ["Teleop", 12, 30]], "Owlet's Autonomous/Teleop modes become periods");
 assert.deepEqual(plainModel.mechanisms.map(item => [item.id, item.name, item.kind, item.units, Boolean(item.setpoint)]),
@@ -240,5 +244,125 @@ const plainKinds = plainModel.markers.map(item => `${item.kind}@${Math.round(ite
 assert.ok(plainKinds.includes("brownout@20") && plainKinds.includes("can@25"), plainKinds.join(", "));
 assert.equal(busiestMechanism(plainModel.mechanisms).id, "Shooter", "A mechanism with a setpoint wins");
 assert.equal(busiestMechanism(plainModel.mechanisms.filter(item => !item.setpoint)).id, "Intake Wrist", "Without setpoints, the one that moved");
+
+// A two-file session: roboRIO file with mechanism values, CANivore file with Phoenix's motor signals
+assert.equal(busName("MOSE_Q8_rio_2026-04-03_14-55-53.hoot"), "rio");
+assert.equal(busName("MOSE_Q8_9F61CEC3394C4853202020503F0E19FF_2026-04-03_14-55-53.hoot"), "CANivore");
+assert.ok(isViewerSignal("Phoenix6/TalonFX-20/SupplyCurrent") && !isViewerSignal("Phoenix6/TalonFX-20/DutyCycle") && isViewerSignal("Shooter Velocity"));
+const rio = new LogWriter();
+const canivore = new LogWriter();
+for (const log of [rio, canivore]) { log.start("RobotMode", "string", "{}", 0); log.start("Voltage", "double", '{"units": "V"}', 0); }
+rio.start("Intake Velocity", "double", '{"units": "rotations per second"}', 0);
+rio.start("Phoenix6/TalonFX-20/SupplyCurrent", "double", '{"units": "A"}', 0);
+const motorIds = [20, 21, 1, 2];
+for (const id of motorIds) for (const signal of ["SupplyCurrent", "SupplyVoltage", "MotorVoltage", "StatorCurrent", "DeviceTemp", "DutyCycle"]) {
+  canivore.start(`Phoenix6/TalonFX-${id}/${signal}`, "double", "{}", 0);
+}
+for (let step = 0; step <= 100; step += 1) {
+  const micros = step * 100000;
+  for (const log of [rio, canivore]) { log.string("RobotMode", micros, step < 20 ? "Disabled" : "Teleop"); log.double("Voltage", micros, 12); }
+  rio.double("Intake Velocity", micros, step >= 20 ? 40 : 0);
+  rio.double("Phoenix6/TalonFX-20/SupplyCurrent", micros, 99);
+  for (const id of motorIds) {
+    const amps = step >= 20 ? (id >= 20 ? 10 : 30) : 0;
+    canivore.double(`Phoenix6/TalonFX-${id}/SupplyCurrent`, micros + id, amps);
+    canivore.double(`Phoenix6/TalonFX-${id}/SupplyVoltage`, micros + id, 11.5);
+    canivore.double(`Phoenix6/TalonFX-${id}/MotorVoltage`, micros + id, id === 20 ? 6 : 8);
+    canivore.double(`Phoenix6/TalonFX-${id}/StatorCurrent`, micros + id, amps * 2);
+    canivore.double(`Phoenix6/TalonFX-${id}/DeviceTemp`, micros + id, 30 + id);
+    canivore.double(`Phoenix6/TalonFX-${id}/DutyCycle`, micros + id, 0.5);
+  }
+}
+const sessionFiles = [{ name: "Q8_rio_2026-04-03_14-55-53.wpilog", bytes: rio.bytes() }, { name: "Q8_9F61CEC3394C4853202020503F0E19FF_2026-04-03_14-55-53.wpilog", bytes: canivore.bytes() }];
+const sessionSources = sessionFiles.map(file => ({ name: file.name, file: parseWpilog(file.bytes, isViewerSignal) }));
+assert.equal(sessionSources[1].file.signals.has("Phoenix6/TalonFX-20/DutyCycle"), false, "Signals the viewer doesn't use are skipped while parsing");
+const intakeConfig = [{ id: "intake", name: "Intake", type: "velocity", motors: [{ role: "leader", id: 20 }, { role: "follower", id: 21 }] }];
+const session = buildLogModel(sessionSources, intakeConfig);
+assert.deepEqual(session.buses, ["rio", "CANivore"]);
+assert.deepEqual(session.motors.map(motor => [motor.key, motor.group]),
+  [["CANivore:1", ""], ["CANivore:2", ""], ["CANivore:20", "Intake"], ["CANivore:21", "Intake"], ["rio:20", ""]],
+  "Config IDs mean the CANivore motor when the same ID is also on the roboRIO bus");
+const intake = session.mechanisms.find(item => item.id === "Intake");
+assert.deepEqual(intake.motors.map(motor => motor.id), [20, 21]);
+assert.equal(valueAt(intake.metrics.current, 5), 20, "Supply current is summed across the mechanism's motors");
+assert.equal(valueAt(intake.metrics.power, 5), 230, "Power is supply voltage times supply current, summed");
+assert.equal(valueAt(intake.metrics.voltage, 5), 7, "Applied voltage is averaged");
+assert.equal(valueAt(intake.metrics.stator, 5), 40);
+assert.equal(valueAt(intake.metrics.temp, 5), 51, "Temperature is the hottest motor");
+assert.deepEqual(session.mechanisms.filter(item => item.kind === "motors").map(item => item.id), ["motor:CANivore:1", "motor:CANivore:2", "motor:rio:20"],
+  "Unassigned motors are listed on their own");
+assert.deepEqual(session.powerGroups.map(group => group.id), ["Intake", "unassigned"]);
+assert.equal(valueAt(session.powerGroups[1].power, 5), 30 * 11.5 * 2 + 99 * 12,
+  "Unassigned motors are grouped in the power widget; a motor without SupplyVoltage uses the battery voltage");
+assert.equal(busiestMechanism(session.mechanisms).id, "Intake", "Motor-only groups come last");
+const assigned = buildLogModel(sessionSources, intakeConfig, { "CANivore:1": "Drive", "CANivore:2": "Drive", "CANivore:21": "" });
+const drive = assigned.mechanisms.find(item => item.id === "Drive");
+assert.equal(drive.kind, "motors");
+assert.equal(valueAt(drive.value, 5), 690, "A new group's value is its power");
+assert.deepEqual(assigned.mechanisms.find(item => item.id === "Intake").motors.map(motor => motor.id), [20], "An override can unassign a configured motor");
+assert.ok(assigned.mechanisms.some(item => item.id === "motor:CANivore:21"));
+assert.deepEqual(assigned.periods.map(period => period.label), ["Teleop"], "Both files share one clock and one set of periods");
+
+// Steady displays of noisy motor data: fixed slots, short averages and a fixed power-group order
+const noisy = { times: Array.from({ length: 1000 }, (_, index) => index * 0.01), values: Array.from({ length: 1000 }, (_, index) => (index % 2 ? 0 : 10)) };
+const slotsA = slotMeans(noisy, 2.003, 4.003, 0.1);
+const slotsB = slotMeans(noisy, 2.051, 4.051, 0.1);
+assert.deepEqual(slotsB.starts.slice(0, 5).map(start => start.toFixed(1)), slotsA.starts.slice(0, 5).map(start => start.toFixed(1)), "Slot edges don't move with the window");
+assert.deepEqual(slotsB.means.slice(0, 19), slotsA.means.slice(0, 19), "So a sliding window shows the same values");
+assert.ok(slotsA.means.every(mean => Math.abs(mean - 5) < 0.6), "Each slot is the mean of its ~10 samples, not one raw 0 or 10");
+assert.equal(averageAt(noisy, 5, 0.5), 5, "Readouts average out alternating 0/10 A samples");
+assert.equal(averageAt(noisy, -1), undefined);
+assert.deepEqual(assigned.powerGroups.map(group => group.id), ["Drive", "Intake", "unassigned"],
+  "Power groups are ordered by average power over the whole log, unassigned last");
+
+// Automatic motor grouping with no config: motion matching, TunerConstants drive IDs, and the template-ID guess
+const motionRio = new LogWriter();
+const motionCan = new LogWriter();
+motionRio.start("RobotMode", "string", "{}", 0);
+motionRio.start("Shooter Velocity", "double", "{}", 0);
+motionRio.start("Arm Position", "double", '{"units": "degrees"}', 0);
+const motionMotors = [30, 31, 40, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+for (const id of motionMotors) for (const signal of ["Position", "SupplyCurrent"]) motionCan.start(`Phoenix6/TalonFX-${id}/${signal}`, "double", "{}", 0);
+const shooterAt = t => t < 20 ? 0 : 30 + 25 * Math.sin(t / 3) + (Math.floor(t / 7) % 2) * 20;
+const armAt = t => 20 + 40 * Math.sin(t / 5) + 15 * Math.sin(t * 1.3);
+let shooterTurns = 0;
+for (let step = 0; step <= 6000; step += 1) {
+  const t = step * 0.02;
+  const micros = Math.round(t * 1e6);
+  if (step % 5 === 0) motionRio.string("RobotMode", micros, t < 20 ? "Disabled" : "Teleop");
+  motionRio.double("Shooter Velocity", micros, shooterAt(t) + Math.sin(step * 2.3) * 0.5);
+  motionRio.double("Arm Position", micros, armAt(t));
+  shooterTurns += shooterAt(t) * 0.02 * 2.5;
+  const positions = { 30: shooterTurns, 31: -shooterTurns, 40: armAt(t) / 360 * 60 + 12, 9: Math.sin(step * 0.71) * 5 };
+  for (const id of motionMotors) {
+    const position = positions[id] ?? (id % 2 ? Math.sin(t * (0.3 + id / 10)) * 3 : t * (1 + id / 4) + Math.sin(t * id));
+    motionCan.double(`Phoenix6/TalonFX-${id}/Position`, micros + id, position);
+    motionCan.double(`Phoenix6/TalonFX-${id}/SupplyCurrent`, micros + id, 5);
+  }
+}
+const motionSources = [{ name: "M_rio_2026-01-01_00-00-00.wpilog", file: parseWpilog(motionRio.bytes()) },
+  { name: "M_9F61CEC3394C4853202020503F0E19FF_2026-01-01_00-00-00.wpilog", file: parseWpilog(motionCan.bytes()) }];
+const groupsOf = model => Object.fromEntries(model.motors.map(motor => [motor.id, `${motor.group}/${motor.source}`]));
+const guessed = groupsOf(buildLogModel(motionSources));
+assert.equal(guessed[30], "Shooter/motion", "A geared motor matches its velocity mechanism by motion");
+assert.equal(guessed[31], "Shooter/motion", "An inverted follower matches too");
+assert.equal(guessed[40], "Arm/motion", "A position mechanism matches its motor's position despite gearing and offset");
+assert.equal(guessed[9], "/", "A motor that matches nothing stays unassigned");
+for (const id of [1, 2, 3, 4, 5, 6, 7, 8]) assert.equal(guessed[id], "Drive/guess", `Template swerve ID ${id} is guessed as Drive`);
+const motionScore = buildLogModel(motionSources).motors.find(motor => motor.id === 30).matchScore;
+assert.ok(motionScore > 0.95, `motion score ${motionScore}`);
+const tuned = groupsOf(buildLogModel(motionSources, [], {}, [1, 2, 3, 4, 5, 6, 7, 8]));
+for (const id of [1, 2, 3, 4, 5, 6, 7, 8]) assert.equal(tuned[id], "Drive/tuner", "TunerConstants IDs group as Drive");
+assert.equal(groupsOf(buildLogModel(motionSources, [{ name: "Shooter", motors: [{ id: 31 }] }], { "CANivore:30": "" }))[31], "Shooter/config",
+  "Config beats motion matching");
+assert.equal(groupsOf(buildLogModel(motionSources, [], { "CANivore:30": "" }))[30], "/override", "A manual Unassigned beats motion matching");
+
+// Owlet helpers: session files, scan parsing and which signals get exported
+assert.deepEqual(owlet.sessionSiblings("Q8_9F61CEC3394C4853202020503F0E19FF_2026-04-03_14-55-53.hoot",
+  ["Q8_9F61CEC3394C4853202020503F0E19FF_2026-04-03_14-55-53.hoot", "Q8_rio_2026-04-03_14-55-53.hoot", "Q9_rio_2026-04-03_15-10-00.hoot", "notes.txt"]),
+  ["Q8_rio_2026-04-03_14-55-53.hoot", "Q8_9F61CEC3394C4853202020503F0E19FF_2026-04-03_14-55-53.hoot"]);
+assert.deepEqual(owlet.sessionSiblings("practice.hoot", ["practice.hoot", "other.hoot"]), ["practice.hoot"], "Files without a session timestamp open alone");
+const scan = "Shooter Velocity:          1ff00\nTalonFX-20/SupplyCurrent:   6f51400\nTalonFX-20/DutyCycle:     6f01400\nCANcoder-11/Position:   1231400\nPowerLib/Subsystems/Intake/Data/Velocity:  2ff00\nScanning...";
+assert.deepEqual(owlet.pickSignalIds(scan), ["1ff00", "6f51400", "2ff00"]);
 
 console.log("log-check passed");

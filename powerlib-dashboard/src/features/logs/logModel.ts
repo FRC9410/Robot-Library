@@ -2,7 +2,39 @@ import type { GeneratedSubsystem } from "../subsystems/types";
 import type { LogValue, Pose, WpilogFile } from "./wpilog";
 
 export type Series<T> = { times: number[]; values: T[] };
-export type MechanismKind = "velocity" | "position";
+/** `motors` is a group of motors with no PowerLib value: a group like Drive, or one unassigned motor. Its value is power. */
+export type MechanismKind = "velocity" | "position" | "motors";
+export type MotorSignal = "SupplyCurrent" | "SupplyVoltage" | "MotorVoltage" | "StatorCurrent" | "DeviceTemp" | "Position";
+/**
+ * How a motor's group was decided, strongest first: the Assign motors dialog, powerlib-subsystems.json,
+ * TunerConstants.java's swerve IDs, matching its motion to a mechanism, or the template's usual swerve IDs.
+ */
+export type MotorSource = "override" | "config" | "tuner" | "motion" | "guess" | "";
+export type MotorMetric = "current" | "power" | "voltage" | "stator" | "temp";
+export type RangedSeries = Series<number> & { min: number; max: number };
+/** What a mechanism graph shows: its PowerLib value vs setpoint, or one of its motor readings. */
+export type GraphView = "value" | MotorMetric;
+export const motorMetrics: Record<MotorMetric, { label: string; units: string }> = {
+  current: { label: "Supply current", units: "A" },
+  power: { label: "Power", units: "W" },
+  voltage: { label: "Applied voltage", units: "V" },
+  stator: { label: "Stator current", units: "A" },
+  temp: { label: "Motor temp", units: "°C" }
+};
+/** One motor controller from Phoenix's auto-logged device signals, keyed by CAN bus and ID. */
+export type LogMotor = {
+  key: string;
+  bus: string;
+  id: number;
+  label: string;
+  signals: Partial<Record<MotorSignal, Series<number>>>;
+  peakCurrent: number;
+  /** Mechanism or group this motor counts toward, or "" when unassigned. */
+  group: string;
+  source: MotorSource;
+  /** For motion matches, how closely the motor's motion followed the mechanism (|correlation|, 0–1). */
+  matchScore?: number;
+};
 export type LogMechanism = {
   id: string;
   name: string;
@@ -14,7 +46,12 @@ export type LogMechanism = {
   /** Finite range across value and setpoint, for graph axes and tolerances. */
   min: number;
   max: number;
+  motors: LogMotor[];
+  /** Combined motor readings: summed currents and power, mean applied voltage, hottest motor. */
+  metrics: Partial<Record<MotorMetric, RangedSeries>>;
 };
+/** A log file and the CAN bus it came from; a .hoot session has one per bus. */
+export type LogSource = { name: string; file: WpilogFile };
 export type LogPeriod = { mode: string; label: string; start: number; end: number };
 export type LogMarker = { time: number; kind: "brownout" | "setpoint" | "can"; label: string; mechanismId?: string };
 /** `settling` is true when inside the tolerance band but not yet for the 0.5 s that counts as settled. */
@@ -32,6 +69,11 @@ export type LogModel = {
   signalCount: number;
   /** True when values came from `/PowerLib/Data` JSON frames rather than per-key signals. */
   usedFrames: boolean;
+  /** Every motor found, assigned or not. */
+  motors: LogMotor[];
+  /** Power per assigned group plus one entry for all unassigned motors, for the power widget. */
+  powerGroups: { id: string; name: string; power: RangedSeries }[];
+  buses: string[];
 };
 
 type Metric = { series: Series<LogValue>; metadata: string };
@@ -70,23 +112,68 @@ export function plainMechanismKey(name: string): { owner: string; key: string } 
   return { owner: match[1].trim(), key: match[3] ? `${value}Setpoint` : value };
 }
 
-export function buildLogModel(file: WpilogFile, subsystems: GeneratedSubsystem[] = []): LogModel {
+const motorPattern = /(?:^|\/)(TalonFXS?)-(\d+)\/(SupplyCurrent|SupplyVoltage|MotorVoltage|StatorCurrent|DeviceTemp|Position)$/;
+
+/** Signals the Logs tab uses; anything else can be skipped while parsing to save memory. */
+export function isViewerSignal(name: string) {
+  return /(?:^|\/)PowerLib\/Data$/.test(name) || metricKey(name) !== null || name in owletSignals
+    || plainMechanismKey(name) !== null || motorPattern.test(name) || /(?:^|\/)Pose(?:\/|$)/.test(name);
+}
+
+/** `rio` for the roboRIO's own CAN bus file, `CANivore` for a CANivore's (named by its hex ID), else the file name. */
+export function busName(fileName: string) {
+  if (/(^|_)rio_/i.test(fileName)) return "rio";
+  if (/[0-9A-F]{16,}/i.test(fileName)) return "CANivore";
+  return fileName.replace(/\.(wpilog|hoot)$/i, "");
+}
+
+/**
+ * `assignments` maps a motor key (`<bus>:<id>`) to a mechanism or group name; "" leaves it unassigned.
+ * Other motors are grouped automatically (see `MotorSource`); `driveMotorIds` are the swerve IDs from TunerConstants.java.
+ */
+export function buildLogModel(input: WpilogFile | LogSource[], subsystems: GeneratedSubsystem[] = [], assignments: Record<string, string> = {},
+  driveMotorIds: number[] = []): LogModel {
+  const sources = Array.isArray(input) ? input : [{ name: "log", file: input }];
+  const usedBuses = new Map<string, number>();
+  const buses = sources.map(source => {
+    const base = sources.length > 1 ? busName(source.name) : "log";
+    const count = (usedBuses.get(base) ?? 0) + 1;
+    usedBuses.set(base, count);
+    return count > 1 ? `${base} ${count}` : base;
+  });
   const direct = new Map<string, Metric>();
   const framed = new Map<string, Metric>();
   const fallback = new Map<string, Metric>();
-  for (const signal of file.signals.values()) {
-    if (signal.times.length === 0) continue;
-    if (/(?:^|\/)PowerLib\/Data$/.test(signal.name) && (signal.type === "json" || signal.type === "string")) {
-      expandFrames(signal.times, signal.values, framed);
-      continue;
+  const motorSignals = new Map<string, { bus: string; id: number; signals: Partial<Record<MotorSignal, Series<number>>> }>();
+  let signalCount = 0;
+  sources.forEach((source, index) => {
+    for (const signal of source.file.signals.values()) {
+      signalCount += 1;
+      if (signal.times.length === 0) continue;
+      if (/(?:^|\/)PowerLib\/Data$/.test(signal.name) && (signal.type === "json" || signal.type === "string")) {
+        expandFrames(signal.times, signal.values, framed);
+        continue;
+      }
+      const motor = motorPattern.exec(signal.name);
+      if (motor) {
+        const key = `${buses[index]}:${motor[2]}`;
+        const entry = motorSignals.get(key) ?? { bus: buses[index], id: Number(motor[2]), signals: {} };
+        entry.signals[motor[3] as MotorSignal] = numbers({ times: signal.times, values: signal.values });
+        motorSignals.set(key, entry);
+        continue;
+      }
+      const metric = { series: { times: signal.times, values: signal.values }, metadata: signal.metadata };
+      const target = metricKey(signal.name);
+      if (target) {
+        // The roboRIO file comes first; the same custom signals repeated in other bus files are ignored.
+        if (!direct.has(`${target.owner}/${target.key}`)) direct.set(`${target.owner}/${target.key}`, metric);
+        continue;
+      }
+      const plain = owletSignals[signal.name] ? null : plainMechanismKey(signal.name);
+      const key = owletSignals[signal.name] ?? (plain && !ignoredOwners.has(plain.owner) ? `${plain.owner}/${plain.key}` : undefined);
+      if (key && !fallback.has(key)) fallback.set(key, metric);
     }
-    const metric = { series: { times: signal.times, values: signal.values }, metadata: signal.metadata };
-    const target = metricKey(signal.name);
-    if (target) { direct.set(`${target.owner}/${target.key}`, metric); continue; }
-    const plain = owletSignals[signal.name] ? null : plainMechanismKey(signal.name);
-    const key = owletSignals[signal.name] ?? (plain && !ignoredOwners.has(plain.owner) ? `${plain.owner}/${plain.key}` : undefined);
-    if (key && !fallback.has(key)) fallback.set(key, metric);
-  }
+  });
   const metrics = new Map(direct);
   let usedFrames = false;
   for (const [key, metric] of framed) {
@@ -96,14 +183,17 @@ export function buildLogModel(file: WpilogFile, subsystems: GeneratedSubsystem[]
 
   let origin = Infinity;
   let last = -Infinity;
-  for (const { series } of metrics.values()) {
+  const allSeries = [...[...metrics.values()].map(metric => metric.series),
+    ...[...motorSignals.values()].flatMap(motor => Object.values(motor.signals).filter(series => series !== undefined))];
+  for (const series of allSeries) {
     origin = Math.min(origin, series.times[0]);
     last = Math.max(last, series.times[series.times.length - 1]);
   }
   if (!Number.isFinite(origin)) {
-    return { duration: 0, mechanisms: [], periods: [], markers: [], signalCount: file.signals.size, usedFrames: false };
+    return { duration: 0, mechanisms: [], periods: [], markers: [], signalCount, usedFrames: false, motors: [], powerGroups: [], buses };
   }
-  for (const metric of metrics.values()) metric.series = { times: metric.series.times.map(time => time - origin), values: metric.series.values };
+  const shift = <T>(series: Series<T>): Series<T> => ({ times: series.times.map(time => time - origin), values: series.values });
+  for (const metric of metrics.values()) metric.series = shift(metric.series);
   const duration = Math.max(0, last - origin);
   const get = (owner: string, key: string) => metrics.get(`${owner}/${key}`);
 
@@ -112,8 +202,203 @@ export function buildLogModel(file: WpilogFile, subsystems: GeneratedSubsystem[]
   const state = strings((get("Drive", "ActualState") ?? get("Drive", "State"))?.series);
   const periods = findPeriods(metrics, duration);
   const mechanisms = findMechanisms(metrics, subsystems);
+  const motors = [...motorSignals.entries()].map(([key, motor]) => {
+    const signals = Object.fromEntries(Object.entries(motor.signals).map(([name, series]) => [name, series && shift(series)])) as LogMotor["signals"];
+    const current = signals.SupplyCurrent?.values ?? [];
+    let peakCurrent = 0;
+    for (const value of current) if (Number.isFinite(value)) peakCurrent = Math.max(peakCurrent, value);
+    return { key, bus: motor.bus, id: motor.id, label: `TalonFX ${motor.id}${buses.length > 1 ? ` · ${motor.bus}` : ""}`, signals, peakCurrent,
+      group: "", source: "" as MotorSource };
+  }).sort((left, right) => left.bus.localeCompare(right.bus) || left.id - right.id);
+  const powerGroups = assignMotors(mechanisms, motors, subsystems, assignments, driveMotorIds, periods, duration, battery);
   const markers = findMarkers(metrics, mechanisms, periods, battery, can);
-  return { duration, mechanisms, battery, can, state, pose: findPose(metrics), periods, markers, signalCount: file.signals.size, usedFrames };
+  return { duration, mechanisms, battery, can, state, pose: findPose(metrics), periods, markers, signalCount, usedFrames, motors, powerGroups, buses };
+}
+
+const normalizeName = (name: string) => name.replace(/[^a-z0-9]/gi, "").toLowerCase();
+
+/** The PowerLib template's swerve motor IDs (TunerConstants.java defaults), used only as a labeled guess. */
+const templateSwerveIds = [1, 2, 3, 4, 5, 6, 7, 8];
+/** A motion match needs at least this |correlation| between the motor and the mechanism. */
+const motionMatchThreshold = 0.9;
+
+/** Puts motors into mechanisms (or new groups), computes their combined readings, and returns the power widget's groups. */
+function assignMotors(mechanisms: LogMechanism[], motors: LogMotor[], subsystems: GeneratedSubsystem[], assignments: Record<string, string>,
+  driveMotorIds: number[], periods: LogPeriod[], duration: number, battery: Series<number> | undefined) {
+  // PowerLib mechanisms and the swerve default to the CANivore; when an ID is on both buses, configs mean the CANivore one.
+  const onOtherBus = (motor: LogMotor) => motor.bus === "rio" && motors.some(other => other !== motor && other.id === motor.id && other.bus !== "rio");
+  for (const motor of motors) {
+    if (motor.key in assignments) { motor.group = assignments[motor.key]; motor.source = "override"; continue; }
+    if (onOtherBus(motor)) continue;
+    const config = subsystems.find(subsystem => subsystem.motors?.some(entry => Number(entry.id) === motor.id));
+    if (config) { motor.group = config.name || config.id || ""; motor.source = "config"; }
+    else if (driveMotorIds.includes(motor.id)) { motor.group = "Drive"; motor.source = "tuner"; }
+  }
+  matchByMotion(mechanisms, motors.filter(motor => !motor.source), periods, duration);
+  if (driveMotorIds.length === 0) {
+    for (const bus of new Set(motors.map(motor => motor.bus))) {
+      const leftover = motors.filter(motor => motor.bus === bus && !motor.source && templateSwerveIds.includes(motor.id));
+      if (leftover.length === templateSwerveIds.length) for (const motor of leftover) { motor.group = "Drive"; motor.source = "guess"; }
+    }
+  }
+  const byName = new Map(mechanisms.map(mechanism => [normalizeName(mechanism.id), mechanism]));
+  const groups = new Map<string, LogMotor[]>();
+  for (const motor of motors) {
+    if (!motor.group) continue;
+    const key = normalizeName(motor.group);
+    groups.set(key, [...(groups.get(key) ?? []), motor]);
+  }
+  const powerGroups: LogModel["powerGroups"] = [];
+  for (const [key, members] of groups) {
+    let mechanism = byName.get(key);
+    const combined = combineMotors(members, battery);
+    if (!mechanism) {
+      if (!combined.power) continue;
+      mechanism = { id: members[0].group, name: members[0].group, kind: "motors", units: "W", value: combined.power, min: combined.power.min,
+        max: combined.power.max, motors: [], metrics: {} };
+      mechanisms.push(mechanism);
+    }
+    mechanism.motors = members;
+    mechanism.metrics = combined;
+    if (combined.power) powerGroups.push({ id: mechanism.id, name: mechanism.name, power: combined.power });
+  }
+  const unassigned = motors.filter(motor => !motor.group);
+  for (const motor of unassigned) {
+    const combined = combineMotors([motor], battery);
+    if (!combined.power) continue;
+    mechanisms.push({ id: `motor:${motor.key}`, name: motor.label, kind: "motors", units: "W", value: combined.power, min: combined.power.min,
+      max: combined.power.max, motors: [motor], metrics: combined });
+  }
+  // A fixed order for the power widget: biggest average user over the whole log first, unassigned last.
+  const meanPower = (series: RangedSeries) => {
+    let sum = 0; let count = 0;
+    for (const value of series.values) if (Number.isFinite(value)) { sum += Math.max(0, value); count += 1; }
+    return count ? sum / count : 0;
+  };
+  powerGroups.sort((left, right) => meanPower(right.power) - meanPower(left.power));
+  const otherPower = unassigned.length ? combineMotors(unassigned, battery).power : undefined;
+  if (otherPower) powerGroups.push({ id: "unassigned", name: "Unassigned motors", power: otherPower });
+  return powerGroups;
+}
+
+/** Pearson correlation of two equal-length arrays, skipping pairs with a non-finite value; NaN if either barely moves. */
+export function correlation(left: number[], right: number[]) {
+  let count = 0; let sumLeft = 0; let sumRight = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    if (Number.isFinite(left[index]) && Number.isFinite(right[index])) { count += 1; sumLeft += left[index]; sumRight += right[index]; }
+  }
+  if (count < 10) return NaN;
+  const meanLeft = sumLeft / count;
+  const meanRight = sumRight / count;
+  let cross = 0; let varianceLeft = 0; let varianceRight = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    if (!Number.isFinite(left[index]) || !Number.isFinite(right[index])) continue;
+    const a = left[index] - meanLeft;
+    const b = right[index] - meanRight;
+    cross += a * b; varianceLeft += a * a; varianceRight += b * b;
+  }
+  return varianceLeft > 1e-9 && varianceRight > 1e-9 ? cross / Math.sqrt(varianceLeft * varianceRight) : NaN;
+}
+
+/**
+ * Matches each unassigned motor to the mechanism whose motion it follows best, while the robot was
+ * enabled. Position mechanisms compare against the motor's position; velocity mechanisms against its
+ * speed (change in position). Correlation ignores gear ratios and units, and its sign ignores inverted
+ * followers. Each motor goes to its single best match, so mechanisms that run together (like a feeder
+ * and a spindexer) still separate.
+ */
+function matchByMotion(mechanisms: LogMechanism[], motors: LogMotor[], periods: LogPeriod[], duration: number) {
+  const candidates = mechanisms.filter(mechanism => mechanism.kind !== "motors");
+  if (!candidates.length || !motors.length || duration <= 0) return;
+  const spans = periods.length ? periods.map(period => [period.start, period.end]) : [[0, duration]];
+  const total = spans.reduce((sum, [start, end]) => sum + (end - start), 0);
+  const step = Math.max(0.1, total / 3000);
+  const half = step / 2;
+  const grid: number[] = [];
+  for (const [start, end] of spans) for (let time = start + half; time < end - half; time += step) grid.push(time);
+  const sample = (series: Series<number>, offset = 0) => { const at = cursor(series); return grid.map(time => at(time + offset) ?? NaN); };
+  const traces = candidates.map(mechanism => sample(mechanism.value));
+  for (const motor of motors) {
+    const position = motor.signals.Position;
+    if (!position) continue;
+    const motorPosition = sample(position);
+    const before = sample(position, -half);
+    const after = sample(position, half);
+    const motorSpeed = grid.map((_, index) => (after[index] - before[index]) / step);
+    let best: { mechanism: LogMechanism; score: number } | undefined;
+    candidates.forEach((mechanism, index) => {
+      const score = Math.abs(correlation(traces[index], mechanism.kind === "velocity" ? motorSpeed : motorPosition));
+      if (Number.isFinite(score) && (!best || score > best.score)) best = { mechanism, score };
+    });
+    if (best && best.score >= motionMatchThreshold) {
+      motor.group = best.mechanism.id;
+      motor.source = "motion";
+      motor.matchScore = best.score;
+    }
+  }
+}
+
+/** Reads a series at increasing times by walking forward instead of searching. */
+function cursor(series: Series<number> | undefined) {
+  let index = -1;
+  return (time: number) => {
+    if (!series) return undefined;
+    while (index + 1 < series.times.length && series.times[index + 1] <= time) index += 1;
+    return index < 0 ? undefined : series.values[index];
+  };
+}
+
+function ranged(times: number[], values: number[]): RangedSeries | undefined {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const value of values) if (Number.isFinite(value)) { min = Math.min(min, value); max = Math.max(max, value); }
+  if (!Number.isFinite(min)) return undefined;
+  if (min === max) { min -= 1; max += 1; }
+  return { times, values, min, max };
+}
+
+/** Sums supply/stator current and power, averages applied voltage and takes the hottest temperature, on the busiest motor's timestamps. */
+export function combineMotors(motors: LogMotor[], battery?: Series<number>): Partial<Record<MotorMetric, RangedSeries>> {
+  const base = motors.map(motor => motor.signals.SupplyCurrent ?? motor.signals.MotorVoltage)
+    .filter((series): series is Series<number> => series !== undefined)
+    .sort((left, right) => right.times.length - left.times.length)[0];
+  if (!base) return {};
+  const readers = motors.map(motor => ({
+    supply: cursor(motor.signals.SupplyCurrent), volts: cursor(motor.signals.SupplyVoltage), applied: cursor(motor.signals.MotorVoltage),
+    stator: cursor(motor.signals.StatorCurrent), temp: cursor(motor.signals.DeviceTemp)
+  }));
+  const batteryAt = cursor(battery);
+  const out: Record<MotorMetric, number[]> = { current: [], power: [], voltage: [], stator: [], temp: [] };
+  for (const time of base.times) {
+    const fallbackVolts = batteryAt(time);
+    let current = 0; let power = 0; let applied = 0; let appliedCount = 0; let stator = 0; let temp = -Infinity;
+    let hasCurrent = false; let hasStator = false;
+    for (const reader of readers) {
+      const supply = reader.supply(time);
+      if (supply !== undefined && Number.isFinite(supply)) {
+        hasCurrent = true;
+        current += supply;
+        power += supply * (reader.volts(time) ?? fallbackVolts ?? 12);
+      }
+      const volts = reader.applied(time);
+      if (volts !== undefined && Number.isFinite(volts)) { applied += volts; appliedCount += 1; }
+      const statorAmps = reader.stator(time);
+      if (statorAmps !== undefined && Number.isFinite(statorAmps)) { hasStator = true; stator += statorAmps; }
+      const degrees = reader.temp(time);
+      if (degrees !== undefined && Number.isFinite(degrees)) temp = Math.max(temp, degrees);
+    }
+    out.current.push(hasCurrent ? current : NaN);
+    out.power.push(hasCurrent ? power : NaN);
+    out.voltage.push(appliedCount ? applied / appliedCount : NaN);
+    out.stator.push(hasStator ? stator : NaN);
+    out.temp.push(Number.isFinite(temp) ? temp : NaN);
+  }
+  const result: Partial<Record<MotorMetric, RangedSeries>> = {};
+  for (const metric of Object.keys(out) as MotorMetric[]) {
+    const series = ranged(base.times, out[metric]);
+    if (series) result[metric] = series;
+  }
+  return result;
 }
 
 function expandFrames(times: number[], values: LogValue[], into: Map<string, Metric>) {
@@ -169,6 +454,49 @@ export function indexAt(times: number[], time: number) {
     if (times[middle] <= time) { found = middle; low = middle + 1; } else high = middle - 1;
   }
   return found;
+}
+
+/**
+ * Mean of the finite samples in (time - span, time], for readouts of noisy 100 Hz motor data.
+ * Falls back to the latest sample when none fall inside the span.
+ */
+export function averageAt(series: Series<number> | undefined, time: number, span = 0.5): number | undefined {
+  if (!series) return undefined;
+  const last = indexAt(series.times, time);
+  if (last < 0) return undefined;
+  let sum = 0; let count = 0;
+  for (let index = last; index >= 0 && series.times[index] > time - span; index -= 1) {
+    if (Number.isFinite(series.values[index])) { sum += series.values[index]; count += 1; }
+  }
+  return count ? sum / count : series.values[last];
+}
+
+/**
+ * Means of the finite samples in fixed time slots [k·step, (k+1)·step) covering [from, to]. Slot edges
+ * depend only on `step`, not `from`, so a window sliding during playback doesn't re-sample (no shimmer).
+ * Empty slots repeat the previous slot's mean.
+ */
+export function slotMeans(series: Series<number>, from: number, to: number, step: number) {
+  const first = Math.floor(from / step);
+  const last = Math.ceil(to / step);
+  const starts: number[] = [];
+  const means: number[] = [];
+  let index = Math.max(0, indexAt(series.times, first * step));
+  let previous = NaN;
+  for (let slot = first; slot < last; slot += 1) {
+    const start = slot * step;
+    const end = start + step;
+    let sum = 0; let count = 0;
+    while (index < series.times.length && series.times[index] < start) index += 1;
+    while (index < series.times.length && series.times[index] < end) {
+      if (Number.isFinite(series.values[index])) { sum += series.values[index]; count += 1; }
+      index += 1;
+    }
+    previous = count ? sum / count : previous;
+    starts.push(start);
+    means.push(previous);
+  }
+  return { starts, means };
 }
 
 export function valueAt<T>(series: Series<T> | undefined, time: number): T | undefined {
@@ -264,14 +592,15 @@ function findMechanisms(metrics: Map<string, Metric>, subsystems: GeneratedSubsy
     }
     if (!Number.isFinite(min)) { min = 0; max = 1; }
     mechanisms.push({ id: owner, name: config?.name || owner.replace(/([a-z0-9])([A-Z])/g, "$1 $2"), kind, units, value, setpoint,
-      atTarget: booleans((get("AtTarget") ?? get("AtSetpoint"))?.series), min, max });
+      atTarget: booleans((get("AtTarget") ?? get("AtSetpoint"))?.series), min, max, motors: [], metrics: {} });
   }
   return mechanisms;
 }
 
 /**
  * The mechanism with the most setpoint changes, so a log opens on something that moved. Without
- * setpoints, the one whose value changed most often by more than 5% of its range.
+ * setpoints, the one whose value changed most often by more than 5% of its range. Motor-only
+ * groups come last.
  */
 export function busiestMechanism(mechanisms: LogMechanism[]) {
   const changes = (values: number[], step: number) => {
@@ -283,8 +612,8 @@ export function busiestMechanism(mechanisms: LogMechanism[]) {
     return count;
   };
   const score = (mechanism: LogMechanism) => mechanism.setpoint
-    ? [1, changes(mechanism.setpoint.values, 0)]
-    : [0, changes(mechanism.value.values, (mechanism.max - mechanism.min) * 0.05)];
+    ? [2, changes(mechanism.setpoint.values, 0)]
+    : [mechanism.kind === "motors" ? 0 : 1, changes(mechanism.value.values, (mechanism.max - mechanism.min) * 0.05)];
   let best: LogMechanism | undefined;
   let bestScore = [-1, -1];
   for (const mechanism of mechanisms) {

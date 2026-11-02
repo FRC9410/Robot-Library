@@ -22,7 +22,8 @@ export type WpilogFile = {
 const utf8 = new TextDecoder("utf-8");
 const skippedTypes = new Set(["raw", "rawBytes", "msgpack", "protobuf", "structschema"]);
 
-export function parseWpilog(bytes: Uint8Array): WpilogFile {
+/** `keep` can drop signals by name while parsing, so a large log doesn't hold data nobody shows. */
+export function parseWpilog(bytes: Uint8Array, keep?: (name: string) => boolean): WpilogFile {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (bytes.byteLength < 12 || utf8.decode(bytes.subarray(0, 6)) !== "WPILOG") {
     throw new Error("This isn't a .wpilog file (missing the WPILOG header).");
@@ -58,7 +59,7 @@ export function parseWpilog(bytes: Uint8Array): WpilogFile {
     offset = start + size;
 
     if (id === 0) {
-      readControl(view, bytes, start, size, entries, signals);
+      readControl(view, bytes, start, size, entries, signals, keep);
       continue;
     }
     const signal = entries.get(id);
@@ -73,7 +74,7 @@ export function parseWpilog(bytes: Uint8Array): WpilogFile {
 }
 
 function readControl(view: DataView, bytes: Uint8Array, start: number, size: number,
-  entries: Map<number, WpilogSignal>, signals: Map<string, WpilogSignal>) {
+  entries: Map<number, WpilogSignal>, signals: Map<string, WpilogSignal>, keep?: (name: string) => boolean) {
   if (size < 5) return;
   const kind = bytes[start];
   const entry = view.getUint32(start + 1, true);
@@ -92,6 +93,7 @@ function readControl(view: DataView, bytes: Uint8Array, start: number, size: num
     const type = readString();
     const metadata = readString();
     if (name === null || type === null) return;
+    if (keep && !keep(name)) { entries.delete(entry); return; }
     // An entry can be finished and started again under a new ID; keep one signal per name.
     let signal = signals.get(name);
     if (!signal || signal.type !== type) {

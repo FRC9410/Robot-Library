@@ -33,7 +33,7 @@ The viewer opens both `.wpilog` and `.hoot` files. Which one the robot writes (S
 
 ## Open questions
 - Can Owlet ship inside Power Tool for laptops that never ran AdvantageScope? CTRE's CLI tools page doesn't state redistribution terms.
-- A session makes one `.hoot` per CAN bus. Should the viewer open a whole session folder and merge the files (e.g. to get CANivore device signals)?
+- [x] A session makes one `.hoot` per CAN bus: opening one now opens them all, merged on one clock (2026-11-02). Only the needed signals are exported, since a full CANivore export is ~1 GB.
 - Export licensing: custom signals (PowerLib's) always export. Device signals export in full only with a Pro-licensed device in the log. See [Telemetry and Logging](../03-PowerLib/Telemetry%20and%20Logging.md).
 
 Related: [Log Viewer Project](Log%20Viewer%20Project.md), [Telemetry and Logging](../03-PowerLib/Telemetry%20and%20Logging.md)

@@ -7,7 +7,8 @@ export type OpenedLog = {
   path: string;
   /** True when a .hoot file was converted to .wpilog through Owlet. */
   converted: boolean;
-  bytes: Uint8Array;
+  /** One entry per log file: the chosen file, plus the other CAN buses' .hoot files from the same session. */
+  files: { name: string; bytes: Uint8Array }[];
 };
 
 declare global {
@@ -42,6 +43,8 @@ declare global {
       }>;
       openLog: () => Promise<OpenedLog | { canceled: true }>;
       openLogPath: (filePath: string) => Promise<OpenedLog>;
+      /** Swerve drive and steer motor CAN IDs from the robot's TunerConstants.java; empty if not found. */
+      readDriveMotorIds: () => Promise<number[]>;
       getPathForFile: (file: File) => string;
       onMenuConnectionSettings: (callback: () => void) => () => void;
       onMenuUpdateSubsystemCode: (callback: () => void) => () => void;

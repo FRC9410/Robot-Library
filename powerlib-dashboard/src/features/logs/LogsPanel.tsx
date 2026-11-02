@@ -10,26 +10,41 @@ import TimelineIcon from "@mui/icons-material/Timeline";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import type { GeneratedSubsystem } from "../subsystems/types";
 import { template } from "../drive/driveModel";
-import { buildLogModel, busiestMechanism, valueAt } from "./logModel";
-import type { LogMarker } from "./logModel";
+import { averageAt, buildLogModel, busiestMechanism, isViewerSignal, valueAt } from "./logModel";
+import type { GraphView, LogMarker, LogSource } from "./logModel";
 import { parseWpilog } from "./wpilog";
-import type { WpilogFile } from "./wpilog";
 import { FieldView, formatClock, markerColors, MechanismGraphs, MechanismStatus, NumberTile, StateStrip, TimelineBar } from "./LogWidgets";
+import { MotorAssignDialog, PowerWidget } from "./PowerWidgets";
 
-type LoadedLog = { name: string; converted: boolean; file: WpilogFile };
+type LoadedLog = { name: string; converted: boolean; sources: LogSource[] };
 const speeds = [0.5, 1, 2, 4];
 const driveSettingsKey = "powerlib.driveDisplay.v1";
 const selectionKey = "powerlib.logs.mechanisms.v1";
+const assignmentsKey = "powerlib.logs.motorGroups.v1";
+const viewsKey = "powerlib.logs.graphViews.v1";
 
-/** The mechanisms picked last time, so the next log opens on the same ones. */
-function readSavedSelection(): string[] {
+function readSaved<T>(key: string, fallback: T, valid: (value: unknown) => value is T): T {
   try {
-    const saved: unknown = JSON.parse(localStorage.getItem(selectionKey) || "[]");
-    return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === "string") : [];
+    const saved: unknown = JSON.parse(localStorage.getItem(key) || "null");
+    return valid(saved) ? saved : fallback;
   } catch {
-    return [];
+    return fallback;
   }
 }
+
+function writeSaved(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Keep this session's choice when browser storage is unavailable.
+  }
+}
+
+const isStringList = (value: unknown): value is string[] => Array.isArray(value) && value.every(item => typeof item === "string");
+const isStringMap = (value: unknown): value is Record<string, string> =>
+  value !== null && typeof value === "object" && !Array.isArray(value) && Object.values(value).every(item => typeof item === "string");
+/** The mechanisms picked last time, so the next log opens on the same ones. */
+const readSavedSelection = () => readSaved(selectionKey, [], isStringList);
 const markerIcons: Record<LogMarker["kind"], typeof BoltIcon> = { brownout: BoltIcon, setpoint: WarningAmberIcon, can: LanIcon };
 
 /** Use the same field size and flip the Drive tab is set to on this machine. */
@@ -59,35 +74,76 @@ export function LogsPanel({ active, subsystems }: { active: boolean; subsystems:
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [mechanismIds, setMechanismIds] = useState<string[]>([]);
-  const model = useMemo(() => (loaded ? buildLogModel(loaded.file, subsystems) : null), [loaded, subsystems]);
+  const [assigningMotors, setAssigningMotors] = useState(false);
+  /** Motor key → mechanism or group, chosen in the Assign motors dialog; overrides powerlib-subsystems.json. */
+  const [assignments, setAssignments] = useState<Record<string, string>>(() => readSaved(assignmentsKey, {}, isStringMap));
+  /** Mechanism id → what its graph shows (value, current, power, voltage, stator or temp). */
+  const [views, setViews] = useState<Record<string, GraphView>>(() => readSaved(viewsKey, {}, isStringMap) as Record<string, GraphView>);
+  /** Swerve motor IDs from the robot's TunerConstants.java, so a log's drive motors group as Drive without setup. */
+  const [driveMotorIds, setDriveMotorIds] = useState<number[]>([]);
+  useEffect(() => {
+    window.powerlib?.readDriveMotorIds?.().then(setDriveMotorIds).catch(() => setDriveMotorIds([]));
+  }, []);
+  const model = useMemo(() => (loaded ? buildLogModel(loaded.sources, subsystems, assignments, driveMotorIds) : null),
+    [loaded, subsystems, assignments, driveMotorIds]);
   const field = useMemo(readFieldSettings, [active]);
   const duration = model?.duration ?? 0;
   const selected = useMemo(() => mechanismIds.flatMap(id => model?.mechanisms.find(item => item.id === id) ?? []), [mechanismIds, model]);
 
   function selectMechanisms(ids: string[]) {
     setMechanismIds(ids);
-    try {
-      localStorage.setItem(selectionKey, JSON.stringify(ids));
-    } catch {
-      // Keep this session's selection when browser storage is unavailable.
-    }
+    writeSaved(selectionKey, ids);
+  }
+
+  function assignMotor(key: string, group: string | null) {
+    setAssignments(current => {
+      const next = { ...current };
+      if (group === null) delete next[key]; else next[key] = group;
+      writeSaved(assignmentsKey, next);
+      return next;
+    });
+  }
+
+  function clearAssignments() {
+    setAssignments({});
+    writeSaved(assignmentsKey, {});
+  }
+
+  function setView(id: string, view: GraphView) {
+    setViews(current => {
+      const next = { ...current, [id]: view };
+      writeSaved(viewsKey, next);
+      return next;
+    });
   }
 
   const seek = useCallback((next: number) => setTime(Math.min(duration, Math.max(0, next))), [duration]);
 
-  function load(bytes: Uint8Array, name: string, converted: boolean) {
-    const file = parseWpilog(bytes);
-    setLoaded({ name, converted, file });
+  /** Several files are one session (one per CAN bus); the roboRIO's comes first. */
+  function load(files: { name: string; bytes: Uint8Array }[], name: string, converted: boolean) {
+    const sources = files.map(file => ({ name: file.name, file: parseWpilog(file.bytes, isViewerSignal) }));
+    setLoaded({ name, converted, sources });
     setPlaying(false);
-    setError(file.truncated ? "The end of this log was cut off (the robot may have lost power). Everything before that point is shown." : null);
+    setError(sources.some(source => source.file.truncated)
+      ? "The end of this log was cut off (the robot may have lost power). Everything before that point is shown." : null);
   }
+
+  // A new log starts at its first enabled period; reassigning motors rebuilds the model but keeps the time.
+  useEffect(() => {
+    if (model) setTime(model.periods[0]?.start ?? 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
 
   useEffect(() => {
     if (!model) return;
-    setTime(model.periods[0]?.start ?? 0);
-    const saved = readSavedSelection().filter(id => model.mechanisms.some(item => item.id === id));
-    const busiest = busiestMechanism(model.mechanisms)?.id;
-    setMechanismIds(saved.length ? saved : busiest ? [busiest] : []);
+    setMechanismIds(current => {
+      const exists = (id: string) => model.mechanisms.some(item => item.id === id);
+      const kept = current.filter(exists);
+      if (kept.length) return kept;
+      const saved = readSavedSelection().filter(exists);
+      const busiest = busiestMechanism(model.mechanisms)?.id;
+      return saved.length ? saved : busiest ? [busiest] : [];
+    });
   }, [model]);
 
   async function run(task: () => Promise<void>) {
@@ -105,23 +161,27 @@ export function LogsPanel({ active, subsystems }: { active: boolean; subsystems:
     void run(async () => {
       if (!window.powerlib?.openLog) throw new Error("Opening files needs the Power Tool app. Drag a .wpilog file here instead.");
       const result = await window.powerlib.openLog();
-      if (!result.canceled) load(result.bytes, result.name, result.converted);
+      if (!result.canceled) load(result.files, result.name, result.converted);
     });
   }
 
   function dropLog(event: DragEvent<HTMLElement>) {
     event.preventDefault();
     setDragging(false);
-    const file = event.dataTransfer.files[0];
-    if (!file) return;
+    const files = Array.from(event.dataTransfer.files);
+    if (!files.length) return;
     void run(async () => {
-      if (/\.hoot$/i.test(file.name)) {
-        const filePath = window.powerlib?.getPathForFile?.(file);
+      const hoot = files.find(file => /\.hoot$/i.test(file.name));
+      if (hoot) {
+        const filePath = window.powerlib?.getPathForFile?.(hoot);
         if (!filePath || !window.powerlib?.openLogPath) throw new Error("Opening .hoot files needs the Power Tool app.");
         const result = await window.powerlib.openLogPath(filePath);
-        load(result.bytes, result.name, result.converted);
+        load(result.files, result.name, result.converted);
       } else {
-        load(new Uint8Array(await file.arrayBuffer()), file.name, false);
+        // Several dropped .wpilog files open together as one session, roboRIO file first.
+        const read = await Promise.all(files.map(async file => ({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) })));
+        read.sort((left, right) => Number(/(^|_)rio_/i.test(right.name)) - Number(/(^|_)rio_/i.test(left.name)));
+        load(read, files.length > 1 ? `${files[0].name} + ${files.length - 1} more` : files[0].name, false);
       }
     });
   }
@@ -177,7 +237,7 @@ export function LogsPanel({ active, subsystems }: { active: boolean; subsystems:
           <TimelineIcon color="primary" sx={{ fontSize: 48 }} />
           <Typography variant="h6" sx={{ fontWeight: 800 }}>Open a robot log</Typography>
           <Typography color="text.secondary" sx={{ maxWidth: 520 }}>
-            Choose a .wpilog or .hoot file, or drag one here. .hoot files are converted with CTRE's Owlet, which needs to be in power-tool/tools/ or on PATH.
+            Choose a .wpilog or .hoot file, or drag one here. Opening one .hoot opens every CAN bus's .hoot from that match. They're converted with CTRE's Owlet, which Power Tool finds in AdvantageScope's downloads, power-tool/tools/ or PATH.
           </Typography>
           <Button variant="contained" startIcon={<FolderOpenIcon />} onClick={openLog} disabled={loading}>Open log</Button>
           {loading && <LinearProgress sx={{ width: 240 }} />}
@@ -186,7 +246,8 @@ export function LogsPanel({ active, subsystems }: { active: boolean; subsystems:
     );
   }
 
-  const battery = valueAt(model.battery, time);
+  // Same 0.5 s average as the power widget, so the two battery readouts agree.
+  const battery = averageAt(model.battery, time);
   const can = valueAt(model.can, time);
   const canPercent = can !== undefined && model.can && Math.max(...model.can.values.filter(Number.isFinite)) <= 1.5 ? can * 100 : can;
   const period = model.periods.find(item => time >= item.start && time < item.end);
@@ -198,7 +259,7 @@ export function LogsPanel({ active, subsystems }: { active: boolean; subsystems:
         <Button variant="outlined" size="small" startIcon={<FolderOpenIcon />} onClick={openLog} disabled={loading}>Open log</Button>
         <Typography sx={{ fontWeight: 800 }}>{loaded.name}</Typography>
         {loaded.converted && <Chip size="small" variant="outlined" label="Converted from .hoot" />}
-        <Typography variant="caption" color="text.secondary">{formatClock(duration)} long · {model.signalCount} signals{model.usedFrames ? " · from 10 Hz NT frames" : ""}</Typography>
+        <Typography variant="caption" color="text.secondary">{formatClock(duration)} long · {model.buses.length > 1 ? `${model.buses.join(" + ")} · ` : ""}{model.signalCount} signals{model.motors.length ? ` · ${model.motors.length} motors` : ""}{model.usedFrames ? " · from 10 Hz NT frames" : ""}</Typography>
         <Box sx={{ flex: 1 }} />
         {model.periods.length > 0 && <Typography variant="caption" color="text.secondary">Jump to:</Typography>}
         {model.periods.map(item => (
@@ -251,9 +312,14 @@ export function LogsPanel({ active, subsystems }: { active: boolean; subsystems:
       </Paper>
 
       <Box sx={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 1.5, alignItems: "start" }}>
-        <MechanismGraphs mechanisms={model.mechanisms} selected={selected} onSelect={selectMechanisms} time={time} />
-        <FieldView pose={model.pose} time={time} field={field} />
+        <MechanismGraphs mechanisms={model.mechanisms} selected={selected} onSelect={selectMechanisms} views={views} onView={setView} time={time} />
+        <Stack spacing={1.5} sx={{ minWidth: 0 }}>
+          <FieldView pose={model.pose} time={time} field={field} />
+          <PowerWidget allGroups={model.powerGroups} selected={selected} battery={model.battery} motorCount={model.motors.length} time={time} onAssign={() => setAssigningMotors(true)} />
+        </Stack>
       </Box>
+      <MotorAssignDialog open={assigningMotors} onClose={() => setAssigningMotors(false)} motors={model.motors} mechanisms={model.mechanisms}
+        overrides={assignments} onAssign={assignMotor} onReset={clearAssignments} />
       <Box sx={{ display: "grid", gridTemplateColumns: "minmax(0, 3fr) minmax(0, 1fr)", gap: 1.5, alignItems: "start" }}>
         <MechanismStatus mechanisms={selected} time={time} />
         <NumberTile title="Battery" value={battery} units="V" warn={battery !== undefined && battery < 8} />

@@ -52,12 +52,27 @@ A form editor for `power-tool/generated/powerlib-subsystems.json`.
 
 ## Logs (`features/logs/`)
 Replays a robot log file. Works offline; it doesn't use NetworkTables.
-- **Opening:** the Open log button (`window.powerlib.openLog`), or drag a file onto the tab. A dropped `.wpilog` is read in the renderer; a dropped `.hoot` goes through `openLogPath` so the main process can run Owlet. See [Power Tool Architecture](Power%20Tool%20Architecture.md).
-- `wpilog.ts`: `.wpilog` v1.0 reader.
+- **Opening:** the Open log button (`window.powerlib.openLog`), or drag files onto the tab.
+  - A `.hoot` opens its whole session (every CAN bus's file from that match) through Owlet. See [Power Tool Architecture](Power%20Tool%20Architecture.md).
+  - Dropped `.wpilog` files are read in the renderer; dropping several opens them together as one session.
+- `wpilog.ts`: `.wpilog` v1.0 reader. `parseWpilog(bytes, keep)` skips signals `keep` rejects (the tab passes `isViewerSignal`).
   - Decodes boolean, int64, float, double, string/json, the array types and `struct:Pose2d`. Schemas and raw types are skipped.
   - An entry finished and restarted under a new ID stays one signal.
   - A cut-off last record sets `truncated`, and the tab shows a warning instead of failing.
-- `logModel.ts` (`buildLogModel`) turns signals into what the tab shows:
+- `logModel.ts` (`buildLogModel(sources, subsystems, assignments)`) turns signals into what the tab shows:
+  - **Sources:** one per file. `busName` labels each by file name: `rio`, `CANivore` (hex ID in the name), else the file name. Custom signals repeated in several files are read from the first (roboRIO) one.
+  - **Motors:** every `Phoenix6/TalonFX-<id>/<signal>` becomes a `LogMotor` keyed `<bus>:<id>`, since IDs can repeat across buses.
+    - Motors are grouped automatically when a log opens. Each motor's `source` records which rule won, strongest first:
+      1. `override`: the Assign motors dialog (`assignments`): a mechanism, a new group like `Drive` (a `motors`-kind entry whose value is power), or `""` for unassigned;
+      2. `config`: the `motors[].id` CAN IDs in `powerlib-subsystems.json`;
+      3. `tuner`: swerve IDs from the robot's `TunerConstants.java` (`k<Module>Drive|SteerMotorId`, read by the `powerlib:read-drive-motor-ids` IPC) → `Drive`;
+      4. `motion` (`matchByMotion`): over enabled periods (≤3,000 samples), the |correlation| between each mechanism's value and the motor's `Position` (position mechanisms) or its change in position (velocity mechanisms). Each motor goes to its best match if ≥ 0.9 (`matchScore`). Correlation ignores gear ratios, units, offsets and inverted followers;
+      5. `guess`: if no TunerConstants IDs were found and IDs 1–8 are all still unassigned on one bus (the template's swerve IDs) → `Drive`, labeled as a guess.
+
+      For rules 2–3, when an ID is on both buses the CANivore one wins, because PowerLib mechanisms and the swerve default to the `canivore` bus.
+    - Each unassigned motor is also listed on its own (`motor:<key>`).
+    - `combineMotors` gives each mechanism/group `metrics`: summed `current` (supply) and `stator`, `power` (Σ supply voltage × supply current; battery voltage if `SupplyVoltage` is missing), mean applied `voltage`, and max `temp`.
+    - `powerGroups` lists power per group plus one "Unassigned motors" entry.
   - **Signal names:** `metricKey` matches `…/Subsystems/<owner>/Data/<key>` anywhere in a name, so SignalLogger (`PowerLib/…`), DataLogManager (`NT:/PowerLib/…`) and Owlet exports all work. Also legacy `/PowerLib/Drive/<key>`, `…/RobotStatus/<key>` and `DS:enabled|autonomous|test`.
   - **`/PowerLib/Data` JSON frames** are expanded per key, but only fill keys that have no per-key signal (`usedFrames`).
   - **Fallbacks for logs without PowerLib keys:**
@@ -71,7 +86,7 @@ Replays a robot log file. Works offline; it doesn't use NetworkTables.
     - CAN over 90%;
     - setpoint misses: off by more than `toleranceFor` (5% of setpoint or 2% of range) for 0.5 s, at least 1 s after the setpoint changed, while enabled.
   - `stepStats`: overshoot and settle time (0.5 s inside tolerance) for the step in effect.
-  - `busiestMechanism`: the mechanism the tab opens on. Prefers the one with the most setpoint changes; with no setpoints, the one whose value moved most often.
+  - `busiestMechanism`: the mechanism the tab opens on. Prefers the one with the most setpoint changes; with no setpoints, the one whose value moved most often. Motor-only groups come last.
 - `LogsPanel.tsx` + `LogWidgets.tsx`: fixed layout, top to bottom.
   - Timeline, directly under the file name so it's always reachable: play/pause, 0.5–4x speed, problem-marker chips, the period/marker bar and a slider. Details below.
   - Then `MechanismGraphs` and the field with a 3 s trail.
@@ -79,7 +94,17 @@ Replays a robot log file. Works offline; it doesn't use NetworkTables.
     - A multi-select dropdown picks mechanisms. Each one gets its own value-vs-setpoint graph, stacked on the same 20 s window with one cursor, so different units never share an axis.
     - Graphs get shorter as more are added (200 / 120 / 88 px).
     - The selection is saved in localStorage (`powerlib.logs.mechanisms.v1`), and the next log opens with the same mechanisms if it has them; otherwise `busiestMechanism`.
-  - Middle: `MechanismStatus` table, one row per selected mechanism (at setpoint, estimated when not logged; value; setpoint; error; overshoot; settle time), plus battery.
+    - Each graph has a view selector: value vs setpoint, supply current, power, applied voltage, stator current or motor temp (only the readings it has). Saved per mechanism in `powerlib.logs.graphViews.v1`.
+    - **Motor readings are noisy** (logged at ~100 Hz, jumping between samples), so motor views draw each fixed group of samples as its mean (≥ 0.05 s per point, `seriesPath`'s `averageSeconds`). Their readouts use `averageAt` (mean of the last 0.5 s). Value views stay raw.
+    - Right column, under the field: `PowerWidget` (`PowerWidgets.tsx`) stacks the power of **only the mechanisms picked in the Mechanisms dropdown** (power groups plus any picked single motors) over the same window.
+      - It shows "Picked N W of M W robot total" and the battery voltage. With no picked mechanism that has motors, it says so and gives the robot total.
+      - Each group's color comes from its place in the full `powerGroups` list, so it doesn't change with the selection.
+      - To keep it steady during playback:
+      - it stacks `slotMeans` (0.1 s slots at fixed positions in the log, so a sliding window doesn't re-sample);
+      - its y-axis is one rounded scale from the picked groups' busiest 0.1 s over the whole log (it changes only when the picks change);
+      - its legend keeps the groups' fixed order (average power over the log, unassigned last);
+      - readouts are 0.5 s averages. The Battery tile uses the same average, so the two agree. Its **Assign motors** button opens `MotorAssignDialog`, which lists every motor with bus, peak current and how it was grouped (e.g. "Shooter · matched by motion 0.99"), for fixing mistakes. Choices are saved in `powerlib.logs.motorGroups.v1`; "Automatic" goes back to the automatic grouping.
+  - Middle: `MechanismStatus` table, one row per selected mechanism (at setpoint, estimated when not logged; value; setpoint; error; overshoot; settle time; current; power), plus battery.
   - Below: `Drive/ActualState` strip.
   - Timeline: play/pause, 0.5–4x speed, match-period chips, problem-marker chips (clicking one jumps there and adds its mechanism to the selection), click-to-seek, slider. Space plays/pauses; arrows step 1 s (Shift 5 s).
 - The panel stays mounted (hidden) when you switch tabs, so the open log is kept. Playback pauses while hidden.

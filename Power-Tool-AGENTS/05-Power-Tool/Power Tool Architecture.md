@@ -62,13 +62,17 @@ flowchart LR
 | `powerlib:update-power-tool` | Launches `update-power-tool.ps1` detached in a console, then quits the app |
 | `powerlib:open-log` | File dialog for `.wpilog`/`.hoot`; returns the file bytes (`.hoot` converted first, see below) |
 | `powerlib:open-log-path` | Same, for a dropped file's path. Only accepts `.wpilog`/`.hoot` paths |
+| `powerlib:read-drive-motor-ids` | Swerve drive/steer motor CAN IDs from the robot's `TunerConstants.java` (`src/main/java/frc/robot/{constants,generated,}/`), for grouping a log's Drive motors |
 | `powerlib:menu-*` (main → renderer) | Menu clicks forwarded to React |
 
 `preload.cts` exposes these as `window.powerlib` (types in `src/types/electron.d.ts`), plus
 `getPathForFile` (Electron `webUtils`) so a dropped `.hoot` can be handed to the main process.
 
 **`.hoot` conversion** (`readLogFile` in `main.ts`, `convertHoot` in `electron/owlet.ts`) runs CTRE's
-Owlet (`owlet <in> <out> -f wpilog`) into a temp folder that is deleted afterwards.
+Owlet (`owlet <in> <out> -f wpilog -s <ids>`) into a temp folder that is deleted afterwards. The IPC
+result is `files: [{ name, bytes }]`, one per log file.
+- **Whole session:** opening one `.hoot` also converts every `.hoot` in the same folder with the same `_YYYY-MM-DD_HH-MM-SS` suffix (`sessionSiblings`). SignalLogger writes one per CAN bus, and they share one clock. The roboRIO bus's file comes first.
+- **Only needed signals:** a full CANivore export is ~1 GB (2,000+ device signals). `convertHoot` runs `owlet <hoot> --scan` first, then exports only robot-written and Owlet status signals plus each Talon FX's `SupplyCurrent`, `SupplyVoltage`, `MotorVoltage`, `StatorCurrent`, `DeviceTemp` and `Position` (for matching motors by motion) (`isViewerSignal`, `pickSignalIds`). On a 2026 match this was ~130 MB and 2.5 s. If the scan fails, everything is exported.
 - **Version matching:** each Owlet reads one `.hoot` format version ("compliancy"), and CTRE changes the format between Phoenix releases.
   1. `convertHoot` asks an Owlet for the log's version with `owlet <hoot> --compliancy`, which prints `owlet: N` / `hoot log: N`.
   2. It then runs the Owlet with the same number. AdvantageScope names its copies `owlet-<ver>-C<N>.exe`; other copies are asked.

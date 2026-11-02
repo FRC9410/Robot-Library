@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { readConstantsFiles, saveConstantsFile } from "./constantsFiles.js";
 import { generatedJsonPath } from "./projectPaths.js";
-import { convertHoot } from "./owlet.js";
+import { convertHoot, sessionSiblings } from "./owlet.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -460,21 +460,46 @@ function owletDirectories() {
   ]));
 }
 
+/** A .hoot opens with every .hoot from the same session (one per CAN bus), each converted to .wpilog. */
 async function readLogFile(filePath: string) {
   const name = path.basename(filePath);
   if (path.extname(filePath).toLowerCase() !== ".hoot") {
-    return { canceled: false as const, name, path: filePath, converted: false, bytes: await fs.readFile(filePath) };
+    return { canceled: false as const, name, path: filePath, converted: false, files: [{ name, bytes: await fs.readFile(filePath) }] };
   }
 
+  const directory = path.dirname(filePath);
+  const siblings = sessionSiblings(name, await fs.readdir(directory).catch(() => [name]));
   const outputDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "power-tool-log-"));
-  const outputPath = path.join(outputDirectory, `${path.basename(filePath, path.extname(filePath))}.wpilog`);
   try {
-    await convertHoot(filePath, outputPath, owletDirectories(), process.env.POWERLIB_OWLET);
-    return { canceled: false as const, name, path: filePath, converted: true, bytes: await fs.readFile(outputPath) };
+    const files = [];
+    for (const sibling of siblings) {
+      const outputPath = path.join(outputDirectory, `${path.basename(sibling, path.extname(sibling))}.wpilog`);
+      await convertHoot(path.join(directory, sibling), outputPath, owletDirectories(), process.env.POWERLIB_OWLET);
+      files.push({ name: sibling, bytes: await fs.readFile(outputPath) });
+    }
+    return { canceled: false as const, name, path: filePath, converted: true, files };
   } finally {
     await fs.rm(outputDirectory, { recursive: true, force: true });
   }
 }
+
+/** Swerve motor CAN IDs from the robot's TunerConstants.java (`k<Module>DriveMotorId` / `k<Module>SteerMotorId`), so logs can group them as Drive. */
+async function readDriveMotorIds() {
+  const robotRoot = getDetectedRobotRoot();
+  const candidates = ["constants", "generated", ""].map((folder) => path.join(robotRoot, "src", "main", "java", "frc", "robot", folder, "TunerConstants.java"));
+  for (const candidate of candidates) {
+    try {
+      const source = await fs.readFile(candidate, "utf-8");
+      const ids = Array.from(source.matchAll(/\bk\w*(?:Drive|Steer)MotorId\s*=\s*(\d+)\s*;/g), (match) => Number(match[1]));
+      if (ids.length) return Array.from(new Set(ids));
+    } catch {
+      // Keep looking.
+    }
+  }
+  return [];
+}
+
+ipcMain.handle("powerlib:read-drive-motor-ids", async () => readDriveMotorIds());
 
 ipcMain.handle("powerlib:open-log", async (event) => {
   const owner = BrowserWindow.fromWebContents(event.sender);
