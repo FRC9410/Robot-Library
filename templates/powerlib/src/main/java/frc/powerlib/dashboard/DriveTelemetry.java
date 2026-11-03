@@ -1,6 +1,8 @@
 package frc.powerlib.dashboard;
 
+import com.ctre.phoenix6.SignalLogger;
 import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.kinematics.SwerveModuleState;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.RobotController;
 import frc.powerlib.PowerRobotContainer;
@@ -14,7 +16,12 @@ public final class DriveTelemetry {
   private Supplier<String> stateSupplier;
   private Supplier<String> requestedStateSupplier;
   private Supplier<String> actualStateSupplier;
+  private Supplier<SwerveModuleState[]> moduleStatesSupplier;
+  private Supplier<SwerveModuleState[]> moduleTargetsSupplier;
   private long heartbeat;
+
+  static final String MODULE_STATES_LOG = "PowerLib/Subsystems/Drive/Data/ModuleStates";
+  static final String MODULE_TARGETS_LOG = "PowerLib/Subsystems/Drive/Data/ModuleTargets";
 
   public DriveTelemetry withPose(Supplier<Pose2d> supplier) {
     poseSupplier = supplier;
@@ -44,7 +51,20 @@ public final class DriveTelemetry {
     return this;
   }
 
+  /**
+   * Swerve module states (measured) and targets (commanded), in module order (front left, front right, back left,
+   * back right). Written to the log only, every loop, for Power Tool's Logs tab; not part of the NetworkTables frame.
+   */
+  public DriveTelemetry withSwerveModules(Supplier<SwerveModuleState[]> states,
+      Supplier<SwerveModuleState[]> targets) {
+    moduleStatesSupplier = Objects.requireNonNull(states);
+    moduleTargetsSupplier = Objects.requireNonNull(targets);
+    return this;
+  }
+
   public void publish() {
+    logModules(MODULE_STATES_LOG, moduleStatesSupplier);
+    logModules(MODULE_TARGETS_LOG, moduleTargetsSupplier);
     setData("Enabled", DriverStation.isEnabled());
     setData("Mode", DriverStation.isDisabled() ? "DISABLED"
         : DriverStation.isAutonomous() ? "AUTO" : DriverStation.isTest() ? "TEST" : "TELEOP");
@@ -79,6 +99,22 @@ public final class DriveTelemetry {
     }
     // Changes even when the robot is stationary, so stale feedback cannot look healthy.
     setData("Heartbeat", (double) ++heartbeat);
+  }
+
+  private static void logModules(String name, Supplier<SwerveModuleState[]> supplier) {
+    if (supplier == null) return;
+    SwerveModuleState[] modules = supplier.get();
+    if (validModules(modules)) SignalLogger.writeStructArray(name, SwerveModuleState.struct, modules);
+  }
+
+  /** Skips missing or nonfinite readings rather than logging made-up wheel directions. */
+  static boolean validModules(SwerveModuleState[] modules) {
+    if (modules == null || modules.length == 0) return false;
+    for (SwerveModuleState module : modules) {
+      if (module == null || module.angle == null || !Double.isFinite(module.speedMetersPerSecond)
+          || !Double.isFinite(module.angle.getRadians())) return false;
+    }
+    return true;
   }
 
   private static void setData(String key, Object value) {

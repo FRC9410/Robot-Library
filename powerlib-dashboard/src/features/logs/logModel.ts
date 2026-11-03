@@ -1,7 +1,12 @@
 import type { GeneratedSubsystem } from "../subsystems/types";
+import { indexAt } from "./series";
+import type { Series } from "./series";
+import { findSwerveModules } from "./swerveModel";
+import type { SwerveModules } from "./swerveModel";
 import type { LogValue, Pose, WpilogFile } from "./wpilog";
 
-export type Series<T> = { times: number[]; values: T[] };
+export { indexAt };
+export type { Series };
 /** `motors` is a group of motors with no PowerLib value: a group like Drive, or one unassigned motor. Its value is power. */
 export type MechanismKind = "velocity" | "position" | "motors";
 export type MotorSignal = "SupplyCurrent" | "SupplyVoltage" | "MotorVoltage" | "StatorCurrent" | "DeviceTemp" | "Position";
@@ -64,6 +69,8 @@ export type LogModel = {
   can?: Series<number>;
   state?: Series<string>;
   pose?: Series<Pose>;
+  /** Swerve module states and targets from PowerLib's `Drive/ModuleStates` and `Drive/ModuleTargets`. */
+  swerve?: SwerveModules;
   /** The Driver Station's match countdown (`DriverStation.getMatchTime()`), seconds; negative when there wasn't one. */
   matchTime?: Series<number>;
   /** Whether the robot was connected to a field (FMS), so a real match can be told from practice. */
@@ -219,7 +226,8 @@ export function buildLogModel(input: WpilogFile | LogSource[], subsystems: Gener
   }).sort((left, right) => left.bus.localeCompare(right.bus) || left.id - right.id);
   const powerGroups = assignMotors(mechanisms, motors, subsystems, assignments, driveMotorIds, periods, duration, battery);
   const markers = findMarkers(metrics, mechanisms, periods, battery, can);
-  return { duration, mechanisms, battery, can, state, pose: findPose(metrics), matchTime, fmsAttached, periods, markers, signalCount, usedFrames, motors,
+  const swerve = findSwerveModules(get("Drive", "ModuleStates")?.series, get("Drive", "ModuleTargets")?.series);
+  return { duration, mechanisms, battery, can, state, pose: findPose(metrics), swerve, matchTime, fmsAttached, periods, markers, signalCount, usedFrames, motors,
     powerGroups, buses };
 }
 
@@ -452,18 +460,6 @@ function strings(series: Series<LogValue> | undefined): Series<string> | undefin
   return { times: series.times, values: series.values.map(value => typeof value === "string" ? value : "") };
 }
 
-/** Index of the last sample at or before `time`, or -1. */
-export function indexAt(times: number[], time: number) {
-  let low = 0;
-  let high = times.length - 1;
-  let found = -1;
-  while (low <= high) {
-    const middle = (low + high) >> 1;
-    if (times[middle] <= time) { found = middle; low = middle + 1; } else high = middle - 1;
-  }
-  return found;
-}
-
 /**
  * Mean of the finite samples in (time - span, time], for readouts of noisy 100 Hz motor data.
  * Falls back to the latest sample when none fall inside the span.
@@ -560,13 +556,17 @@ export type PoseHeatmap = { cell: number; columns: number; rows: number; counts:
 /**
  * Where the robot spent its time: pose samples counted in square cells (`cell` meters) over the field, while enabled
  * (the whole log when there are no periods). Poses off the field are left out. Cell `row * columns + column`.
+ * Only samples up to `until` count, so the map can fill in as playback runs; `max` is the busiest cell so far, so
+ * there's always a red cell and colors adjust as the robot spends time elsewhere.
  */
-export function poseHeatmap(pose: Series<Pose>, periods: LogPeriod[], length: number, width: number, cell = 0.3): PoseHeatmap {
+export function poseHeatmap(pose: Series<Pose>, periods: LogPeriod[], length: number, width: number, cell = 0.3,
+  until = Infinity): PoseHeatmap {
   const columns = Math.max(1, Math.ceil(length / cell));
   const rows = Math.max(1, Math.ceil(width / cell));
   const counts = new Array<number>(columns * rows).fill(0);
   let max = 0;
   pose.times.forEach((time, index) => {
+    if (time > until) return;
     if (periods.length && !periods.some(period => time >= period.start && time < period.end)) return;
     const column = Math.floor(pose.values[index].x / cell);
     const row = Math.floor(pose.values[index].y / cell);

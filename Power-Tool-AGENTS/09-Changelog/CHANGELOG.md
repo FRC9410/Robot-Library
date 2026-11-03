@@ -25,6 +25,20 @@ Entry format:
 
 ---
 
+## 2026-11-03: Swerve wheels in the Logs tab
+- **What:** PowerLib logs swerve module states and targets (`DriveTelemetry.withSwerveModules`, `SignalLogger.writeStructArray` to `Drive/Data/ModuleStates` and `ModuleTargets`, log only). The template `PowerDashboard` passes CTRE's `getState().ModuleStates`/`ModuleTargets`, and `generate-subsystem.ps1` adds it to existing projects. Power Tool reads `struct:SwerveModuleState[]`; the field robot gets an arrow per wheel on Position and Heat map, and the Field card has a new **Swerve** mode: the robot close up with actual (green) and target (purple dashed) arrows, speeds, and a wheel more than 15° off its target in red. New `swerveModel.ts`, `series.ts` (`Series`, `indexAt` moved out of `logModel.ts`), `WheelArrows.tsx`, `SwerveModulesView.tsx`. The `log-check.mjs` sample match now has module data with the back-right wheel 25° off from 40 to 44 s.
+- **Why:** To see which way the wheels faced at any moment of a match, and to catch a wheel that doesn't follow its target. Logs only showed the robot's position.
+- **Files:** `templates/powerlib/src/main/java/frc/powerlib/dashboard/DriveTelemetry.java`, `templates/replacements/src/main/java/frc/robot/subsystems/PowerDashboard.java`, `generate-subsystem.ps1`, `tests/java/frc/powerlib/dashboard/TelemetryContractTest.java`, `powerlib-dashboard/src/features/logs/wpilog.ts`, `logModel.ts`, `series.ts`, `swerveModel.ts`, `LogsPanel.tsx`, `components/FieldView.tsx`, `RobotPose.tsx`, `WheelArrows.tsx`, `SwerveModulesView.tsx`, `powerlib-dashboard/scripts/log-check.mjs`
+- **Notes updated:** [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [Telemetry and Logging](../03-PowerLib/Telemetry%20and%20Logging.md), [Project Overview](../11-Ideas/INDEX.md)
+- **Branch / commit:** feature/Log-Viewer
+
+## 2026-11-03: Heat map fills in during playback, red/yellow/green
+- **What:** The field heat map only counts pose samples up to the playhead, so it draws itself as the log plays (and un-draws when you scrub back). Cells go green (little time) through yellow to red (most time), scaled to the busiest cell so far, so red shows from the start. The "Brighter = more time" caption is gone. `poseHeatmap` takes an `until` time (checked in `log-check.mjs`).
+- **Why:** Watching it fill in shows where the robot went and in what order; a static map hid that. The colors read without a legend.
+- **Files:** `powerlib-dashboard/src/features/logs/logModel.ts`, `components/FieldView.tsx`, `components/FieldHeatmap.tsx`, `powerlib-dashboard/scripts/log-check.mjs`
+- **Notes updated:** [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md)
+- **Branch / commit:** feature/Log-Viewer
+
 ## 2026-11-03: Get logs from robot
 - **What:** A **Get logs from robot** button (start page and logs list) is greyed out until the robot answers on SSH, then opens a popup listing the robot's runs with checkboxes, "Downloaded"/"On robot", time and size. One ticked downloads and opens it; several just download. Files land in the logs folder in the same event/Shop layout the list reads. New `electron/robotLogs.ts` (SFTP through the new `ssh2` dependency; roboRIO and Systemcore default logins and log folders), IPC `powerlib:find-robot`, `list-robot-logs`, `download-robot-logs` and the `robot-download-progress` event. `SavedLogGroup` now takes a `renderLog` slot; `groupLogFiles` normalizes `\` to `/` in folders; new `isDownloaded` and `downloadFolderFor` (checked in `log-check.mjs`).
 - **Why:** Pulling logs meant a USB stick or Phoenix Tuner. On Systemcore's small internal storage, pulling after each match also keeps it from filling.

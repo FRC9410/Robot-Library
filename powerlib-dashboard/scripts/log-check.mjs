@@ -6,11 +6,11 @@ import { build } from "esbuild";
 // Usage: node scripts/log-check.mjs [--write-sample <path.wpilog>]
 // The written sample also has Phoenix TalonFX signals (swerve IDs 1-8 plus each mechanism's motors), so every Logs widget has data.
 const result = await build({
-  stdin: { contents: 'export * from "./src/features/logs/wpilog.ts"; export * from "./src/features/logs/logModel.ts"; export * as library from "./src/features/logs/logLibraryModel.ts";',
+  stdin: { contents: 'export * from "./src/features/logs/wpilog.ts"; export * from "./src/features/logs/logModel.ts"; export * as library from "./src/features/logs/logLibraryModel.ts"; export * as swerveModel from "./src/features/logs/swerveModel.ts";',
     resolveDir: fileURLToPath(new URL("..", import.meta.url)), loader: "ts" },
   bundle: true, write: false, format: "esm", platform: "node"
 });
-const { library, parseWpilog, buildLogModel, busiestMechanism, busName, isViewerSignal, metricKey, plainMechanismKey, stepStats, valueAt, indexAt, segments,
+const { library, swerveModel, parseWpilog, buildLogModel, busiestMechanism, busName, isViewerSignal, metricKey, plainMechanismKey, stepStats, valueAt, indexAt, segments,
   averageAt, slotMeans, canPercentAt, matchClockAt, poseHeatmap, motorAverage } =
   await import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].contents).toString("base64")}`);
 const owletBundle = await build({ entryPoints: [fileURLToPath(new URL("../electron/owlet.ts", import.meta.url))], bundle: true, write: false,
@@ -52,6 +52,12 @@ class LogWriter {
   boolean(name, micros, value) { this.append(name, micros, Buffer.from([value ? 1 : 0])); }
   string(name, micros, value) { this.append(name, micros, Buffer.from(value)); }
   pose(name, micros, x, y, heading) { const bytes = Buffer.alloc(24); bytes.writeDoubleLE(x, 0); bytes.writeDoubleLE(y, 8); bytes.writeDoubleLE(heading, 16); this.append(name, micros, bytes); }
+  /** struct:SwerveModuleState[]: 16 bytes per module, speed then angle (radians). */
+  modules(name, micros, modules) {
+    const bytes = Buffer.alloc(16 * modules.length);
+    modules.forEach((module, index) => { bytes.writeDoubleLE(module.speed, index * 16); bytes.writeDoubleLE(module.angle, index * 16 + 8); });
+    this.append(name, micros, bytes);
+  }
   bytes() { return new Uint8Array(Buffer.concat(this.parts)); }
 }
 
@@ -92,6 +98,8 @@ function writeMatch(withMotors = false) {
   for (const [key, type] of [["Mode", "string"], ["Enabled", "boolean"], ["ActualState", "string"], ["BatteryVolts", "double"], ["RioCanUtilization", "double"],
     ["Pose", "struct:Pose2d"], ["Pose/XMeters", "double"], ["Pose/YMeters", "double"], ["Pose/HeadingDegrees", "double"], ["Heartbeat", "double"], ["MatchTimeSeconds", "double"]]) log.start(drive(key), type, "", boot);
   log.start(".schema/struct:Pose2d", "structschema", "", boot);
+  log.start(drive("ModuleStates"), "struct:SwerveModuleState[]", "", boot);
+  log.start(drive("ModuleTargets"), "struct:SwerveModuleState[]", "", boot);
   log.start("PowerLib/RobotStatus/BrownedOut", "boolean", "", boot);
   log.start("PowerLib/RobotStatus/FmsAttached", "boolean", "", boot);
   for (const [owner, config] of Object.entries(mechanisms)) {
@@ -106,6 +114,8 @@ function writeMatch(withMotors = false) {
   for (const motor of motors) for (const signal of motorSignalNames) log.start(`Phoenix6/TalonFX-${motor.id}/${signal}`, "double", "", boot);
   let previousPose = { x: 2, y: 4 };
   let previousDriveSpeed = 0;
+  let previousHeading = 0;
+  const wheelAngles = [0, 0, 0, 0];
   let aim = 25;
   let previousState = "";
   for (let step = 0; step <= 7500; step += 1) {
@@ -153,6 +163,24 @@ function writeMatch(withMotors = false) {
       ...Object.fromEntries(Object.entries(mechanisms).map(([owner, config]) => [owner, config.kind === "velocity"
         ? { speed: config.v, accel: config.dv / 0.02 } : { speed: config.dv / 0.02, accel: 0, position: config.v }]))
     };
+    // Swerve wheels from the robot's motion: robot-relative velocity plus turning, at each corner (FL, FR, BL, BR).
+    // The back-right wheel lags 25° behind its target from 40 to 44 s, so the Swerve view has a wheel to flag.
+    const fieldVx = step ? (x - previousPose.x) / 0.02 : 0;
+    const fieldVy = step ? (y - previousPose.y) / 0.02 : 0;
+    const omega = step ? Math.atan2(Math.sin(heading - previousHeading), Math.cos(heading - previousHeading)) / 0.02 : 0;
+    const vx = Math.cos(heading) * fieldVx + Math.sin(heading) * fieldVy;
+    const vy = -Math.sin(heading) * fieldVx + Math.cos(heading) * fieldVy;
+    const targets = [[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([cx, cy], index) => {
+      const mx = vx - omega * cy * 0.27;
+      const my = vy + omega * cx * 0.27;
+      const speed = disabled ? 0 : Math.hypot(mx, my);
+      if (speed > 0.05) wheelAngles[index] = Math.atan2(my, mx);
+      return { speed, angle: wheelAngles[index] };
+    });
+    log.modules(drive("ModuleTargets"), micros, targets);
+    log.modules(drive("ModuleStates"), micros, targets.map((target, index) => ({ speed: target.speed * 0.98,
+      angle: target.angle + (index === 3 && t >= 40 && t < 44 ? (25 * Math.PI) / 180 : Math.sin(step * 0.3 + index) * 0.01) })));
+    previousHeading = heading;
     previousPose = { x, y };
     previousDriveSpeed = driveSpeed;
     for (const motor of motors) {
@@ -232,7 +260,35 @@ assert.equal(heat.counts.reduce((sum, count) => sum + count, 0), enabledSamples,
 assert.ok(heat.max > 0 && heat.max === Math.max(...heat.counts));
 const parked = poseHeatmap({ times: [0, 1, 2, 3], values: [{ x: 1, y: 1 }, { x: 1.1, y: 1.1 }, { x: 99, y: 1 }, { x: 1, y: 1 }] }, [{ start: 0, end: 2.5 }], 16.54, 8.07);
 assert.equal(parked.counts[3 * parked.columns + 3], 2, "Off-field and disabled samples are left out");
+const halfway = poseHeatmap(model.pose, model.periods, 16.54, 8.07, 0.3, 60);
+const samplesByMinute = model.pose.times.filter(time => time <= 60 && model.periods.some(period => time >= period.start && time < period.end)).length;
+assert.equal(halfway.counts.reduce((sum, count) => sum + count, 0), samplesByMinute, "Only samples up to the playhead are drawn");
+assert.ok(halfway.max > 0 && halfway.max === Math.max(...halfway.counts), "Colors scale to the busiest cell so far, so red shows right away");
 assert.ok(Math.abs(model.duration - 150) < 0.01, "Times start at the first sample");
+// Swerve modules: struct:SwerveModuleState[] from Drive/ModuleStates and Drive/ModuleTargets.
+const firstModules = file.signals.get("PowerLib/Subsystems/Drive/Data/ModuleTargets").values[0];
+assert.equal(firstModules.length, 4, "Four 16-byte SwerveModuleStates per sample");
+assert.ok(firstModules.every(module => Number.isFinite(module.speed) && Number.isFinite(module.angle)));
+assert.ok(model.swerve && model.swerve.targets, "Both module series are found");
+assert.equal(model.swerve.states.times.length, 7501);
+const offAt = time => {
+  const states = swerveModel.modulesAt(model.swerve.states, time);
+  const targets = swerveModel.modulesAt(model.swerve.targets, time);
+  return states.map((state, index) => swerveModel.moduleErrorDegrees(state, targets[index]));
+};
+const stuck = offAt(42);
+assert.ok(Math.abs(stuck[3] - 25) < 1 && stuck[3] > swerveModel.offDegrees, "The back-right wheel is flagged while it lags");
+assert.ok(stuck.slice(0, 3).every(error => error < 2), "The other wheels are on target");
+assert.ok(offAt(50).every(error => error === null || error < 2));
+assert.equal(swerveModel.moduleErrorDegrees({ speed: -2, angle: Math.PI }, { speed: 2, angle: 0 }), 0, "Turned around and driving backward is on target");
+assert.ok(Math.abs(swerveModel.moduleErrorDegrees({ speed: 1, angle: 0.1 }, { speed: 1, angle: -0.1 }) - 11.46) < 0.01);
+assert.equal(swerveModel.moduleErrorDegrees({ speed: 0, angle: 1 }, { speed: 0, angle: 0 }), null, "No error when the wheel isn't told to move");
+assert.equal(swerveModel.travelAngle({ speed: -1, angle: 0 }), Math.PI);
+assert.equal(swerveModel.modulesAt(model.swerve.states, 151), undefined, "No wheels once the data is over 0.5 s old");
+assert.equal(swerveModel.modulesAt(model.swerve.states, -1), undefined);
+assert.equal(swerveModel.findSwerveModules(undefined, undefined), undefined, "Logs from before module logging have no Swerve data");
+assert.deepEqual(swerveModel.moduleSeries({ times: [0, 1, 2], values: [[{ speed: 1, angle: 0 }], [{ speed: NaN, angle: 0 }], []] }).times, [0],
+  "Incomplete samples are dropped");
 assert.deepEqual(model.mechanisms.map(item => [item.id, item.kind, item.units]),
   [["Climber", "position", "inches"], ["Hood", "position", "deg"], ["Intake", "velocity", "rps"], ["Shooter", "velocity", "rps"]]);
 assert.equal(busiestMechanism(model.mechanisms).id, "Shooter", "Open on the mechanism with the most setpoint changes, not the first alphabetically");

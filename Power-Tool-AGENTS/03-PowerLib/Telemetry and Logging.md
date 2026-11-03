@@ -43,7 +43,7 @@ In the JSON, non-finite numbers become `null` and other objects use `toString()`
 not included in the JSON**; they exist only in the log.
 
 ## `DriveTelemetry` (owner `Drive`)
-Collects into the shared map; it never writes to NT or the log itself.
+Collects into the shared map. The one exception is swerve modules (below), which it writes to the log itself.
 
 | Key | Type / units |
 |---|---|
@@ -60,6 +60,8 @@ Collects into the shared map; it never writes to NT or the log itself.
 | `Pose/HeadingDegrees` | degrees, NaN when invalid |
 | `HeadingSetpointDegrees` | degrees, NaN = no target |
 | `Heartbeat` | increments every call |
+
+**Swerve modules, log only:** `withSwerveModules(states, targets)` writes `PowerLib/Subsystems/Drive/Data/ModuleStates` (measured) and `ModuleTargets` (commanded) every loop with `SignalLogger.writeStructArray` as `SwerveModuleState[]` (speed m/s, angle from robot forward), in CTRE's module order (FL, FR, BL, BR). A sample with a missing or nonfinite module is skipped (`validModules`). They're kept out of the shared map, so they aren't in the NetworkTables frame. The template's `PowerDashboard` passes `getState().ModuleStates` and `getState().ModuleTargets`; `generate-subsystem.ps1` adds that call to existing projects whose `driveTelemetry` uses `stateMachine.drivetrain.getState()`. Power Tool's Logs tab draws them (see [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md)).
 
 ## `RobotLogTelemetry`: log only, never on NT
 Writes directly to SignalLogger at 50 Hz under `PowerLib/RobotStatus/`:

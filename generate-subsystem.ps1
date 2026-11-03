@@ -1880,6 +1880,10 @@ function Ensure-SubsystemTelemetrySupport {
         if (-not $initialization.Contains('.withActualState(')) {
             $initialization = $initialization.TrimEnd().TrimEnd(';') + "`n        .withActualState(() -> stateMachine.getActualState().name());`n"
         }
+        # Swerve module logging for the Logs tab; only for the template's CTRE drivetrain.
+        if (-not $initialization.Contains('.withSwerveModules(') -and $initialization.Contains('stateMachine.drivetrain.getState()')) {
+            $initialization = $initialization.TrimEnd().TrimEnd(';') + "`n        .withSwerveModules(() -> stateMachine.drivetrain.getState().ModuleStates,`n            () -> stateMachine.drivetrain.getState().ModuleTargets);`n"
+        }
         $initialization
     })
     foreach ($call in @('driveTelemetry.publish();', 'robotLogTelemetry.log();')) {

@@ -43,7 +43,9 @@ public class PowerDashboard extends SubsystemBase {
         .withPose(() -> stateMachine.drivetrain.getState().Pose)
         .withRequestedState(() -> stateMachine.getWantedState().name())
         .withActualState(() -> stateMachine.getActualState().name())
-        .withHeadingSetpoint(() -> stateMachine.drivetrain.getHeadingSetpointDegrees());
+        .withHeadingSetpoint(() -> stateMachine.drivetrain.getHeadingSetpointDegrees())
+        .withSwerveModules(() -> stateMachine.drivetrain.getState().ModuleStates,
+            () -> stateMachine.drivetrain.getState().ModuleTargets);
     robotLogTelemetry = new frc.powerlib.dashboard.RobotLogTelemetry()
         .withDriverControllerPort(frc.robot.Constants.OI.DRIVER_CONTROLLER_PORT);
     frc.robot.constants.GeneratedTunableConstants.register();

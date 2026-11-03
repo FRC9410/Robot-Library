@@ -146,8 +146,8 @@ export function LogsPanel({ active, subsystems }: LogsPanelProps) {
       <LogsLayout
         graphs={<SubsystemGraphs subsystems={model.mechanisms} selected={selected} onSelect={selectMechanisms} views={views} onView={setView} time={time}
           colorOf={id => (model.powerGroups.some(group => group.id === id) ? groupColor(id, model.powerGroups) : undefined)} />}
-        field={<FieldView pose={model.pose} periods={model.periods} time={time} field={field} orientation="vertical"
-          sx={model.pose ? { flex: "1 1 0", minHeight: 210 } : { flexShrink: 0 }} />}
+        field={<FieldView pose={model.pose} swerve={model.swerve} periods={model.periods} time={time} field={field} orientation="vertical"
+          sx={model.pose || model.swerve ? { flex: "1 1 0", minHeight: 210 } : { flexShrink: 0 }} />}
         power={<PowerCard allGroups={model.powerGroups} selected={selected} battery={model.battery} motorCount={model.motors.length} time={time}
           onAssign={() => setAssigningMotors(true)} graphHeight={180} sx={{ flex: "1 1 0", minHeight: 230 }} />} />
       <PlayBar time={time} duration={duration} playing={playback.playing} speed={playback.speed} periods={model.periods} state={model.state}

@@ -1,7 +1,9 @@
 /** WPILib data log (.wpilog) v1.0 reader. Spec: allwpilib wpiutil/doc/datalog.adoc. */
 
 export type Pose = { x: number; y: number; heading: number };
-export type LogValue = boolean | number | string | number[] | boolean[] | string[] | Pose | null;
+/** WPILib `SwerveModuleState`: wheel speed in m/s and wheel angle in radians, counterclockwise from robot forward. */
+export type ModuleState = { speed: number; angle: number };
+export type LogValue = boolean | number | string | number[] | boolean[] | string[] | Pose | ModuleState[] | null;
 
 export type WpilogSignal = {
   name: string;
@@ -126,6 +128,14 @@ function decodeValue(type: string, view: DataView, bytes: Uint8Array, start: num
     case "struct:Pose2d":
       return size >= 24 ? { x: view.getFloat64(start, true), y: view.getFloat64(start + 8, true),
         heading: view.getFloat64(start + 16, true) } : undefined;
+    // Each SwerveModuleState is 16 bytes: speed (double), then its Rotation2d (one double, radians).
+    case "struct:SwerveModuleState[]": {
+      const modules: ModuleState[] = [];
+      for (let index = 0; index < Math.floor(size / 16); index += 1) {
+        modules.push({ speed: view.getFloat64(start + index * 16, true), angle: view.getFloat64(start + index * 16 + 8, true) });
+      }
+      return modules;
+    }
     default: return undefined;
   }
 }
