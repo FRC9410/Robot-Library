@@ -1,44 +1,62 @@
 ---
-title: Ideas
-date: 2026-10-30
-tags: [index, idea]
+title: Project Overview
+date: 2026-11-03
+tags: [index, project, idea, log-viewer, power-tool]
+aliases: [Ideas, Log Viewer Project, Roadmap]
 ---
 
-# Ideas
+# Project Overview
 
-Projects in planning and the ideas we've talked about, **one note per idea**. Each note's
-frontmatter has a `status`: `proposed` (talked about, not chosen), `decided` (we're doing it), or
-`dropped` (keep the note and say why). When an idea is built, its code change goes in the
-[CHANGELOG](../09-Changelog/CHANGELOG.md).
+Where Power Tool's log viewer (the **Logs** tab) stands, what's next, and what's still open.
+How the built parts work is in [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md#logs-featureslogs);
+what changed and when is in the [CHANGELOG](../09-Changelog/CHANGELOG.md). Next season's work is in
+[2027 and Systemcore Readiness](2027%20and%20Systemcore%20Readiness.md).
 
-## Log viewer
-[Log Viewer Project](Log%20Viewer%20Project.md): status, open questions and where it plugs into Power Tool.
+Branch: `feature/Log-Viewer` (last pushed 2026-11-03).
 
-**Decided** (built in v1, 2026-10-31, unless marked partly)
-- [Reading wpilog and hoot](Reading%20wpilog%20and%20hoot.md): one `.wpilog` reader, `.hoot` converted through Owlet.
-- [Mechanism Power and Current](Mechanism%20Power%20and%20Current.md): current, power, applied voltage and temperature per mechanism from Phoenix's motor signals, with a power widget and motor assignment.
-- [Mechanism Picker](Mechanism%20Picker.md): fixed layout; a multi-select dropdown stacks a graph and a status row for each picked mechanism.
-- [Match List](Match%20List.md): split a log into enable periods you can click.
-- [Setpoint Error Widget](Setpoint%20Error%20Widget.md): error, overshoot and settle time.
-- [Problem Markers](Problem%20Markers.md) (partly): brownouts, CAN spikes and setpoint misses; vision rejects not yet.
-- [Widget Grid and Shared Timeline](Widget%20Grid%20and%20Shared%20Timeline.md) (partly): shared timeline built; drag-and-drop grid not yet.
-- [Pull Logs from the Robot](Pull%20Logs%20from%20the%20Robot.md) (partly, 2026-11-03; not yet tried on a robot): Get logs from robot downloads runs over SFTP into the logs folder.
-- [Built-in Log List](Built-in%20Log%20List.md) (partly, 2026-11-03): the start page and a drawer list the logs folder by event; click a run to open it.
-- [Choosing Widgets by Data Shape](Choosing%20Widgets%20by%20Data%20Shape.md) (partly): PowerLib conventions built; type → widget and saved layouts not yet.
+## Built
+| Feature | What it does |
+|---|---|
+| **Reading logs** | Opens `.wpilog` directly and `.hoot` through CTRE's Owlet (the one matching the log's format version, from AdvantageScope's cache). A `.hoot` opens every CAN bus file from the same run. |
+| **Logs list** | Open log shows a popup of the logs folder (default `Documents\Power Tool\Logs`), grouped by event, Matches first, with search, time and size. With a log open, the same list is a drawer. Matches are named from Phoenix's file names ("Qual 6"). |
+| **Get logs from robot** | Greyed out until the robot answers on SSH; lists its runs and downloads them over SFTP into the logs folder. Tested against the fake robot (`scripts/fake-robot.mjs`), **not yet on the real robot**. |
+| **Layout** | Three columns: subsystem graphs, the field standing up (driver side at the bottom), the Power card. Fits 1280x720 and 1920x1080 without page scrolling. |
+| **Subsystem graphs** | Pick several subsystems; each graph shows value vs. setpoint, or current, power, voltage, stator or temperature, with every motor as a thin line under the average. |
+| **Power and current** | Phoenix motor signals grouped by subsystem (config, `TunerConstants.java`, then matched by motion), with an Assign motors dialog. |
+| **Playback** | One timeline drives everything; match periods (auto/teleop) as chips; setpoint error, overshoot and settle time. Problem markers (brownouts, CAN spikes, setpoint misses) are computed but hidden to save space. |
+| **Shared state** | The open log lives in a context above the tab; the last 3 logs opened from the list stay loaded. |
 
-**Proposed**
-- [Standardize Setpoint Keys](Standardize%20Setpoint%20Keys.md): one `<Signal>Setpoint` naming rule across subsystem types.
-- [Auto Path Overlay](Auto%20Path%20Overlay.md): planned path next to the actual pose trail.
-- [Before and After Compare](Before%20and%20After%20Compare.md): overlay the same signal from two logs.
-- [Jump to Tuning](Jump%20to%20Tuning.md): open the tuning drawer from a graph.
-- [Timeline Notes and Bookmarks](Timeline%20Notes%20and%20Bookmarks.md): notes saved next to the log.
-- [Shareable Views](Shareable%20Views.md): export a layout plus time range.
-- [Live Mode with Rewind](Live%20Mode%20with%20Rewind.md): record NT while connected and scrub back.
-- [One Widget System Everywhere](One%20Widget%20System%20Everywhere.md): the Drive tab built from the same widgets.
-- [Match Summary](Match%20Summary.md): a card per match, comparable across an event.
-- [Vertical Field Layout](Vertical%20Field%20Layout.md): field standing up on the right, power graph and table in one card on the left.
+Widgets are picked by data shape and PowerLib's key names, never by the game, so a new robot gets graphs without code changes.
 
-## Next season
-- [2027 and Systemcore Readiness](2027%20and%20Systemcore%20Readiness.md) (proposed): what has to change in PowerLib and Power Tool for WPILib 2027, Phoenix 2027 and Systemcore.
+## Next
+Not built. Roughly in the order they'd help most.
+- **Try Get logs from robot on the real robot.** Confirms the `lvuser` login and the log folders.
+- **Driver Station logs:** brownouts, packet loss and voltage from the DS, matched to each robot log. The 2027 DS writes `.wpilog`, so no new reader is needed.
+- **Better names in the list:** PowerLib writes a small `session.json` into each log folder (alliance, enabled time, practice at events); renaming runs; a "New" tag; a warning when a bus's file is missing.
+- **More robot download tools:** show the robot's free space, delete logs after downloading (Systemcore's log storage is small), block downloads while the robot is enabled.
+- **Match Summary:** a card per match (battery low, peak currents, cycle count, auto result), comparable across an event. Cycle count could come from `ActualState` entering a scoring state.
+- **Before and After Compare:** open two logs, line them up at enable, overlay the same signal. Answers "did this change help?"
+- **Timeline notes:** notes at points on the timeline ("intake jammed here"), saved next to the log.
+- **Auto Path Overlay:** the planned auto path next to the actual pose trail. The robot would need to log the path it's following.
+- **Jump to Tuning:** from a subsystem's graph, open the Robot tab's tuning drawer for it.
+- **Live Mode with Rewind:** record the 10 Hz `/PowerLib/Data` frames while connected and scrub back 30 s. Needs no robot changes.
+- **Drag-and-drop layout and One Widget System:** an Elastic-style grid of widgets picked by data type, saved per robot, and the Drive tab built from the same widgets.
+- **Shareable Views:** export a layout and time range as a small file for a teammate.
+- **Show problem markers again** (and add vision rejects and `Robot/Control/Action` events) once there's room.
+- **Standardize setpoint keys:** `Velocity`/`VelocitySetpoint`, `Position`/`SetpointRotations`, `Position`/`Setpoint` differ by subsystem type; one `<Signal>Setpoint` rule would make pairing automatic. Check every reader (`robotModel.ts`, Drive cards) before renaming.
 
-Up: [Home](../README.md)
+## Open questions
+- Should the templates call `SignalLogger.setPath()` so logs land in one known folder?
+- Should the robot also write a WPILib `.wpilog` (`DataLogManager`) so no Owlet conversion is needed?
+- Can Owlet ship inside Power Tool for laptops that never ran AdvantageScope? CTRE doesn't state redistribution terms.
+- Motor assignments and picked subsystems are saved per laptop. Should they move into `power-tool/generated/` to travel with the robot project?
+- Performance: parsing runs on the renderer thread, and a full match with motors uses about 400 MB. Typed arrays or a worker if real logs get slow.
+- Not tested yet: a log from a PowerLib robot (real logs so far predate PowerLib).
+
+## Decisions worth remembering
+- "Current" means supply current (battery draw); stator current is its own view. The drivetrain is one "Drive" group.
+- Settled means 0.5 s inside tolerance (5% of setpoint or 2% of range).
+- Device signals export from a `.hoot` in full only with a Pro-licensed device in the log; PowerLib's custom signals always export.
+- Keep the UI lean, and check it on the real screen before cutting detail.
+
+Related: [2027 and Systemcore Readiness](2027%20and%20Systemcore%20Readiness.md), [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [Telemetry and Logging](../03-PowerLib/Telemetry%20and%20Logging.md), [Home](../README.md)

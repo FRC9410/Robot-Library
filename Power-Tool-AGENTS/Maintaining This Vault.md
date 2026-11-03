@@ -25,17 +25,16 @@ points coding agents at them and at this note.
    and link it from that folder's `INDEX.md` and from [Home](README.md).
 4. **Changed how two parts talk to each other** (NetworkTables topics, JSON files, IPC channels,
    log keys)? Update the matching note in [06-Data-Flows](06-Data-Flows/INDEX.md) too.
-5. **Built an idea from [11-Ideas](11-Ideas/INDEX.md)?** Set its note's `status` to `decided`
-   (if it wasn't already) and update the project note, e.g.
-   [Log Viewer Project](11-Ideas/Log%20Viewer%20Project.md).
+5. **Built something from the [Project Overview](11-Ideas/INDEX.md)?** Move its line from
+   **Next** to **Built** (one row, a sentence or two). The details go in the area note, not there.
 
 ## When you talk about ideas
 
-- **One note per idea** in [11-Ideas](11-Ideas/INDEX.md), listed in its `INDEX.md` under its project.
-- Frontmatter adds `status: proposed | decided | dropped`. Start the body with a `**Status:**` line and date.
-- Sections: **Idea**, **Why**, and **Open questions** or **Notes** if there are any.
-- A dropped idea keeps its note, with a line saying why it was dropped.
-- Project-wide status and open questions go in the project note. Questions about a single idea go in that idea's note.
+- Ideas go in the [Project Overview](11-Ideas/INDEX.md), not in notes of their own: one bullet
+  under **Next** with what it is and why, and any open question under **Open questions**.
+- Keep it short enough to read in two minutes. Drop an idea by deleting its line.
+- A bigger plan that needs a checklist, like [2027 and Systemcore Readiness](11-Ideas/2027%20and%20Systemcore%20Readiness.md),
+  can have its own note in `11-Ideas/`, linked from the Overview.
 
 ## Writing rules
 

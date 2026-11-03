@@ -95,4 +95,4 @@ result is `files: [{ name, bytes }]`, one per log file.
 - `src/types/app.ts`: `AppView = "drive" | "robot" | "subsystems" | "limelights" | "networktables" | "logs"`. Add a new value here to add a tab.
 - NetworkTables plumbing: [NetworkTables Layer](NetworkTables%20Layer.md).
 
-Related: [NetworkTables Layer](NetworkTables%20Layer.md), [Tabs and Features](Tabs%20and%20Features.md), [Custom Dashboard](Custom%20Dashboard.md), [Telemetry Flow](../06-Data-Flows/Telemetry%20Flow.md), [Log Viewer Project](../11-Ideas/Log%20Viewer%20Project.md)
+Related: [NetworkTables Layer](NetworkTables%20Layer.md), [Tabs and Features](Tabs%20and%20Features.md), [Custom Dashboard](Custom%20Dashboard.md), [Telemetry Flow](../06-Data-Flows/Telemetry%20Flow.md), [Project Overview](../11-Ideas/INDEX.md)

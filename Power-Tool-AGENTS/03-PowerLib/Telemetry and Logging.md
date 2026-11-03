@@ -84,4 +84,4 @@ Writes directly to SignalLogger at 50 Hz under `PowerLib/RobotStatus/`:
 - Power Tool's live tabs keep **no history**; they only show the latest NT value. Recorded logs open in the **Logs** tab (see [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md)).
 - The NT frame (10 Hz) is a lighter, lower-rate copy of the same map, so a viewer could also record NT live.
 
-Related: [Telemetry Flow](../06-Data-Flows/Telemetry%20Flow.md), [Shared Data Store](Shared%20Data%20Store.md), [NetworkTables Layer](../05-Power-Tool/NetworkTables%20Layer.md), [Log Viewer Project](../11-Ideas/Log%20Viewer%20Project.md)
+Related: [Telemetry Flow](../06-Data-Flows/Telemetry%20Flow.md), [Shared Data Store](Shared%20Data%20Store.md), [NetworkTables Layer](../05-Power-Tool/NetworkTables%20Layer.md), [Project Overview](../11-Ideas/INDEX.md)

@@ -29,7 +29,7 @@ Entry format:
 - **What:** A **Get logs from robot** button (start page and logs list) is greyed out until the robot answers on SSH, then opens a popup listing the robot's runs with checkboxes, "Downloaded"/"On robot", time and size. One ticked downloads and opens it; several just download. Files land in the logs folder in the same event/Shop layout the list reads. New `electron/robotLogs.ts` (SFTP through the new `ssh2` dependency; roboRIO and Systemcore default logins and log folders), IPC `powerlib:find-robot`, `list-robot-logs`, `download-robot-logs` and the `robot-download-progress` event. `SavedLogGroup` now takes a `renderLog` slot; `groupLogFiles` normalizes `\` to `/` in folders; new `isDownloaded` and `downloadFolderFor` (checked in `log-check.mjs`).
 - **Why:** Pulling logs meant a USB stick or Phoenix Tuner. On Systemcore's small internal storage, pulling after each match also keeps it from filling.
 - **Files:** `powerlib-dashboard/package.json` (`ssh2`, `@types/ssh2`, `check:robot-logs`, `fake-robot`), `scripts/fake-robot.mjs`, `scripts/robot-logs-check.mjs`, `electron/robotLogs.ts`, `electron/main.ts`, `electron/preload.cts`, `src/types/electron.d.ts`, `src/features/logs/logLibraryModel.ts`, new `useRobotReachable.ts`, `useRobotLogs.ts`, `components/RobotLogsButton.tsx`, `RobotLogsDialog.tsx`, `RobotLogRow.tsx`, `RobotLogsFooter.tsx`; changed `components/SavedLogGroup.tsx`, `LogLibrary.tsx`, `OpenLogPrompt.tsx`, `LogsPanel.tsx`, `scripts/log-check.mjs`
-- **Notes updated:** [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [Pull Logs from the Robot](../11-Ideas/Pull%20Logs%20from%20the%20Robot.md), [Ideas](../11-Ideas/INDEX.md)
+- **Notes updated:** [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [Pull Logs from the Robot](../11-Ideas/INDEX.md), [Ideas](../11-Ideas/INDEX.md)
 - **Testing:** new `scripts/fake-robot.mjs` (a pretend roboRIO SFTP server) and `scripts/robot-logs-check.mjs` (`npm run check:robot-logs`: find, log in, list, download byte for byte, skip existing). `POWERLIB_ROBOT=host[:port]` points Power Tool at a test robot.
 - **Branch / commit:** feature/Log-Viewer, not committed yet. Tested against the fake robot, not a real one yet.
 
@@ -37,7 +37,7 @@ Entry format:
 - **What:** The Logs tab's Open log button opens a popup listing every run in a logs folder (default `Documents\Power Tool\Logs`, changeable), grouped by event (Matches, the default) or by week (Practice), with search. Matches are named from Phoenix/DataLogManager file names ("Qual 6", "Elim 3"); each row also shows when it ran and its size (`powerlib:list-logs` returns file sizes). With a log open, a **Logs** button in the status bar opens the same list in a drawer (above the app bar). The popup and drawer share one flat frame (`logsSurface`) so their colors match the tab's cards. The open log moved into a `LoadedLogsProvider` context, and the last 3 logs opened from the list stay parsed for instant switching. New IPC `powerlib:list-logs`, `open-log-files`, `choose-logs-folder`, `default-logs-folder`; `readLogFile` now reads through `readLogFiles`. `readFieldSettings` moved to `logUtils.ts`. `LogStatusBar`'s Open log button became Logs.
 - **Why:** Opening a log meant hunting through File Explorer. Mentor feedback: use a drawer, not a popup, and keep wanted state above components that unmount.
 - **Files:** `powerlib-dashboard/electron/main.ts`, `electron/preload.cts`, `src/types/electron.d.ts`, `src/main.tsx`, `src/features/logs/LogsPanel.tsx`, `useLogFile.ts`, `logUtils.ts`, new `logLibraryModel.ts`, `useLogLibrary.ts`, `useLoadedLogs.ts`, `loadedLogsContext.ts`, `LoadedLogsProvider.tsx`, `components/LogLibrary.tsx`, `LogLibraryToolbar.tsx`, `SavedLogGroup.tsx`, `SavedLogRow.tsx`, `LogFolderBar.tsx`, `LogsDrawer.tsx`, `LogsDialog.tsx`, changed `components/OpenLogPrompt.tsx`, `LogStatusBar.tsx`, `scripts/log-check.mjs`
-- **Notes updated:** [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [Built-in Log List](../11-Ideas/Built-in%20Log%20List.md), [Ideas](../11-Ideas/INDEX.md)
+- **Notes updated:** [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [Built-in Log List](../11-Ideas/INDEX.md), [Ideas](../11-Ideas/INDEX.md)
 - **Branch / commit:** feature/Log-Viewer, not committed yet
 
 ## 2026-11-02: Logs tab motor graphs show each motor and their average
@@ -58,7 +58,7 @@ Entry format:
 - **What:** The 3-column layout (graphs, vertical field, Power card) is the only layout. The 2 columns / 3 columns switch, `LayoutToggle`, the saved `powerlib.logs.layout.v1` choice, the 2-column arrangement in `LogsLayout`, and `LogStatusBar`'s `actions` slot are removed.
 - **Why:** The team and mentor picked 3 columns.
 - **Files:** `powerlib-dashboard/src/features/logs/LogsPanel.tsx`, `components/LogsLayout.tsx`, `components/LogStatusBar.tsx`; removed `components/LayoutToggle.tsx`
-- **Notes updated:** [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [Vertical Field Layout](../11-Ideas/Vertical%20Field%20Layout.md)
+- **Notes updated:** [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [Vertical Field Layout](../11-Ideas/INDEX.md)
 - **Branch / commit:** not committed yet
 
 ## 2026-11-02: Logs tab graphs are tiles, half height, two across
@@ -93,7 +93,7 @@ Entry format:
   - Each widget stays a standalone component (mentor's direction), so other layouts only change `LogsPanel.tsx`.
 - **Why:** Mentor feedback: temps, current draw and position matter most; setpoint numbers in a table repeat the graphs; the team thinks in amps.
 - **Files:** `powerlib-dashboard/src/features/logs/**` (new `PowerCard`, `CurrentGraph`, `PowerTable`, `PowerTableRow`, `PowerMotorRow`; removed `PowerWidget`, `SubsystemStatus`, `StatusRow`, `MotorStatusRow`, `useElementHeight`), `powerlib-dashboard/scripts/log-check.mjs`
-- **Notes updated:** [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [Vertical Field Layout](../11-Ideas/Vertical%20Field%20Layout.md) (saved idea)
+- **Notes updated:** [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [Vertical Field Layout](../11-Ideas/INDEX.md) (saved idea)
 - **Branch / commit:** not committed yet
 
 ## 2026-11-02: Logs tab fits the window, play bar at the bottom, one component per file
@@ -113,7 +113,7 @@ Entry format:
   - `LogWidgets.tsx`, `PowerWidgets.tsx` and most of `LogsPanel.tsx` split into `components/` (one component per file), hooks `useLogFile`, `useLogPlayback`, `useElementHeight`, and `logUtils.ts`. Added `canPercentAt` to `logModel.ts`.
 - **Why:** The tab wasted space and needed page scrolling, and the play bar was crowded. The Logs files broke the one-component-per-file rule.
 - **Files:** `powerlib-dashboard/src/features/logs/**`, `powerlib-dashboard/src/App.tsx`, `powerlib-dashboard/scripts/log-check.mjs`
-- **Notes updated:** [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [React Code Rules](../05-Power-Tool/React%20Code%20Rules.md), [Problem Markers](../11-Ideas/Problem%20Markers.md), [Mechanism Picker](../11-Ideas/Mechanism%20Picker.md), [Tests and Checks](../07-Testing/Tests%20and%20Checks.md)
+- **Notes updated:** [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [React Code Rules](../05-Power-Tool/React%20Code%20Rules.md), [Problem Markers](../11-Ideas/INDEX.md), [Mechanism Picker](../11-Ideas/INDEX.md), [Tests and Checks](../07-Testing/Tests%20and%20Checks.md)
 - **Branch / commit:** not committed yet
 
 ## 2026-11-02: Logs tab shows current, power and voltage per mechanism
@@ -146,7 +146,7 @@ Entry format:
   - A reported "0 W while spinning" was real: the roller's applied voltage dropped to 0 V (turned off, coasting).
   - Picked Shooter + Feeder: the widget showed only those two (1,500 W scale, "Picked 306 W of 907 W"). Adding Drive through the dropdown added it live with unchanged colors for the others.
   - Not yet tested end to end in the Electron app.
-- **Notes updated:** [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [Power Tool Architecture](../05-Power-Tool/Power%20Tool%20Architecture.md), [Mechanism Power and Current](../11-Ideas/Mechanism%20Power%20and%20Current.md), [Reading wpilog and hoot](../11-Ideas/Reading%20wpilog%20and%20hoot.md), [Log Viewer Project](../11-Ideas/Log%20Viewer%20Project.md)
+- **Notes updated:** [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [Power Tool Architecture](../05-Power-Tool/Power%20Tool%20Architecture.md), [Mechanism Power and Current](../11-Ideas/INDEX.md), [Reading wpilog and hoot](../11-Ideas/INDEX.md), [Project Overview](../11-Ideas/INDEX.md)
 - **Branch / commit:** feature/Log-Viewer (uncommitted)
 
 ## 2026-10-31: Logs tab shows several mechanisms at once, timeline on top, steady graphs
@@ -163,7 +163,7 @@ Entry format:
   - picked three mechanisms through the dropdown, then reloaded to confirm the selection is kept;
   - stepped the slider one sample at a time and confirmed the drawn points stayed identical (and confirmed the wiggle is gone in the Electron app);
   - confirmed the timeline sits above the graphs.
-- **Notes updated:** [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [Mechanism Picker](../11-Ideas/Mechanism%20Picker.md), [Log Viewer Project](../11-Ideas/Log%20Viewer%20Project.md)
+- **Notes updated:** [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [Mechanism Picker](../11-Ideas/INDEX.md), [Project Overview](../11-Ideas/INDEX.md)
 - **Branch / commit:** feature/Log-Viewer (uncommitted)
 
 ## 2026-10-31: Power Tool Logs tab (log viewer v1)
@@ -178,7 +178,7 @@ Entry format:
   - Hand-written `.wpilog` reader. Graphs are plain SVG; no new dependencies.
   - **Owlet:** finds AdvantageScope's cached Owlets and runs the one matching the log's `.hoot` format version, via `owlet <hoot> --compliancy`.
   - **Older logs:** reads Owlet's built-in signals (`Voltage`, `CAN Utilization`, `RobotMode`, `RobotEnable`) and plain `<Name> Velocity`/`Position` names, so pre-PowerLib logs still show mechanisms, battery and match periods.
-- **Why:** Review matches and practice runs inside Power Tool, built from the ideas in [Log Viewer Project](../11-Ideas/Log%20Viewer%20Project.md).
+- **Why:** Review matches and practice runs inside Power Tool, built from the ideas in [Project Overview](../11-Ideas/INDEX.md).
 - **Files:**
   - new: `powerlib-dashboard/src/features/logs/` (`wpilog.ts`, `logModel.ts`, `LogsPanel.tsx`, `LogWidgets.tsx`), `powerlib-dashboard/electron/owlet.ts`, `powerlib-dashboard/scripts/log-check.mjs`;
   - changed: `powerlib-dashboard/electron/main.ts` (`powerlib:open-log`, `powerlib:open-log-path`, Owlet folders), `electron/preload.cts`, `src/types/electron.d.ts`, `src/types/app.ts`, `src/App.tsx`, `package.json` (`check:logs`), `tests/README.md`.
@@ -188,7 +188,7 @@ Entry format:
   - `owlet.ts` converted two real `.hoot` logs (format version 19).
   - Opening a real `.hoot` from the Open log dialog works end to end in the Electron app.
   - Not yet tested: a log from a PowerLib robot.
-- **Notes updated:** [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [Power Tool Architecture](../05-Power-Tool/Power%20Tool%20Architecture.md), [Telemetry Flow](../06-Data-Flows/Telemetry%20Flow.md), [Tests and Checks](../07-Testing/Tests%20and%20Checks.md), [Change to Tests Map](../07-Testing/Change%20to%20Tests%20Map.md), [Telemetry and Logging](../03-PowerLib/Telemetry%20and%20Logging.md), [Log Viewer Project](../11-Ideas/Log%20Viewer%20Project.md) and its idea notes
+- **Notes updated:** [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [Power Tool Architecture](../05-Power-Tool/Power%20Tool%20Architecture.md), [Telemetry Flow](../06-Data-Flows/Telemetry%20Flow.md), [Tests and Checks](../07-Testing/Tests%20and%20Checks.md), [Change to Tests Map](../07-Testing/Change%20to%20Tests%20Map.md), [Telemetry and Logging](../03-PowerLib/Telemetry%20and%20Logging.md), [Project Overview](../11-Ideas/INDEX.md) and its idea notes
 - **Branch / commit:** feature/Log-Viewer (uncommitted)
 
 ## History before the vault (from git log)
@@ -235,4 +235,4 @@ Entry format:
   subsystems, button-binding generator (later removed), Update Power Tool scripts, branch-aware
   installs (`-RepoRef`), `.template` naming for existing files.
 
-Related: [Log Viewer Project](../11-Ideas/Log%20Viewer%20Project.md), [Maintaining This Vault](../Maintaining%20This%20Vault.md)
+Related: [Project Overview](../11-Ideas/INDEX.md), [Maintaining This Vault](../Maintaining%20This%20Vault.md)

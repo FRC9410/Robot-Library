@@ -52,4 +52,4 @@ Details: [Telemetry and Logging](../03-PowerLib/Telemetry%20and%20Logging.md) (r
 [NetworkTables Layer](../05-Power-Tool/NetworkTables%20Layer.md) (dashboard side). Both sides are
 checked against the same fixture frame (see [Tests and Checks](../07-Testing/Tests%20and%20Checks.md)).
 
-Related: [Log Viewer Project](../11-Ideas/Log%20Viewer%20Project.md), [Tuning Round Trip](Tuning%20Round%20Trip.md)
+Related: [Project Overview](../11-Ideas/INDEX.md), [Tuning Round Trip](Tuning%20Round%20Trip.md)

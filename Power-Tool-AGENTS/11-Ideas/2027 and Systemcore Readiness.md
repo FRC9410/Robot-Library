@@ -21,7 +21,7 @@ The team will still open this season's logs next year, and Systemcore, WPILib 20
 
 ## Already works in 2027
 - **`.wpilog` reader:** WPILib's format; not changing.
-- **Widgets:** chosen from PowerLib key names and data shapes, not this season's mechanisms. See [Choosing Widgets by Data Shape](Choosing%20Widgets%20by%20Data%20Shape.md).
+- **Widgets:** chosen from PowerLib key names and data shapes, not this season's mechanisms. See the [Project Overview](INDEX.md).
 - **Field size:** from the template's `field` settings (`LogsPanel.tsx`), not code. A new game means new numbers.
 - **Owlet choice:** Power Tool picks the Owlet matching the log's format version (`electron/owlet.ts`). Open one 2027 `.hoot` in AdvantageScope once and the new Owlet (26.70.0 or newer) is cached where Power Tool looks.
 
@@ -35,7 +35,7 @@ The team will still open this season's logs next year, and Systemcore, WPILib 20
    They need to accept a single file and take bus names from inside the log.
 3. **Connection targets.** `ConnectionSettingsDialog.tsx` has `10.94.10.2` and `roborio-9410-frc.local` written in. Add `robot.local` (Systemcore's mDNS name; the IP stays `10.94.10.2`) and change "roboRIO" labels to "Robot".
 4. **Owlet's own signal names.** `logModel.ts` (`owletSignals`) falls back on `RobotMode`, `RobotEnable`, `Voltage`, `CAN Utilization` and `DS:IsFMSAttached` when PowerLib keys are missing. If CTRE renames them, those fallbacks stop working without an error. PowerLib's own keys aren't affected.
-5. **Getting logs off the robot.** Systemcore has a different login (`systemcore` / `systemcore` at `robot.local`) and log folders (see Research below). Keep the robot folder a setting, as [Pull Logs from the Robot](Pull%20Logs%20from%20the%20Robot.md) plans, and don't build this part until we can look at a real Systemcore.
+5. **Getting logs off the robot.** Systemcore has a different login (`systemcore` / `systemcore` at `robot.local`) and log folders (see Research below). Keep the robot folder a setting, as Get logs from robot already does, and don't build this part until we can look at a real Systemcore.
 
 ## What other teams found
 From Team 604's alpha-testing thread on Chief Delphi ("Team 604 Quixilver Systemcore Alpha Testing", updates Aug 2025 to Jul 2026). They use AdvantageKit, so none of this is about `.hoot` or SignalLogger specifically.
@@ -46,7 +46,7 @@ From Team 604's alpha-testing thread on Chief Delphi ("Team 604 Quixilver System
 - Heavy logging raised their loop times.
 
 What this means for us:
-- [Pull Logs from the Robot](Pull%20Logs%20from%20the%20Robot.md) matters more on Systemcore: pulling logs after each match keeps the 4 GB partition from filling. The download dialog should show free space on the robot, and we should rethink "read-only": offering to delete logs once they're downloaded may be needed.
+- Get logs from robot matters more on Systemcore: pulling logs after each match keeps the 4 GB partition from filling. The download dialog should show free space on the robot, and we should rethink "read-only": offering to delete logs once they're downloaded may be needed.
 - Don't rely on a USB stick for 2027 until these issues are fixed.
 
 ## Plan
@@ -78,4 +78,4 @@ From a Gemini research pass, each claim below checked against its source. "Check
 - **Get logs from robot:** connect to `robot.local` as `systemcore`, and list both `/U/logs` and `/home/systemcore/logs`.
 - **Driver Station logs:** reading them is now cheap, since they're `.wpilog`. Add `FIRSTDriverStation\Logs` as a second folder, or match them to robot logs by time.
 
-Related: [Pull Logs from the Robot](Pull%20Logs%20from%20the%20Robot.md), [Reading wpilog and hoot](Reading%20wpilog%20and%20hoot.md), [Telemetry and Logging](../03-PowerLib/Telemetry%20and%20Logging.md), [Log Viewer Project](Log%20Viewer%20Project.md)
+Related: [Project Overview](INDEX.md), [Tabs and Features](../05-Power-Tool/Tabs%20and%20Features.md), [Telemetry and Logging](../03-PowerLib/Telemetry%20and%20Logging.md)
