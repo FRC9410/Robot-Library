@@ -1,16 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import type { DragEvent } from "react";
-import { Alert, Box, LinearProgress, Stack } from "@mui/material";
+import { Alert, IconButton, LinearProgress, Stack } from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
 import type { GeneratedSubsystem } from "../subsystems/types";
-import { template } from "../drive/driveModel";
 import { buildLogModel, busiestMechanism, canPercentAt } from "./logModel";
 import type { GraphView } from "./logModel";
-import { groupColor, logDetails, readSaved, writeSaved } from "./logUtils";
-import { useLogFile } from "./useLogFile";
+import type { SavedLog } from "./logLibraryModel";
+import { groupColor, logDetails, readFieldSettings, readSaved, writeSaved } from "./logUtils";
+import { useLoadedLogs } from "./useLoadedLogs";
 import { useLogPlayback } from "./useLogPlayback";
 import { FieldView } from "./components/FieldView";
+import { LogLibrary } from "./components/LogLibrary";
+import { LogsDialog } from "./components/LogsDialog";
+import { LogsDrawer } from "./components/LogsDrawer";
 import { LogStatusBar } from "./components/LogStatusBar";
 import { MotorAssignDialog } from "./components/MotorAssignDialog";
+import { RobotLogsButton } from "./components/RobotLogsButton";
 import { OpenLogPrompt } from "./components/OpenLogPrompt";
 import { PlayBar } from "./components/PlayBar";
 import { PowerCard } from "./components/PowerCard";
@@ -22,7 +27,6 @@ type LogsPanelProps = {
   subsystems: GeneratedSubsystem[];
 };
 
-const driveSettingsKey = "powerlib.driveDisplay.v1";
 const selectionKey = "powerlib.logs.mechanisms.v1";
 const assignmentsKey = "powerlib.logs.motorGroups.v1";
 const viewsKey = "powerlib.logs.graphViews.v1";
@@ -33,25 +37,11 @@ const isStringMap = (value: unknown): value is Record<string, string> =>
 /** The subsystems picked last time, so the next log opens on the same ones. */
 const readSavedSelection = () => readSaved(selectionKey, [], isStringList);
 
-/** Use the same field size and flip the Drive tab is set to on this machine. */
-function readFieldSettings() {
-  const defaults = { length: template.field.lengthMeters, width: template.field.widthMeters, flip: false };
-  try {
-    const saved = JSON.parse(localStorage.getItem(driveSettingsKey) || "{}");
-    return {
-      length: typeof saved.length === "number" && saved.length > 0 ? saved.length : defaults.length,
-      width: typeof saved.width === "number" && saved.width > 0 ? saved.width : defaults.width,
-      flip: saved.flip === true
-    };
-  } catch {
-    return defaults;
-  }
-}
-
 /** The Logs tab: fills the window without scrolling the page; long widgets scroll on their own. */
 export function LogsPanel({ active, subsystems }: LogsPanelProps) {
-  const { loaded, loading, error, setError, openLog, openFiles } = useLogFile();
+  const { loaded, loading, error, setError, openLog, openFiles, openSaved, keptIds } = useLoadedLogs();
   const [dragging, setDragging] = useState(false);
+  const [showingLogs, setShowingLogs] = useState(false);
   const [mechanismIds, setMechanismIds] = useState<string[]>([]);
   const [assigningMotors, setAssigningMotors] = useState(false);
   /** Motor key → subsystem or group, chosen in the Assign motors dialog; overrides powerlib-subsystems.json. */
@@ -123,11 +113,24 @@ export function LogsPanel({ active, subsystems }: LogsPanelProps) {
     onDrop: (event: DragEvent<HTMLElement>) => { event.preventDefault(); setDragging(false); openFiles(Array.from(event.dataTransfer.files)); }
   };
 
+  function openFromList(log: SavedLog) {
+    setShowingLogs(false);
+    openSaved(log);
+  }
+
+  const library = (
+    <LogLibrary openId={loaded?.id} keptIds={keptIds} loading={loading} onOpen={openFromList}
+      onOpenFile={() => { setShowingLogs(false); openLog(); }}
+      action={<IconButton size="small" aria-label="Close logs" onClick={() => setShowingLogs(false)}><CloseIcon fontSize="small" /></IconButton>} />
+  );
+
   if (!loaded || !model) {
     return (
-      <Stack spacing={2} {...dropProps}>
+      <Stack spacing={2} {...dropProps} sx={{ flex: 1, minHeight: 0 }}>
         {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
-        <OpenLogPrompt dragging={dragging} loading={loading} onOpen={openLog} />
+        <OpenLogPrompt dragging={dragging} loading={loading} onOpen={() => setShowingLogs(true)}
+          actions={<RobotLogsButton variant="outlined" onOpenLog={openSaved} />} />
+        <LogsDialog open={showingLogs} onClose={() => setShowingLogs(false)}>{library}</LogsDialog>
       </Stack>
     );
   }
@@ -150,8 +153,9 @@ export function LogsPanel({ active, subsystems }: LogsPanelProps) {
       <PlayBar time={time} duration={duration} playing={playback.playing} speed={playback.speed} periods={model.periods} state={model.state}
         matchTime={model.matchTime} fmsAttached={model.fmsAttached}
         onTogglePlay={playback.togglePlay} onCycleSpeed={playback.cycleSpeed} onSeek={playback.seek} />
-      <LogStatusBar name={loaded.name} converted={loaded.converted} loading={loading} onOpen={openLog}
+      <LogStatusBar name={loaded.name} converted={loaded.converted} onShowLogs={() => setShowingLogs(true)}
         details={logDetails(duration, model.buses, model.signalCount, model.motors.length, model.usedFrames)} canPercent={canPercentAt(model.can, time)} />
+      <LogsDrawer open={showingLogs} onClose={() => setShowingLogs(false)}>{library}</LogsDrawer>
       <MotorAssignDialog open={assigningMotors} onClose={() => setAssigningMotors(false)} motors={model.motors} mechanisms={model.mechanisms}
         overrides={assignments} onAssign={assignMotor} onReset={clearAssignments} />
     </Stack>

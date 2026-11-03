@@ -13,6 +13,18 @@ contextBridge.exposeInMainWorld("powerlib", {
   updatePowerTool: () => ipcRenderer.invoke("powerlib:update-power-tool"),
   openLog: () => ipcRenderer.invoke("powerlib:open-log"),
   openLogPath: (filePath: string) => ipcRenderer.invoke("powerlib:open-log-path", filePath),
+  openLogFiles: (filePaths: string[]) => ipcRenderer.invoke("powerlib:open-log-files", filePaths),
+  defaultLogsFolder: () => ipcRenderer.invoke("powerlib:default-logs-folder"),
+  listLogs: (folder: string) => ipcRenderer.invoke("powerlib:list-logs", folder),
+  chooseLogsFolder: () => ipcRenderer.invoke("powerlib:choose-logs-folder"),
+  findRobot: () => ipcRenderer.invoke("powerlib:find-robot"),
+  listRobotLogs: () => ipcRenderer.invoke("powerlib:list-robot-logs"),
+  downloadRobotLogs: (downloads: { remotePath: string; localFolder: string }[], localRoot: string) =>
+    ipcRenderer.invoke("powerlib:download-robot-logs", downloads, localRoot),
+  onRobotDownloadProgress: (callback: (_event: unknown, progress: { done: number; total: number; file: string }) => void) => {
+    ipcRenderer.on("powerlib:robot-download-progress", callback);
+    return () => ipcRenderer.removeListener("powerlib:robot-download-progress", callback);
+  },
   readDriveMotorIds: () => ipcRenderer.invoke("powerlib:read-drive-motor-ids"),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   onMenuConnectionSettings: (callback: () => void) => {

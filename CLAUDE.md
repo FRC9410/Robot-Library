@@ -33,6 +33,10 @@ note, say so and offer to split it. Don't make it bigger.
 
 ## Git and pull requests
 
+**Planned, not in use yet** (as of 2026-11-03). The team plans to work this way later; for now,
+work happens on feature branches like `feature/Log-Viewer`. Don't flag missing issues or branch
+names. Still never commit to `main` directly or merge a PR.
+
 - Every change starts from a GitHub issue. Work on a branch off `main` named
   `feature/<issue-number>-<short-name>`, e.g. `feature/42-split-log-widgets`.
 - One issue per branch and one pull request per branch, into `main`. The PR description

@@ -26,6 +26,7 @@ and what it needs: [Tests and Checks](Tests%20and%20Checks.md).
 | **Cameras / Limelights tab / CSP in `index.html`** | — | `npm run check:cameras` and, from `powerlib-dashboard/`: `node_modules/electron/dist/electron.exe scripts/camera-electron-check.cjs` |
 | Any Power Tool TypeScript | — | `npm run build` (type-check + bundle) |
 | **Logs tab** (`features/logs/`, `open-log` IPC) | extend `scripts/log-check.mjs` | `npm run check:logs` + `npm run build`. The Open dialog and `.hoot`/Owlet path need a manual test in the Electron app |
+| **Get logs from robot** (`electron/robotLogs.ts`, robot IPC) | extend `scripts/robot-logs-check.mjs` | `npm run check:robot-logs` (finds, logs in, lists and downloads from the fake robot in `scripts/fake-robot.mjs`). By hand without a robot: `npm run fake-robot -- <logs folder>`, then start Power Tool with `POWERLIB_ROBOT=127.0.0.1:2222`. Still try it on the real robot |
 | **Telemetry key names** (`setSubsystemData` keys, `Drive/*`) | — | also `npm run check:logs`: the Logs tab finds mechanisms and setpoints by key name |
 
 ## Local checks vs. another project's regressions

@@ -6,11 +6,11 @@ import { build } from "esbuild";
 // Usage: node scripts/log-check.mjs [--write-sample <path.wpilog>]
 // The written sample also has Phoenix TalonFX signals (swerve IDs 1-8 plus each mechanism's motors), so every Logs widget has data.
 const result = await build({
-  stdin: { contents: 'export * from "./src/features/logs/wpilog.ts"; export * from "./src/features/logs/logModel.ts";',
+  stdin: { contents: 'export * from "./src/features/logs/wpilog.ts"; export * from "./src/features/logs/logModel.ts"; export * as library from "./src/features/logs/logLibraryModel.ts";',
     resolveDir: fileURLToPath(new URL("..", import.meta.url)), loader: "ts" },
   bundle: true, write: false, format: "esm", platform: "node"
 });
-const { parseWpilog, buildLogModel, busiestMechanism, busName, isViewerSignal, metricKey, plainMechanismKey, stepStats, valueAt, indexAt, segments,
+const { library, parseWpilog, buildLogModel, busiestMechanism, busName, isViewerSignal, metricKey, plainMechanismKey, stepStats, valueAt, indexAt, segments,
   averageAt, slotMeans, canPercentAt, matchClockAt, poseHeatmap, motorAverage } =
   await import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].contents).toString("base64")}`);
 const owletBundle = await build({ entryPoints: [fileURLToPath(new URL("../electron/owlet.ts", import.meta.url))], bundle: true, write: false,
@@ -452,5 +452,67 @@ const sampleModel = buildLogModel(parseWpilog(sample));
 const sampleGroup = id => sampleModel.motors.find(motor => motor.id === id)?.group;
 assert.deepEqual([1, 8, 20, 21, 22, 23, 24].map(sampleGroup), ["Drive", "Drive", "Intake", "Shooter", "Shooter", "Hood", "Climber"]);
 assert.ok(sampleModel.pose && sampleModel.state && sampleModel.powerGroups.length >= 5, "The sample fills every Logs widget");
+
+// Logs list: file names → runs → event and week groups
+assert.deepEqual(library.parseLogFileName("KSLA_Q6_rio_2026-03-20_14-39-56.hoot").match, { event: "KSLA", type: "Q", number: 6 });
+assert.equal(library.parseLogFileName("KSLA_Q6_rio_2026-03-20_14-39-56.hoot").start, new Date(2026, 2, 20, 14, 39, 56).getTime(), "Phoenix stamps are local time");
+assert.equal(library.parseLogFileName("9F61CEC3394C4853202020503F0E19FF_2026-03-28_05-49-09.hoot").match, undefined, "A CANivore ID isn't an event");
+assert.equal(library.parseLogFileName("rio_2026-04-03_14-15-42.hoot.wpilog").stamp, "20260403141542", "An Owlet export keeps its run's stamp");
+assert.deepEqual(library.parseLogFileName("FRC_20261101_152233_NYRO_Q12.wpilog"),
+  { stamp: "20261101152233", start: Date.UTC(2026, 10, 1, 15, 22, 33), match: { event: "NYRO", type: "Q", number: 12 } }, "DataLogManager names, in UTC");
+assert.equal(library.matchLabel({ event: "KSLA", type: "E", number: 13 }), "Elim 13");
+
+const entry = (folder, name, modifiedMs = 0) => ({ path: `L/${folder}/${name}`, folder, name, modifiedMs, size: name.includes("rio_") ? 700_000 : 17_000_000 });
+const savedLogs = library.groupLogFiles([
+  entry("2026 KSLA - Heartland/Qual 6", "KSLA_Q6_9F61CEC3394C4853202020503F0E19FF_2026-03-20_14-39-56.hoot"),
+  entry("2026 KSLA - Heartland/Qual 6", "KSLA_Q6_rio_2026-03-20_14-39-56.hoot"),
+  entry("2026 KSLA - Heartland/Elim 3", "KSLA_E3_rio_2026-03-21_18-46-51.hoot"),
+  entry("hoot logs/MOSE_Q8", "MOSE_Q8_rio_2026-04-03_14-55-53.hoot"),
+  entry("Shop/2026-04-03 14-15", "rio_2026-04-03_14-15-42.hoot"),
+  entry("Shop/2026-04-03 14-15", "9F61CEC3394C4853202020503F0E19FF_2026-04-03_14-15-42.hoot"),
+  entry("Shop/2026-03-28 05-49", "rio_2026-03-28_05-49-09.hoot"),
+  entry("", "notes-run.wpilog", new Date(2026, 3, 1, 9).getTime())
+]);
+assert.equal(savedLogs.length, 6, "Files from one run become one saved log");
+const qual6 = savedLogs.find(log => log.name === "Qual 6");
+assert.deepEqual(qual6.files.map(file => file.split("/").pop().slice(0, 11)), ["KSLA_Q6_rio", "KSLA_Q6_9F6"], "The roboRIO file opens first");
+assert.equal(library.savedLogTitle(qual6), "Qual 6 · KSLA");
+assert.equal(library.formatBytes(qual6.bytes), "18 MB", "A run's size is all its files");
+assert.equal(library.savedLogWhen(qual6), "Fri 2:39 PM", "Match rows show the day and time");
+assert.equal(library.formatBytes(640_000), "640 KB");
+assert.equal(library.formatBytes(1_250_000_000), "1.3 GB");
+assert.equal(library.formatBytes(NaN), "", "An unknown size (an older app listing files without sizes) shows blank, not NaN");
+assert.equal(savedLogs[0].name, "Qual 8", "Newest first");
+
+const matchGroups = library.groupSavedLogs(savedLogs, "matches");
+assert.deepEqual(matchGroups.map(group => group.title), ["MOSE", "2026 KSLA - Heartland"],
+  "Matches group by event, titled by the event's folder when there is one (not a folder named for the match)");
+assert.deepEqual(matchGroups[1].logs.map(log => log.name), ["Elim 3", "Qual 6"]);
+assert.equal(matchGroups[1].subtitle, "Mar 20–21");
+const practiceGroups = library.groupSavedLogs(savedLogs, "practice");
+assert.ok(practiceGroups.every(group => group.title.startsWith("Week of ")), "Runs without a match group by week");
+assert.equal(practiceGroups.reduce((sum, group) => sum + group.logs.length, 0), 3);
+assert.equal(library.groupSavedLogs(savedLogs, "all").length, matchGroups.length + practiceGroups.length);
+assert.deepEqual(library.groupSavedLogs(savedLogs, "all", "heartland").flatMap(group => group.logs.map(log => log.name)), ["Elim 3", "Qual 6"],
+  "Search looks at folder names too");
+// Robot downloads: which runs are already here, and the folder each new one goes in
+const robotLogs = library.groupLogFiles([
+  { path: "/U/logs/KSLA_Q6_rio_2026-03-20_14-39-56.hoot", folder: "/U/logs", name: "KSLA_Q6_rio_2026-03-20_14-39-56.hoot", modifiedMs: 0, size: 1 },
+  { path: "/U/logs/KSLA_Q70_rio_2026-03-21_17-02-10.hoot", folder: "/U/logs", name: "KSLA_Q70_rio_2026-03-21_17-02-10.hoot", modifiedMs: 0, size: 1 },
+  { path: "/U/logs/NYRO_Q2_rio_2026-11-07_10-05-00.hoot", folder: "/U/logs", name: "NYRO_Q2_rio_2026-11-07_10-05-00.hoot", modifiedMs: 0, size: 1 },
+  { path: "/home/lvuser/logs/2026-11-04_18-30-00/rio_2026-11-04_18-30-05.hoot", folder: "/home/lvuser/logs/2026-11-04_18-30-00",
+    name: "rio_2026-11-04_18-30-05.hoot", modifiedMs: 0, size: 1 }
+]);
+const robotRun = name => robotLogs.find(log => log.name === name || log.match && library.matchLabel(log.match) === name);
+assert.equal(library.isDownloaded(robotRun("Qual 6"), savedLogs), true, "The robot's Qual 6 file is already in the folder");
+assert.equal(library.isDownloaded(robotRun("Qual 70"), savedLogs), false);
+assert.equal(library.isDownloaded({ ...robotRun("Qual 6"), files: ["/U/logs/KSLA_Q6_rio_2026-03-20_14-39-56.hoot"] },
+  [{ ...qual6, files: ["C:\\Logs\\2026 KSLA - Heartland\\Qual 6\\KSLA_Q6_rio_2026-03-20_14-39-56.hoot"] }]), true, "Matched by file name across / and \\");
+assert.equal(library.downloadFolderFor(robotRun("Qual 70"), savedLogs), "2026 KSLA - Heartland/Qual 70 (2026-03-21_17-02)",
+  "A match joins its event's folder when there is one");
+assert.equal(library.downloadFolderFor(robotRun("Qual 2"), savedLogs), "2026 NYRO/Qual 2 (2026-11-07_10-05)", "A new event gets <year> <event>");
+assert.equal(library.downloadFolderFor(robotLogs.find(log => !log.match), savedLogs), "Shop/2026-11-04 18-30", "Other runs go in Shop");
+
+assert.equal(library.dayRange([new Date(2026, 9, 31).getTime(), new Date(2026, 10, 1).getTime()]), "Oct 31–Nov 1");
 
 console.log("log-check passed");

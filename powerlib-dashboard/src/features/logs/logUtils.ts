@@ -1,3 +1,4 @@
+import { template } from "../drive/driveModel";
 import { indexAt } from "./logModel";
 import type { LogMechanism, LogModel, Series } from "./logModel";
 
@@ -10,6 +11,12 @@ export const logColors = {
   good: "#22c55e",
   bad: "#ef4444"
 };
+/**
+ * The logs list's frame, the same in the popup and the drawer. MUI lightens raised surfaces in dark mode
+ * with a background image, so it's turned off to match the tab's cards.
+ */
+export const logsSurface = { bgcolor: "background.paper", backgroundImage: "none", border: 1, borderColor: "divider", p: 2,
+  boxSizing: "border-box", display: "flex", flexDirection: "column" } as const;
 export const periodColors: Record<string, string> = { AUTO: "#3b82f6", TELEOP: "#22c55e", TEST: "#a855f7", ENABLED: "#22c55e" };
 const statePalette = ["#60a5fa", "#f59e0b", "#a78bfa", "#34d399", "#f472b6", "#22d3ee", "#fb923c", "#a3e635"];
 const idleStates = new Set(["", "IDLE", "DISABLED", "NONE"]);
@@ -71,6 +78,21 @@ export const formatMatchClock = (seconds: number) => {
   const whole = Math.ceil(seconds);
   return `${Math.floor(whole / 60)}:${(whole % 60).toString().padStart(2, "0")}`;
 };
+
+/** The same field size and flip the Drive tab is set to on this machine. */
+export function readFieldSettings() {
+  const defaults = { length: template.field.lengthMeters, width: template.field.widthMeters, flip: false };
+  try {
+    const saved = JSON.parse(localStorage.getItem("powerlib.driveDisplay.v1") || "{}");
+    return {
+      length: typeof saved.length === "number" && saved.length > 0 ? saved.length : defaults.length,
+      width: typeof saved.width === "number" && saved.width > 0 ? saved.width : defaults.width,
+      flip: saved.flip === true
+    };
+  } catch {
+    return defaults;
+  }
+}
 
 export function readSaved<T>(key: string, fallback: T, valid: (value: unknown) => value is T): T {
   try {

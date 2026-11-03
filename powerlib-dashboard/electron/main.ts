@@ -9,6 +9,8 @@ import { fileURLToPath } from "node:url";
 import { readConstantsFiles, saveConstantsFile } from "./constantsFiles.js";
 import { generatedJsonPath } from "./projectPaths.js";
 import { convertHoot, sessionSiblings } from "./owlet.js";
+import { downloadRobotLogs, findRobot, listRobotLogs } from "./robotLogs.js";
+import type { RobotDownload } from "./robotLogs.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -460,27 +462,57 @@ function owletDirectories() {
   ]));
 }
 
-/** A .hoot opens with every .hoot from the same session (one per CAN bus), each converted to .wpilog. */
-async function readLogFile(filePath: string) {
-  const name = path.basename(filePath);
-  if (path.extname(filePath).toLowerCase() !== ".hoot") {
-    return { canceled: false as const, name, path: filePath, converted: false, files: [{ name, bytes: await fs.readFile(filePath) }] };
-  }
+const isLogPath = (filePath: unknown): filePath is string => typeof filePath === "string" && /\.(wpilog|hoot)$/i.test(filePath);
 
-  const directory = path.dirname(filePath);
-  const siblings = sessionSiblings(name, await fs.readdir(directory).catch(() => [name]));
+/** Reads one session's files in order; each .hoot is converted to .wpilog through Owlet first. */
+async function readLogFiles(filePaths: string[]) {
   const outputDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "power-tool-log-"));
   try {
     const files = [];
-    for (const sibling of siblings) {
-      const outputPath = path.join(outputDirectory, `${path.basename(sibling, path.extname(sibling))}.wpilog`);
-      await convertHoot(path.join(directory, sibling), outputPath, owletDirectories(), process.env.POWERLIB_OWLET);
-      files.push({ name: sibling, bytes: await fs.readFile(outputPath) });
+    let converted = false;
+    for (const filePath of filePaths) {
+      const name = path.basename(filePath);
+      if (path.extname(filePath).toLowerCase() !== ".hoot") {
+        files.push({ name, bytes: await fs.readFile(filePath) });
+        continue;
+      }
+      const outputPath = path.join(outputDirectory, `${path.basename(name, path.extname(name))}.wpilog`);
+      await convertHoot(filePath, outputPath, owletDirectories(), process.env.POWERLIB_OWLET);
+      files.push({ name, bytes: await fs.readFile(outputPath) });
+      converted = true;
     }
-    return { canceled: false as const, name, path: filePath, converted: true, files };
+    return { canceled: false as const, name: path.basename(filePaths[0]), path: filePaths[0], converted, files };
   } finally {
     await fs.rm(outputDirectory, { recursive: true, force: true });
   }
+}
+
+/** A .hoot opens with every .hoot from the same session (one per CAN bus). */
+async function readLogFile(filePath: string) {
+  if (path.extname(filePath).toLowerCase() !== ".hoot") return readLogFiles([filePath]);
+  const directory = path.dirname(filePath);
+  const name = path.basename(filePath);
+  const siblings = sessionSiblings(name, await fs.readdir(directory).catch(() => [name]));
+  return readLogFiles(siblings.map((sibling) => path.join(directory, sibling)));
+}
+
+/** Every .hoot and .wpilog under `folder` (a few levels deep), for the Logs tab's list. */
+async function listLogFiles(folder: string) {
+  const files: { path: string; folder: string; name: string; modifiedMs: number; size: number }[] = [];
+  async function walk(directory: string, depth: number) {
+    const entries = await fs.readdir(directory, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      const full = path.join(directory, entry.name);
+      if (entry.isDirectory() && depth < 4) await walk(full, depth + 1);
+      else if (entry.isFile() && isLogPath(entry.name) && files.length < 5000) {
+        const stats = await fs.stat(full).catch(() => null);
+        if (stats) files.push({ path: full, folder: path.relative(folder, directory), name: entry.name, modifiedMs: stats.mtimeMs, size: stats.size });
+      }
+    }
+  }
+  const exists = await fs.stat(folder).then((stats) => stats.isDirectory()).catch(() => false);
+  if (exists) await walk(folder, 0);
+  return { folder, exists, files };
 }
 
 /** Swerve motor CAN IDs from the robot's TunerConstants.java (`k<Module>DriveMotorId` / `k<Module>SteerMotorId`), so logs can group them as Drive. */
@@ -517,10 +549,42 @@ ipcMain.handle("powerlib:open-log", async (event) => {
 });
 
 ipcMain.handle("powerlib:open-log-path", async (_event, filePath: string) => {
-  if (typeof filePath !== "string" || !/\.(wpilog|hoot)$/i.test(filePath)) {
+  if (!isLogPath(filePath)) {
     throw new Error("Only .wpilog and .hoot files can be opened.");
   }
   return readLogFile(filePath);
+});
+
+ipcMain.handle("powerlib:open-log-files", async (_event, filePaths: unknown) => {
+  if (!Array.isArray(filePaths) || filePaths.length === 0 || !filePaths.every(isLogPath)) {
+    throw new Error("Only .wpilog and .hoot files can be opened.");
+  }
+  return readLogFiles(filePaths);
+});
+
+ipcMain.handle("powerlib:default-logs-folder", () => path.join(app.getPath("documents"), "Power Tool", "Logs"));
+
+ipcMain.handle("powerlib:list-logs", async (_event, folder: unknown) => {
+  if (typeof folder !== "string" || !folder) throw new Error("Pick a logs folder first.");
+  return listLogFiles(folder);
+});
+
+ipcMain.handle("powerlib:find-robot", async () => findRobot());
+ipcMain.handle("powerlib:list-robot-logs", async () => listRobotLogs());
+
+ipcMain.handle("powerlib:download-robot-logs", async (event, downloads: unknown, localRoot: unknown) => {
+  const valid = Array.isArray(downloads) && downloads.every((item) => typeof item?.remotePath === "string" && isLogPath(item.remotePath)
+    && typeof item?.localFolder === "string" && !path.isAbsolute(item.localFolder) && !item.localFolder.split(/[\\/]/).includes(".."));
+  if (!valid || typeof localRoot !== "string" || !localRoot) throw new Error("Pick a logs folder and some logs to download.");
+  return downloadRobotLogs(downloads as RobotDownload[], localRoot,
+    (progress) => { if (!event.sender.isDestroyed()) event.sender.send("powerlib:robot-download-progress", progress); });
+});
+
+ipcMain.handle("powerlib:choose-logs-folder", async (event) => {
+  const owner = BrowserWindow.fromWebContents(event.sender);
+  const options: Electron.OpenDialogOptions = { title: "Choose the logs folder", properties: ["openDirectory", "createDirectory"] };
+  const result = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options);
+  return result.canceled ? null : result.filePaths[0] ?? null;
 });
 
 function createWindow() {
