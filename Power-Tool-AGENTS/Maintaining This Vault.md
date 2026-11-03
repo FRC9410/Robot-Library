@@ -12,6 +12,10 @@ matches the code, so updating it is part of finishing a change.
 
 ## When you change code
 
+Changing React code in Power Tool? Follow the
+[React Code Rules](05-Power-Tool/React%20Code%20Rules.md) first. The repo-root `CLAUDE.md`
+points coding agents at them and at this note.
+
 1. **Add a [CHANGELOG](09-Changelog/CHANGELOG.md) entry**, newest at the top, using the format
    at the top of that file. One entry per logical change, not per commit. **Code changes
    only:** edits that touch only vault notes don't get an entry.

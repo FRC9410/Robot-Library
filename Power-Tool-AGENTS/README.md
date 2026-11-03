@@ -13,7 +13,8 @@ changelog. Written for teammates and coding agents. Open this folder in Obsidian
 
 **Start here:** [Architecture](01-Overview/Architecture.md), then the
 [First Robot Walkthrough](10-Guides/First%20Robot%20Walkthrough.md). **Changing code?** Follow
-[Maintaining This Vault](Maintaining%20This%20Vault.md), check the
+[Maintaining This Vault](Maintaining%20This%20Vault.md) and, for React code, the
+[React Code Rules](05-Power-Tool/React%20Code%20Rules.md). Check the
 [Change to Tests Map](07-Testing/Change%20to%20Tests%20Map.md), and add a [CHANGELOG](09-Changelog/CHANGELOG.md) entry.
 
 ## 10 Guides: how to use it ([index](10-Guides/INDEX.md))
@@ -54,6 +55,7 @@ changelog. Written for teammates and coding agents. Open this folder in Obsidian
 - [NetworkTables Layer](05-Power-Tool/NetworkTables%20Layer.md): NT4 client, frame decoding, buffering, views.
 - [Tabs and Features](05-Power-Tool/Tabs%20and%20Features.md): Drive, Robot, Subsystems, Limelights, NetworkTables; how to add a tab.
 - [Custom Dashboard](05-Power-Tool/Custom%20Dashboard.md): the project-owned `power-tool/dashboard/`.
+- [React Code Rules](05-Power-Tool/React%20Code%20Rules.md): one component per file, composition, reuse. **Required for React changes.**
 
 ## 06 Data Flows ([index](06-Data-Flows/INDEX.md))
 - [Telemetry Flow](06-Data-Flows/Telemetry%20Flow.md): shared map → SignalLogger (50 Hz) and NT frame (10 Hz) → Power Tool.

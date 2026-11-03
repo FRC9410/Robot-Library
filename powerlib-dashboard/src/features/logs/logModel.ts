@@ -64,6 +64,10 @@ export type LogModel = {
   can?: Series<number>;
   state?: Series<string>;
   pose?: Series<Pose>;
+  /** The Driver Station's match countdown (`DriverStation.getMatchTime()`), seconds; negative when there wasn't one. */
+  matchTime?: Series<number>;
+  /** Whether the robot was connected to a field (FMS), so a real match can be told from practice. */
+  fmsAttached?: Series<boolean>;
   periods: LogPeriod[];
   markers: LogMarker[];
   signalCount: number;
@@ -71,8 +75,8 @@ export type LogModel = {
   usedFrames: boolean;
   /** Every motor found, assigned or not. */
   motors: LogMotor[];
-  /** Power per assigned group plus one entry for all unassigned motors, for the power widget. */
-  powerGroups: { id: string; name: string; power: RangedSeries }[];
+  /** Summed supply current (and power) per assigned group plus one entry for all unassigned motors, for the Power card. */
+  powerGroups: { id: string; name: string; current: RangedSeries; power: RangedSeries }[];
   buses: string[];
 };
 
@@ -98,7 +102,8 @@ const owletSignals: Record<string, string> = {
   Voltage: "Drive/BatteryVolts",
   "CAN Utilization": "Drive/RioCanUtilization",
   RobotMode: "Drive/Mode",
-  RobotEnable: "Drive/Enabled"
+  RobotEnable: "Drive/Enabled",
+  "DS:IsFMSAttached": "RobotStatus/FmsAttached"
 };
 
 /** Plain `<Name> Velocity` / `<Name> Position` / `<Name> Setpoint` signals from robots without PowerLib. */
@@ -200,6 +205,8 @@ export function buildLogModel(input: WpilogFile | LogSource[], subsystems: Gener
   const battery = numbers(get("Drive", "BatteryVolts")?.series);
   const can = numbers(get("Drive", "RioCanUtilization")?.series);
   const state = strings((get("Drive", "ActualState") ?? get("Drive", "State"))?.series);
+  const matchTime = numbers(get("Drive", "MatchTimeSeconds")?.series);
+  const fmsAttached = booleans(get("RobotStatus", "FmsAttached")?.series);
   const periods = findPeriods(metrics, duration);
   const mechanisms = findMechanisms(metrics, subsystems);
   const motors = [...motorSignals.entries()].map(([key, motor]) => {
@@ -212,7 +219,8 @@ export function buildLogModel(input: WpilogFile | LogSource[], subsystems: Gener
   }).sort((left, right) => left.bus.localeCompare(right.bus) || left.id - right.id);
   const powerGroups = assignMotors(mechanisms, motors, subsystems, assignments, driveMotorIds, periods, duration, battery);
   const markers = findMarkers(metrics, mechanisms, periods, battery, can);
-  return { duration, mechanisms, battery, can, state, pose: findPose(metrics), periods, markers, signalCount, usedFrames, motors, powerGroups, buses };
+  return { duration, mechanisms, battery, can, state, pose: findPose(metrics), matchTime, fmsAttached, periods, markers, signalCount, usedFrames, motors,
+    powerGroups, buses };
 }
 
 const normalizeName = (name: string) => name.replace(/[^a-z0-9]/gi, "").toLowerCase();
@@ -260,7 +268,7 @@ function assignMotors(mechanisms: LogMechanism[], motors: LogMotor[], subsystems
     }
     mechanism.motors = members;
     mechanism.metrics = combined;
-    if (combined.power) powerGroups.push({ id: mechanism.id, name: mechanism.name, power: combined.power });
+    if (combined.power && combined.current) powerGroups.push({ id: mechanism.id, name: mechanism.name, current: combined.current, power: combined.power });
   }
   const unassigned = motors.filter(motor => !motor.group);
   for (const motor of unassigned) {
@@ -276,8 +284,8 @@ function assignMotors(mechanisms: LogMechanism[], motors: LogMotor[], subsystems
     return count ? sum / count : 0;
   };
   powerGroups.sort((left, right) => meanPower(right.power) - meanPower(left.power));
-  const otherPower = unassigned.length ? combineMotors(unassigned, battery).power : undefined;
-  if (otherPower) powerGroups.push({ id: "unassigned", name: "Unassigned motors", power: otherPower });
+  const other = unassigned.length ? combineMotors(unassigned, battery) : {};
+  if (other.power && other.current) powerGroups.push({ id: "unassigned", name: "Unassigned motors", current: other.current, power: other.power });
   return powerGroups;
 }
 
@@ -497,6 +505,77 @@ export function slotMeans(series: Series<number>, from: number, to: number, step
     means.push(previous);
   }
   return { starts, means };
+}
+
+/** CAN use at `time` in percent, whether the log stored it as a 0–1 fraction (PowerLib) or a percentage (Owlet). */
+export function canPercentAt(can: Series<number> | undefined, time: number) {
+  const value = valueAt(can, time);
+  if (!can || value === undefined) return undefined;
+  let peak = -Infinity;
+  for (const sample of can.values) if (Number.isFinite(sample)) peak = Math.max(peak, sample);
+  return peak <= 1.5 ? value * 100 : value;
+}
+
+/** The match clock at `time` in seconds left, or undefined when the log has no match time then (it reads negative outside a match period). */
+export function matchClockAt(matchTime: Series<number> | undefined, time: number) {
+  const seconds = valueAt(matchTime, time);
+  return seconds !== undefined && Number.isFinite(seconds) && seconds >= 0 ? seconds : undefined;
+}
+
+/** The motor signal behind each per-motor graph view. */
+export const motorSignalFor: Record<"current" | "voltage" | "stator", MotorSignal> = { current: "SupplyCurrent", voltage: "MotorVoltage", stator: "StatorCurrent" };
+
+/**
+ * The motors' mean reading at each of the busiest motor's timestamps, for a graph that draws every motor and their
+ * average. `min`/`max` span every motor's readings averaged over 0.1 s (how the graph draws them) plus zero, so real
+ * peaks fit on the axis but single-sample noise doesn't stretch it.
+ */
+export function motorAverage(motors: LogMotor[], signal: MotorSignal): RangedSeries | undefined {
+  const lines = motors.map(motor => motor.signals[signal]).filter((series): series is Series<number> => series !== undefined);
+  if (!lines.length) return undefined;
+  const base = lines.reduce((busiest, series) => series.times.length > busiest.times.length ? series : busiest);
+  const readers = lines.map(series => cursor(series));
+  const values = base.times.map(time => {
+    let sum = 0; let count = 0;
+    for (const read of readers) {
+      const value = read(time);
+      if (value !== undefined && Number.isFinite(value)) { sum += value; count += 1; }
+    }
+    return count ? sum / count : NaN;
+  });
+  let min = 0; let max = 0; let any = false;
+  for (const series of lines) {
+    if (!series.times.length) continue;
+    for (const mean of slotMeans(series, series.times[0], series.times[series.times.length - 1], 0.1).means) {
+      if (Number.isFinite(mean)) { min = Math.min(min, mean); max = Math.max(max, mean); any = true; }
+    }
+  }
+  if (!any) return undefined;
+  if (min === max) { min -= 1; max += 1; }
+  return { times: base.times, values, min, max };
+}
+
+export type PoseHeatmap = { cell: number; columns: number; rows: number; counts: number[]; max: number };
+
+/**
+ * Where the robot spent its time: pose samples counted in square cells (`cell` meters) over the field, while enabled
+ * (the whole log when there are no periods). Poses off the field are left out. Cell `row * columns + column`.
+ */
+export function poseHeatmap(pose: Series<Pose>, periods: LogPeriod[], length: number, width: number, cell = 0.3): PoseHeatmap {
+  const columns = Math.max(1, Math.ceil(length / cell));
+  const rows = Math.max(1, Math.ceil(width / cell));
+  const counts = new Array<number>(columns * rows).fill(0);
+  let max = 0;
+  pose.times.forEach((time, index) => {
+    if (periods.length && !periods.some(period => time >= period.start && time < period.end)) return;
+    const column = Math.floor(pose.values[index].x / cell);
+    const row = Math.floor(pose.values[index].y / cell);
+    if (column < 0 || row < 0 || column >= columns || row >= rows) return;
+    const slot = row * columns + column;
+    counts[slot] += 1;
+    max = Math.max(max, counts[slot]);
+  });
+  return { cell, columns, rows, counts, max };
 }
 
 export function valueAt<T>(series: Series<T> | undefined, time: number): T | undefined {

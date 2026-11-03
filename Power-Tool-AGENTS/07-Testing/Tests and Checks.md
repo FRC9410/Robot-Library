@@ -69,7 +69,7 @@ These bundle TypeScript with esbuild and assert with `node:assert`. They also ru
   - It writes its own logs with a small writer that uses the shortest field widths, so the record bitfield is exercised.
   - Main fixture: a fake 150 s match with four mechanisms (all three setpoint key spellings), a brownout, a CAN spike and an intake jam.
   - Also covers: every value type, entry restart, a truncated file, bad files, signal-name variants, periods, markers, step stats, the default mechanism, and a frames-only (DataLogManager-style) log.
-  - `node scripts/log-check.mjs --write-sample build/log-sample.wpilog` saves the fake match so you can open it in the Logs tab.
+  - `node scripts/log-check.mjs --write-sample build/log-sample.wpilog` saves the fake match so you can open it in the Logs tab. The saved file also has fake TalonFX signals (swerve IDs 1-8, Intake 20, Shooter 21-22, Hood 23, Climber 24), so every widget has data: pose, state, setpoints, power and motor rows. The check asserts those motors group to the right subsystems with no config.
 - `camera-check.mjs` and `camera-electron-check.cjs` (run with Electron itself): camera failover and the Limelight iframe under the real CSP. **Not listed in `tests/README.md`.**
 
 ## Gaps

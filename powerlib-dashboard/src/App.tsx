@@ -556,9 +556,12 @@ function AppContent() {
     }
   }
 
+  // The Robot and Logs tabs fit the window and scroll inside their own widgets instead of scrolling the page.
+  const fillsWindow = activeView === "robot" || activeView === "logs";
+
   return (
-    <Box sx={{ minHeight: activeView === "robot" ? 0 : "100vh", height: activeView === "robot" ? "100dvh" : undefined,
-      overflow: activeView === "robot" ? "hidden" : undefined, display: "flex", flexDirection: "column", bgcolor: "background.default" }}>
+    <Box sx={{ minHeight: fillsWindow ? 0 : "100vh", height: fillsWindow ? "100dvh" : undefined,
+      overflow: fillsWindow ? "hidden" : undefined, display: "flex", flexDirection: "column", bgcolor: "background.default" }}>
       <AppBar
         position="sticky"
         color="inherit"
@@ -712,9 +715,10 @@ function AppContent() {
       </Snackbar>
 
       <Container maxWidth={false} disableGutters={activeView === "robot"} sx={activeView === "drive" ? { p: "0 !important" } : activeView === "robot"
-        ? { py: 0, pl: { xs: 2, sm: 3 }, flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" } : { py: 2 }}>
+        ? { py: 0, pl: { xs: 2, sm: 3 }, flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }
+        : activeView === "logs" ? { pt: 1.5, pb: 0, flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" } : { py: 2 }}>
         {telemetryError && <Alert severity="warning" sx={{ m: 1 }}>{telemetryError}</Alert>}
-        <Stack spacing={2} sx={activeView === "robot" ? { flex: 1, minHeight: 0 } : undefined}>
+        <Stack spacing={2} sx={fillsWindow ? { flex: 1, minHeight: 0 } : undefined}>
           {activeView === "drive" && <DashboardPanel subsystems={subsystemDocument.subsystems} />}
           {activeView === "robot" && (
             <RobotPanelWithTelemetry
@@ -724,7 +728,7 @@ function AppContent() {
           )}
 
           {/* Stays mounted so an open log survives switching tabs. */}
-          <Box sx={{ display: activeView === "logs" ? "block" : "none" }}>
+          <Box sx={{ display: activeView === "logs" ? "flex" : "none", flexDirection: "column", flex: 1, minHeight: 0 }}>
             <LogsPanel active={activeView === "logs"} subsystems={subsystemDocument.subsystems} />
           </Box>
 

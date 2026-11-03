@@ -1,51 +1,37 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { DragEvent } from "react";
-import { Alert, Box, Button, Chip, IconButton, LinearProgress, Paper, Slider, Stack, Tooltip, Typography } from "@mui/material";
-import BoltIcon from "@mui/icons-material/Bolt";
-import FolderOpenIcon from "@mui/icons-material/FolderOpen";
-import LanIcon from "@mui/icons-material/Lan";
-import PauseIcon from "@mui/icons-material/Pause";
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import TimelineIcon from "@mui/icons-material/Timeline";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import { Alert, Box, LinearProgress, Stack } from "@mui/material";
 import type { GeneratedSubsystem } from "../subsystems/types";
 import { template } from "../drive/driveModel";
-import { averageAt, buildLogModel, busiestMechanism, isViewerSignal, valueAt } from "./logModel";
-import type { GraphView, LogMarker, LogSource } from "./logModel";
-import { parseWpilog } from "./wpilog";
-import { FieldView, formatClock, markerColors, MechanismGraphs, MechanismStatus, NumberTile, StateStrip, TimelineBar } from "./LogWidgets";
-import { MotorAssignDialog, PowerWidget } from "./PowerWidgets";
+import { buildLogModel, busiestMechanism, canPercentAt } from "./logModel";
+import type { GraphView } from "./logModel";
+import { groupColor, logDetails, readSaved, writeSaved } from "./logUtils";
+import { useLogFile } from "./useLogFile";
+import { useLogPlayback } from "./useLogPlayback";
+import { FieldView } from "./components/FieldView";
+import { LogStatusBar } from "./components/LogStatusBar";
+import { MotorAssignDialog } from "./components/MotorAssignDialog";
+import { OpenLogPrompt } from "./components/OpenLogPrompt";
+import { PlayBar } from "./components/PlayBar";
+import { PowerCard } from "./components/PowerCard";
+import { SubsystemGraphs } from "./components/SubsystemGraphs";
+import { LogsLayout } from "./components/LogsLayout";
 
-type LoadedLog = { name: string; converted: boolean; sources: LogSource[] };
-const speeds = [0.5, 1, 2, 4];
+type LogsPanelProps = {
+  active: boolean;
+  subsystems: GeneratedSubsystem[];
+};
+
 const driveSettingsKey = "powerlib.driveDisplay.v1";
 const selectionKey = "powerlib.logs.mechanisms.v1";
 const assignmentsKey = "powerlib.logs.motorGroups.v1";
 const viewsKey = "powerlib.logs.graphViews.v1";
 
-function readSaved<T>(key: string, fallback: T, valid: (value: unknown) => value is T): T {
-  try {
-    const saved: unknown = JSON.parse(localStorage.getItem(key) || "null");
-    return valid(saved) ? saved : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function writeSaved(key: string, value: unknown) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Keep this session's choice when browser storage is unavailable.
-  }
-}
-
 const isStringList = (value: unknown): value is string[] => Array.isArray(value) && value.every(item => typeof item === "string");
 const isStringMap = (value: unknown): value is Record<string, string> =>
   value !== null && typeof value === "object" && !Array.isArray(value) && Object.values(value).every(item => typeof item === "string");
-/** The mechanisms picked last time, so the next log opens on the same ones. */
+/** The subsystems picked last time, so the next log opens on the same ones. */
 const readSavedSelection = () => readSaved(selectionKey, [], isStringList);
-const markerIcons: Record<LogMarker["kind"], typeof BoltIcon> = { brownout: BoltIcon, setpoint: WarningAmberIcon, can: LanIcon };
 
 /** Use the same field size and flip the Drive tab is set to on this machine. */
 function readFieldSettings() {
@@ -62,22 +48,15 @@ function readFieldSettings() {
   }
 }
 
-const cleanError = (caught: unknown) =>
-  (caught instanceof Error ? caught.message : String(caught)).replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "");
-
-export function LogsPanel({ active, subsystems }: { active: boolean; subsystems: GeneratedSubsystem[] }) {
-  const [loaded, setLoaded] = useState<LoadedLog | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+/** The Logs tab: fills the window without scrolling the page; long widgets scroll on their own. */
+export function LogsPanel({ active, subsystems }: LogsPanelProps) {
+  const { loaded, loading, error, setError, openLog, openFiles } = useLogFile();
   const [dragging, setDragging] = useState(false);
-  const [time, setTime] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState(1);
   const [mechanismIds, setMechanismIds] = useState<string[]>([]);
   const [assigningMotors, setAssigningMotors] = useState(false);
-  /** Motor key → mechanism or group, chosen in the Assign motors dialog; overrides powerlib-subsystems.json. */
+  /** Motor key → subsystem or group, chosen in the Assign motors dialog; overrides powerlib-subsystems.json. */
   const [assignments, setAssignments] = useState<Record<string, string>>(() => readSaved(assignmentsKey, {}, isStringMap));
-  /** Mechanism id → what its graph shows (value, current, power, voltage, stator or temp). */
+  /** Subsystem id → what its graph shows (value, current, power, voltage, stator or temp). */
   const [views, setViews] = useState<Record<string, GraphView>>(() => readSaved(viewsKey, {}, isStringMap) as Record<string, GraphView>);
   /** Swerve motor IDs from the robot's TunerConstants.java, so a log's drive motors group as Drive without setup. */
   const [driveMotorIds, setDriveMotorIds] = useState<number[]>([]);
@@ -88,6 +67,8 @@ export function LogsPanel({ active, subsystems }: { active: boolean; subsystems:
     [loaded, subsystems, assignments, driveMotorIds]);
   const field = useMemo(readFieldSettings, [active]);
   const duration = model?.duration ?? 0;
+  const playback = useLogPlayback(duration, active, model !== null);
+  const { time, setTime, setPlaying } = playback;
   const selected = useMemo(() => mechanismIds.flatMap(id => model?.mechanisms.find(item => item.id === id) ?? []), [mechanismIds, model]);
 
   function selectMechanisms(ids: string[]) {
@@ -117,19 +98,9 @@ export function LogsPanel({ active, subsystems }: { active: boolean; subsystems:
     });
   }
 
-  const seek = useCallback((next: number) => setTime(Math.min(duration, Math.max(0, next))), [duration]);
-
-  /** Several files are one session (one per CAN bus); the roboRIO's comes first. */
-  function load(files: { name: string; bytes: Uint8Array }[], name: string, converted: boolean) {
-    const sources = files.map(file => ({ name: file.name, file: parseWpilog(file.bytes, isViewerSignal) }));
-    setLoaded({ name, converted, sources });
-    setPlaying(false);
-    setError(sources.some(source => source.file.truncated)
-      ? "The end of this log was cut off (the robot may have lost power). Everything before that point is shown." : null);
-  }
-
-  // A new log starts at its first enabled period; reassigning motors rebuilds the model but keeps the time.
+  // A new log starts paused at its first enabled period; reassigning motors rebuilds the model but keeps the time.
   useEffect(() => {
+    setPlaying(false);
     if (model) setTime(model.periods[0]?.start ?? 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded]);
@@ -146,185 +117,43 @@ export function LogsPanel({ active, subsystems }: { active: boolean; subsystems:
     });
   }, [model]);
 
-  async function run(task: () => Promise<void>) {
-    setLoading(true);
-    try {
-      await task();
-    } catch (caught) {
-      setError(cleanError(caught));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function openLog() {
-    void run(async () => {
-      if (!window.powerlib?.openLog) throw new Error("Opening files needs the Power Tool app. Drag a .wpilog file here instead.");
-      const result = await window.powerlib.openLog();
-      if (!result.canceled) load(result.files, result.name, result.converted);
-    });
-  }
-
-  function dropLog(event: DragEvent<HTMLElement>) {
-    event.preventDefault();
-    setDragging(false);
-    const files = Array.from(event.dataTransfer.files);
-    if (!files.length) return;
-    void run(async () => {
-      const hoot = files.find(file => /\.hoot$/i.test(file.name));
-      if (hoot) {
-        const filePath = window.powerlib?.getPathForFile?.(hoot);
-        if (!filePath || !window.powerlib?.openLogPath) throw new Error("Opening .hoot files needs the Power Tool app.");
-        const result = await window.powerlib.openLogPath(filePath);
-        load(result.files, result.name, result.converted);
-      } else {
-        // Several dropped .wpilog files open together as one session, roboRIO file first.
-        const read = await Promise.all(files.map(async file => ({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) })));
-        read.sort((left, right) => Number(/(^|_)rio_/i.test(right.name)) - Number(/(^|_)rio_/i.test(left.name)));
-        load(read, files.length > 1 ? `${files[0].name} + ${files.length - 1} more` : files[0].name, false);
-      }
-    });
-  }
-
-  useEffect(() => {
-    if (!playing || !active) return;
-    let frame = 0;
-    let last = performance.now();
-    const step = (now: number) => {
-      const elapsed = ((now - last) / 1000) * speed;
-      last = now;
-      setTime(current => {
-        const next = current + elapsed;
-        if (next >= duration) { setPlaying(false); return duration; }
-        return next;
-      });
-      frame = requestAnimationFrame(step);
-    };
-    frame = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(frame);
-  }, [playing, active, speed, duration]);
-
-  useEffect(() => {
-    if (!active || !model) return;
-    const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable || target.getAttribute("role") === "combobox")) return;
-      if (event.code === "Space") { event.preventDefault(); setPlaying(current => !current); }
-      else if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
-        event.preventDefault();
-        const jump = (event.shiftKey ? 5 : 1) * (event.key === "ArrowRight" ? 1 : -1);
-        setTime(current => Math.min(duration, Math.max(0, current + jump)));
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [active, model, duration]);
-
-  useEffect(() => { if (!active) setPlaying(false); }, [active]);
-
   const dropProps = {
     onDragOver: (event: DragEvent<HTMLElement>) => { event.preventDefault(); setDragging(true); },
     onDragLeave: () => setDragging(false),
-    onDrop: dropLog
+    onDrop: (event: DragEvent<HTMLElement>) => { event.preventDefault(); setDragging(false); openFiles(Array.from(event.dataTransfer.files)); }
   };
 
   if (!loaded || !model) {
     return (
       <Stack spacing={2} {...dropProps}>
         {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
-        <Paper variant="outlined" sx={{ p: 6, borderRadius: 2, borderStyle: "dashed", borderColor: dragging ? "primary.main" : "divider",
-          display: "flex", flexDirection: "column", alignItems: "center", gap: 2, textAlign: "center" }}>
-          <TimelineIcon color="primary" sx={{ fontSize: 48 }} />
-          <Typography variant="h6" sx={{ fontWeight: 800 }}>Open a robot log</Typography>
-          <Typography color="text.secondary" sx={{ maxWidth: 520 }}>
-            Choose a .wpilog or .hoot file, or drag one here. Opening one .hoot opens every CAN bus's .hoot from that match. They're converted with CTRE's Owlet, which Power Tool finds in AdvantageScope's downloads, power-tool/tools/ or PATH.
-          </Typography>
-          <Button variant="contained" startIcon={<FolderOpenIcon />} onClick={openLog} disabled={loading}>Open log</Button>
-          {loading && <LinearProgress sx={{ width: 240 }} />}
-        </Paper>
+        <OpenLogPrompt dragging={dragging} loading={loading} onOpen={openLog} />
       </Stack>
     );
   }
 
-  // Same 0.5 s average as the power widget, so the two battery readouts agree.
-  const battery = averageAt(model.battery, time);
-  const can = valueAt(model.can, time);
-  const canPercent = can !== undefined && model.can && Math.max(...model.can.values.filter(Number.isFinite)) <= 1.5 ? can * 100 : can;
-  const period = model.periods.find(item => time >= item.start && time < item.end);
   const noPowerLib = model.mechanisms.length === 0 && !model.battery && !model.pose && !model.state;
 
   return (
-    <Stack spacing={1.5} {...dropProps} sx={{ outline: dragging ? "2px dashed" : "none", outlineColor: "primary.main", borderRadius: 2 }}>
-      <Stack direction="row" sx={{ alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-        <Button variant="outlined" size="small" startIcon={<FolderOpenIcon />} onClick={openLog} disabled={loading}>Open log</Button>
-        <Typography sx={{ fontWeight: 800 }}>{loaded.name}</Typography>
-        {loaded.converted && <Chip size="small" variant="outlined" label="Converted from .hoot" />}
-        <Typography variant="caption" color="text.secondary">{formatClock(duration)} long · {model.buses.length > 1 ? `${model.buses.join(" + ")} · ` : ""}{model.signalCount} signals{model.motors.length ? ` · ${model.motors.length} motors` : ""}{model.usedFrames ? " · from 10 Hz NT frames" : ""}</Typography>
-        <Box sx={{ flex: 1 }} />
-        {model.periods.length > 0 && <Typography variant="caption" color="text.secondary">Jump to:</Typography>}
-        {model.periods.map(item => (
-          <Chip key={item.start} size="small" label={item.label} clickable color={period === item ? "primary" : "default"}
-            variant={period === item ? "filled" : "outlined"} onClick={() => seek(item.start)} />
-        ))}
-      </Stack>
+    <Stack spacing={1.5} {...dropProps}
+      sx={{ flex: 1, minHeight: 0, outline: dragging ? "2px dashed" : "none", outlineColor: "primary.main", borderRadius: 2 }}>
       {loading && <LinearProgress />}
       {error && <Alert severity={error.startsWith("The end of this log") ? "warning" : "error"} onClose={() => setError(null)}>{error}</Alert>}
       {noPowerLib && <Alert severity="info">No PowerLib data found in this log ({model.signalCount} signals). The viewer looks for PowerLib/Subsystems/&lt;name&gt;/Data/&lt;key&gt; signals or /PowerLib/Data frames.</Alert>}
-      <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
-        <Stack direction="row" sx={{ alignItems: "center", gap: 1, flexWrap: "wrap", mb: 0.5 }}>
-          <Tooltip title="Play or pause (Space)">
-            <IconButton size="small" color="primary" onClick={() => {
-              if (!playing && time >= duration) setTime(0);
-              setPlaying(current => !current);
-            }} aria-label={playing ? "Pause" : "Play"}>
-              {playing ? <PauseIcon /> : <PlayArrowIcon />}
-            </IconButton>
-          </Tooltip>
-          <Button size="small" variant="outlined" sx={{ minWidth: 48 }} onClick={() => setSpeed(current => speeds[(speeds.indexOf(current) + 1) % speeds.length])}>
-            {speed}x
-          </Button>
-          <Typography sx={{ fontWeight: 700, minWidth: 150, fontVariantNumeric: "tabular-nums" }}>
-            {formatClock(time)}{period ? ` · ${period.label}` : " · disabled"}
-          </Typography>
-          {canPercent !== undefined && Number.isFinite(canPercent) && (
-            <Typography variant="caption" color="text.secondary">CAN {canPercent.toFixed(0)}%</Typography>
-          )}
-          <Box sx={{ flex: 1 }} />
-          <Typography variant="caption" color="text.secondary">{model.markers.length ? "Problems:" : "No problems flagged"}</Typography>
-          <Stack direction="row" sx={{ gap: 0.75, overflowX: "auto", maxWidth: "60%" }}>
-            {model.markers.map(marker => {
-              const Icon = markerIcons[marker.kind];
-              return (
-                <Chip key={`${marker.kind}-${marker.time}-${marker.mechanismId ?? ""}`} size="small" variant="outlined" clickable
-                  icon={<Icon sx={{ color: `${markerColors[marker.kind]} !important` }} />} label={`${marker.label} · ${formatClock(marker.time)}`}
-                  onClick={() => {
-                    if (marker.mechanismId && !mechanismIds.includes(marker.mechanismId)) selectMechanisms([...mechanismIds, marker.mechanismId]);
-                    seek(marker.time - 1);
-                  }} />
-              );
-            })}
-          </Stack>
-        </Stack>
-        <TimelineBar periods={model.periods} markers={model.markers} duration={duration} time={time} onSeek={seek} />
-        <Slider size="small" min={0} max={Math.max(duration, 0.01)} step={0.02} value={time} onChange={(_, value) => seek(value as number)}
-          aria-label="Log time" sx={{ mt: 0.5, py: 1 }} />
-        <Typography variant="caption" color="text.secondary">Space plays and pauses. Arrow keys step 1 s (Shift for 5 s). Click the timeline or state strip to jump.</Typography>
-      </Paper>
-
-      <Box sx={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 1.5, alignItems: "start" }}>
-        <MechanismGraphs mechanisms={model.mechanisms} selected={selected} onSelect={selectMechanisms} views={views} onView={setView} time={time} />
-        <Stack spacing={1.5} sx={{ minWidth: 0 }}>
-          <FieldView pose={model.pose} time={time} field={field} />
-          <PowerWidget allGroups={model.powerGroups} selected={selected} battery={model.battery} motorCount={model.motors.length} time={time} onAssign={() => setAssigningMotors(true)} />
-        </Stack>
-      </Box>
+      <LogsLayout
+        graphs={<SubsystemGraphs subsystems={model.mechanisms} selected={selected} onSelect={selectMechanisms} views={views} onView={setView} time={time}
+          colorOf={id => (model.powerGroups.some(group => group.id === id) ? groupColor(id, model.powerGroups) : undefined)} />}
+        field={<FieldView pose={model.pose} periods={model.periods} time={time} field={field} orientation="vertical"
+          sx={model.pose ? { flex: "1 1 0", minHeight: 210 } : { flexShrink: 0 }} />}
+        power={<PowerCard allGroups={model.powerGroups} selected={selected} battery={model.battery} motorCount={model.motors.length} time={time}
+          onAssign={() => setAssigningMotors(true)} graphHeight={180} sx={{ flex: "1 1 0", minHeight: 230 }} />} />
+      <PlayBar time={time} duration={duration} playing={playback.playing} speed={playback.speed} periods={model.periods} state={model.state}
+        matchTime={model.matchTime} fmsAttached={model.fmsAttached}
+        onTogglePlay={playback.togglePlay} onCycleSpeed={playback.cycleSpeed} onSeek={playback.seek} />
+      <LogStatusBar name={loaded.name} converted={loaded.converted} loading={loading} onOpen={openLog}
+        details={logDetails(duration, model.buses, model.signalCount, model.motors.length, model.usedFrames)} canPercent={canPercentAt(model.can, time)} />
       <MotorAssignDialog open={assigningMotors} onClose={() => setAssigningMotors(false)} motors={model.motors} mechanisms={model.mechanisms}
         overrides={assignments} onAssign={assignMotor} onReset={clearAssignments} />
-      <Box sx={{ display: "grid", gridTemplateColumns: "minmax(0, 3fr) minmax(0, 1fr)", gap: 1.5, alignItems: "start" }}>
-        <MechanismStatus mechanisms={selected} time={time} />
-        <NumberTile title="Battery" value={battery} units="V" warn={battery !== undefined && battery < 8} />
-      </Box>
-      <StateStrip state={model.state} duration={duration} time={time} onSeek={seek} />
     </Stack>
   );
 }

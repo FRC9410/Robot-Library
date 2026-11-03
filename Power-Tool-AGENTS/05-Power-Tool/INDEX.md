@@ -10,5 +10,6 @@ tags: [index]
 - [NetworkTables Layer](NetworkTables%20Layer.md): connecting, subscribing, frame decoding.
 - [Tabs and Features](Tabs%20and%20Features.md): each tab and how to add one.
 - [Custom Dashboard](Custom%20Dashboard.md): the team-owned Drive dashboard folder.
+- [React Code Rules](React%20Code%20Rules.md): one component per file, composition, reuse; required for every React change.
 
 Up: [Home](../README.md)

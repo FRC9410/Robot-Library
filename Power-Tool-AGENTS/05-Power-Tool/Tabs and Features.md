@@ -87,26 +87,30 @@ Replays a robot log file. Works offline; it doesn't use NetworkTables.
     - setpoint misses: off by more than `toleranceFor` (5% of setpoint or 2% of range) for 0.5 s, at least 1 s after the setpoint changed, while enabled.
   - `stepStats`: overshoot and settle time (0.5 s inside tolerance) for the step in effect.
   - `busiestMechanism`: the mechanism the tab opens on. Prefers the one with the most setpoint changes; with no setpoints, the one whose value moved most often. Motor-only groups come last.
-- `LogsPanel.tsx` + `LogWidgets.tsx`: fixed layout, top to bottom.
-  - Timeline, directly under the file name so it's always reachable: play/pause, 0.5–4x speed, problem-marker chips, the period/marker bar and a slider. Details below.
-  - Then `MechanismGraphs` and the field with a 3 s trail.
-    - Graphs draw at most ~900 points per line. When a window has more samples, `seriesPath` keeps every Nth sample of the whole log (N fixed by window length), so the same samples stay drawn while the window slides. Choosing them relative to the window made lines shimmer during playback. The field uses the Drive tab's field size and flip settings.
-    - A multi-select dropdown picks mechanisms. Each one gets its own value-vs-setpoint graph, stacked on the same 20 s window with one cursor, so different units never share an axis.
-    - Graphs get shorter as more are added (200 / 120 / 88 px).
-    - The selection is saved in localStorage (`powerlib.logs.mechanisms.v1`), and the next log opens with the same mechanisms if it has them; otherwise `busiestMechanism`.
-    - Each graph has a view selector: value vs setpoint, supply current, power, applied voltage, stator current or motor temp (only the readings it has). Saved per mechanism in `powerlib.logs.graphViews.v1`.
-    - **Motor readings are noisy** (logged at ~100 Hz, jumping between samples), so motor views draw each fixed group of samples as its mean (≥ 0.05 s per point, `seriesPath`'s `averageSeconds`). Their readouts use `averageAt` (mean of the last 0.5 s). Value views stay raw.
-    - Right column, under the field: `PowerWidget` (`PowerWidgets.tsx`) stacks the power of **only the mechanisms picked in the Mechanisms dropdown** (power groups plus any picked single motors) over the same window.
-      - It shows "Picked N W of M W robot total" and the battery voltage. With no picked mechanism that has motors, it says so and gives the robot total.
-      - Each group's color comes from its place in the full `powerGroups` list, so it doesn't change with the selection.
-      - To keep it steady during playback:
-      - it stacks `slotMeans` (0.1 s slots at fixed positions in the log, so a sliding window doesn't re-sample);
-      - its y-axis is one rounded scale from the picked groups' busiest 0.1 s over the whole log (it changes only when the picks change);
-      - its legend keeps the groups' fixed order (average power over the log, unassigned last);
-      - readouts are 0.5 s averages. The Battery tile uses the same average, so the two agree. Its **Assign motors** button opens `MotorAssignDialog`, which lists every motor with bus, peak current and how it was grouped (e.g. "Shooter · matched by motion 0.99"), for fixing mistakes. Choices are saved in `powerlib.logs.motorGroups.v1`; "Automatic" goes back to the automatic grouping.
-  - Middle: `MechanismStatus` table, one row per selected mechanism (at setpoint, estimated when not logged; value; setpoint; error; overshoot; settle time; current; power), plus battery.
-  - Below: `Drive/ActualState` strip.
-  - Timeline: play/pause, 0.5–4x speed, match-period chips, problem-marker chips (clicking one jumps there and adds its mechanism to the selection), click-to-seek, slider. Space plays/pauses; arrows step 1 s (Shift 5 s).
+- `LogsPanel.tsx` puts the pieces in `components/` together (one component per file, see [React Code Rules](React%20Code%20Rules.md)). Hooks: `useLogFile` (open/drop/convert), `useLogPlayback` (clock, speed, keys). Helpers: `logUtils.ts` (colors, `groupColor`, `pickedGroups`, formatting, `seriesPath`, saved choices). Each widget stands on its own (data in through props, sizes to the space it's given), so layouts can be rearranged in `LogsPanel` alone.
+  - **The tab fits the window and never scrolls the page** (`App.tsx` gives the Robot and Logs tabs a fixed height). Widgets that run long scroll on their own inside `ScrollArea` (thin dark scrollbar). Checked at 1280x720 and 1920x1080.
+  - **Layout** (`LogsLayout`, only arranges the widgets it's given): three columns: graphs; the field standing up with the driver station side at the bottom (`orientation="vertical"`); the Power card at a fixed 400 px (its current graph is 180 px). The team chose this layout on 2026-11-02; the 2-column layout and its switch were removed.
+  - Left: `SubsystemGraphs`, full height. The **Subsystems** dropdown (`SubsystemPicker`) picks subsystems; each gets a `SubsystemPlot`, stacked on the same 20 s window with one cursor, so different units never share an axis.
+    - Each graph is a tile (`SubsystemPlot` = `SubsystemPlotHeader` + `GraphViewSelector` + `PlotChart`). Tiles go two across when the graphs card is at least 500 px wide (container query) and scroll when they don't fit. Every chart is a fixed height: 90 px, or 170 px when the window is at least 1000 px tall. Checked at 1280x720 and 1920x1080 (the mentor's targets).
+    - Tiles are outlined cards with a stripe down the left edge in the subsystem's Power card color (`colorOf`); `colorLines` (off) draws the line in that color too.
+    - `PlotChart` is generic: a line shaded underneath (`areaPath` in `logUtils.ts`), an optional dashed setpoint, faint dashed grid, the axis ends and −10 s / now / +10 s under it. The header shows the value now in large type, the setpoint after an arrow (or "no setpoint"), and the hottest motor's temperature.
+    - Current, Voltage and Stator: with two or more motors, each motor is a thin colored line (hover for its name) and the bold line is their **average** (`motorAverage` in `logModel.ts`, `motorSignalFor` maps the view to SupplyCurrent / MotorVoltage / StatorCurrent); the header reads e.g. "11.3 A avg". Its axis spans each motor's 0.1 s means plus zero, so real peaks fit but single-sample noise doesn't stretch it; motor lines are smoothed over 0.1 s and faint so the average reads on top. A key under the graph (`LineKey`) lists Avg and each motor by CAN ID (`#21`) in the line colors (`motorLineColor`); clicking an entry makes that line bold and shaded, fades the rest, and the header shows its value (e.g. "11.3 A #21"). The choice is per tile and not saved. Charts shade between the line and zero. With one motor it's just that motor. The Power card still sums current per subsystem.
+    - Graphs draw at most ~900 points per line. When a window has more samples, `seriesPath` keeps every Nth sample of the whole log (N fixed by window length), so the same samples stay drawn while the window slides. Choosing them relative to the window made lines shimmer during playback.
+    - The setpoint is a purple dashed line. If the log has no setpoint for that subsystem, the legend says "Setpoint not logged".
+    - The selection is saved in localStorage (`powerlib.logs.mechanisms.v1`), and the next log opens with the same subsystems if it has them; otherwise `busiestMechanism`.
+    - Above each graph, `GraphViewSelector` is a segmented row: Position/Velocity (vs setpoint), Current, Voltage, Stator (only the readings it has). Power has its own widget; the hottest motor's temperature is a number next to the subsystem name (red at 70 °C). Saved per subsystem in `powerlib.logs.graphViews.v1`.
+    - **Motor readings are noisy** (logged at ~100 Hz, jumping between samples), so motor views draw each fixed group of samples as its mean (at least 0.05 s per point, `seriesPath`'s `averageSeconds`). Their readouts use `averageAt` (mean of the last 0.5 s). Value views stay raw.
+  - `FieldView` (uses the Drive tab's field size and flip) has a **Position | Heat map** toggle. It's built from `FieldCanvas` (outline, zones, orientation, flip; layers as children in field coordinates), `RobotPose` (robot plus 3 s trail) and `FieldHeatmap` (cells from `poseHeatmap` in `logModel.ts`: enabled pose samples per 0.3 m cell, square-root shaded). The position readout is under the field. It shares the column's height with the Power card and never goes below 210 px.
+  - Right, bottom: `PowerCard`, one card for the subsystems picked in the Subsystems dropdown (power groups plus any picked single motors, `pickedGroups` in `logUtils.ts`):
+    - Header: the whole robot's supply current and the battery voltage (0.5 s averages), and **Assign motors**.
+    - `CurrentGraph`: their supply current stacked in **amps** over the graphs' window. It stacks `slotMeans` (0.1 s slots at fixed positions in the log) and uses one rounded y-scale from the busiest 0.1 s over the whole log, so it doesn't shimmer or rescale while it plays.
+    - A divider, then `PowerTable`: Subsystem, Current, Temp (hottest motor, red at 70 °C), one `PowerTableRow` each. Only one subsystem's motors (`PowerMotorRow`: current and temp) can be open at a time, so the table stays short; it scrolls inside the card if it must.
+    - Each group's color (`groupColor`) comes from its place in the full `powerGroups` list, so it doesn't change with the selection; the graph and the table use the same colors.
+    - **Assign motors** opens `MotorAssignDialog`, which lists every motor with bus, peak current and how it was grouped (e.g. "Shooter · matched by motion 0.99"), for fixing mistakes. Choices are saved in `powerlib.logs.motorGroups.v1`; "Automatic" goes back to the automatic grouping.
+    - No setpoint table: the setpoint is in the graphs, and overshoot/settle time were dropped on the mentor's advice.
+  - Bottom: `PlayBar` on one row: play/pause (Space), 0.5-4x speed, the time with its match period, the **match clock** ("1:45 left", from `Drive/MatchTimeSeconds` via `matchClockAt`; hidden when the log has none or it reads negative), an **FMS** tag while `RobotStatus/FmsAttached` (or Owlet's `DS:IsFMSAttached`) is true, the robot's current state (`Drive/ActualState`), the `Timeline` (periods on top, state underneath; click or drag to seek; arrows step 1 s, Shift 5 s) and `PhaseToggle`, a segmented Auto | Teleop switch that highlights the period being played and jumps to a period's start.
+  - Very bottom: `LogStatusBar`, edge to edge: Open log, the file name, "Converted from .hoot", length, buses, signal and motor counts, and CAN % at the current time (`canPercentAt`).
+  - Problem markers are still found (`findMarkers`) but not shown for now.
 - The panel stays mounted (hidden) when you switch tabs, so the open log is kept. Playback pauses while hidden.
 - Ideas and plans: [Log Viewer Project](../11-Ideas/Log%20Viewer%20Project.md).
 
@@ -126,7 +130,7 @@ Types and Java literal formatting only. Constants are edited in the Robot tab dr
 ## Adding a tab
 1. Add the value to `AppView` in `src/types/app.ts`.
 2. Add a `<Tab>` and a panel branch in `App.tsx`.
-3. Put the code in `src/features/<name>/`.
+3. Put the code in `src/features/<name>/`, laid out as in [React Code Rules](React%20Code%20Rules.md).
 4. If it needs disk access, add an IPC handler in `electron/main.ts`, expose it in `preload.cts`, and type it in `src/types/electron.d.ts`.
 
-Related: [Power Tool Architecture](Power%20Tool%20Architecture.md), [NetworkTables Layer](NetworkTables%20Layer.md), [Custom Dashboard](Custom%20Dashboard.md), [Log Viewer Project](../11-Ideas/Log%20Viewer%20Project.md)
+Related: [Power Tool Architecture](Power%20Tool%20Architecture.md), [NetworkTables Layer](NetworkTables%20Layer.md), [Custom Dashboard](Custom%20Dashboard.md), [React Code Rules](React%20Code%20Rules.md), [Log Viewer Project](../11-Ideas/Log%20Viewer%20Project.md)

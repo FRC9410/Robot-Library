@@ -7,7 +7,7 @@ status: decided
 
 # Problem Markers
 
-**Status:** Decided. Partly built in v1 (2026-10-31): brownouts, CAN spikes and setpoint misses. Vision rejects and `Robot/Control/Action` events aren't built.
+**Status:** Decided. Partly built in v1 (2026-10-31): brownouts, CAN spikes and setpoint misses. Vision rejects and `Robot/Control/Action` events aren't built. Hidden from the Logs tab on 2026-11-02 to save space; `findMarkers` still runs.
 
 ## Idea
 Flag likely problems on the timeline so you can jump to them:

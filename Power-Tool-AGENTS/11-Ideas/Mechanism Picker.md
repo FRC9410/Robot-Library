@@ -7,7 +7,7 @@ status: decided
 
 # Mechanism Picker
 
-**Status:** Decided. Built in v1 (2026-10-31) as the default (and only) layout. Multi-select added the same day.
+**Status:** Decided. Built in v1 (2026-10-31) as the default (and only) layout. Multi-select added the same day. On 2026-11-02 it became the Subsystems dropdown, and the tab now fits the window (graphs scroll inside their widget).
 
 ## Idea
 Open a log and everything is already in place, with no dragging. The layout stays fixed, and the

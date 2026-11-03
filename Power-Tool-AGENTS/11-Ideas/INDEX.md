@@ -35,5 +35,6 @@ frontmatter has a `status`: `proposed` (talked about, not chosen), `decided` (we
 - [Live Mode with Rewind](Live%20Mode%20with%20Rewind.md): record NT while connected and scrub back.
 - [One Widget System Everywhere](One%20Widget%20System%20Everywhere.md): the Drive tab built from the same widgets.
 - [Match Summary](Match%20Summary.md): a card per match, comparable across an event.
+- [Vertical Field Layout](Vertical%20Field%20Layout.md): field standing up on the right, power graph and table in one card on the left.
 
 Up: [Home](../README.md)
