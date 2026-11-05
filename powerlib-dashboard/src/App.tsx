@@ -640,7 +640,6 @@ function AppContent() {
               value="robot"
               sx={{ minHeight: 44 }}
             />
-            <Tab icon={<RouteIcon />} iconPosition="start" label="Autos" value="autos" sx={{ minHeight: 44 }} />
             <Tab
               icon={<ConstructionIcon />}
               iconPosition="start"
@@ -664,6 +663,8 @@ function AppContent() {
               value="networktables"
               sx={{ minHeight: 44 }}
             />
+            {/* Autos is always the last tab; add new tabs above this line. */}
+            <Tab icon={<RouteIcon />} iconPosition="start" label="Autos" value="autos" sx={{ minHeight: 44 }} />
           </Tabs>
         </Container>
       </AppBar>
