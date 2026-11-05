@@ -3,20 +3,22 @@
 Team 9410's robot library: PowerLib (Java, `templates/powerlib/`), the installer and generator
 scripts, and Power Tool (Electron + React + MUI, `powerlib-dashboard/`).
 
-The docs for people and agents are in `Power-Tool-AGENTS/` (an Obsidian vault). Start at
-`Power-Tool-AGENTS/README.md` to find the note for the area you're changing.
+The docs for people and agents are in an Obsidian vault kept **outside this repo**, next to it
+at `../Power-Tool-AGENTS/` (not every checkout has it). If it's there, start at
+`../Power-Tool-AGENTS/README.md` to find the note for the area you're changing. If it isn't,
+skip the vault steps below; the React rules summary in this file still applies.
 
 ## Before you change code
 
-- Follow `Power-Tool-AGENTS/Maintaining This Vault.md`: add a CHANGELOG entry for code changes
-  and update the note that owns the area you touched.
-- Run the checks listed in `Power-Tool-AGENTS/07-Testing/Change to Tests Map.md`.
+- Follow `../Power-Tool-AGENTS/Maintaining This Vault.md`: add a CHANGELOG entry for code
+  changes and update the note that owns the area you touched.
+- Run the checks listed in `../Power-Tool-AGENTS/07-Testing/Change to Tests Map.md`.
 
 ## React/TypeScript rules (required)
 
 All React/TypeScript in `powerlib-dashboard/` must follow
-`Power-Tool-AGENTS/05-Power-Tool/React Code Rules.md`. Read it before writing or changing a
-component. In short:
+`../Power-Tool-AGENTS/05-Power-Tool/React Code Rules.md` (when the vault is present). Read it
+before writing or changing a component. In short:
 
 - **One component per file.** The file name matches the component, with a named export and a
   `<Component>Props` type. Small private components (rows, cells) get their own file too.
