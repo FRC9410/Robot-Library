@@ -70,7 +70,7 @@ Existing constants appear directly in the same side panel, alongside the group's
 
 ## Auto Builder
 
-The Autos tab builds routines for the existing `frc.powerlib.auto.Auto` API without changing it. The left column lists the project's autos with undo, redo and a save status. The center shows the selected auto's settings, the field (or the generated code) and the replay bar. The right column lists the steps in run order, with the selected step's settings below; with no step selected it shows totals and problems. The field prompts the next action for a new auto, and setting explanations sit behind info icons.
+The Autos tab builds routines for the existing `frc.powerlib.auto.Auto` API without changing it. The left column lists the project's autos and the named points they share. The center shows the selected auto: its name (click to rename), alliance, symmetry and default star, with the save status, undo, redo and reload at the right; then the field (or the generated code) and the replay bar. The right column lists the steps in run order, with the selected step's settings below (Esc or the × closes them). Dragging the handles between the columns resizes them; on a window narrower than 1500 px they start narrower so the field gets the room. The field prompts the next action for a new auto, and setting explanations sit behind info icons.
 
 The field draws each drive point as a robot outline with its front bar and swerve modules, whose wheels point along the direction of travel. The colored line is the replay's ideal route (rounded where loose tolerances let legs blend), with a dot every 0.1 s so spacing shows speed; faint dashes show the straight line to each target.
 
@@ -106,7 +106,9 @@ While Power Tool is connected, it records each enabled autonomous period, in sim
 
 Before a match, while the robot is disabled, the Drive tab lists checks under the auto chooser: an auto is selected, the alliance is known and fits the auto (an auto for any alliance must start on the robot's side), the robot is within 15 cm and 5° of the selected Auto Builder auto's point 1, and `GeneratedAutos.java` matches the Auto Builder (otherwise use File → Update Code and deploy). The field outlines point 1 in green so the robot can be lined up on it. Hand-written autos get the alliance check only.
 
-Autos save to `power-tool/generated/powerlib-autos.json` as you edit. File → Update Code, which also regenerates subsystem code, writes `src/main/java/frc/robot/autos/GeneratedAutos.java` and, if needed, adds `GeneratedAutos.register(autoBuilder, robot);` to `RobotAutos.register`. Hand-written autos in `RobotAutos.java` are untouched. Generated drive steps need `DriveToPose.java` and PowerLib's `DriveConstraints.java`; if the project is missing them, install the PowerLib templates. Auto names must not match a string in `RobotAutos.java`, because `AutoBuilder` stops robot code at startup on duplicate names. Run `npm run check:autos` to check validation, code generation, symmetry, subpoints, turning, named points, branches, replay, speed checks, tag visibility, recorded runs, pre-match checks and file updates.
+Autos save to `power-tool/generated/powerlib-autos.json` as you edit. File → Update Code, which also regenerates subsystem code, writes `src/main/java/frc/robot/autos/GeneratedAutos.java` and, if needed, adds `GeneratedAutos.register(autoBuilder, robot);` to `RobotAutos.register`. Hand-written autos in `RobotAutos.java` are untouched. Generated drive steps need `DriveToPose.java` and PowerLib's `DriveConstraints.java`; if the project is missing them, install the PowerLib templates. Auto names must not match a string in `RobotAutos.java`, because `AutoBuilder` stops robot code at startup on duplicate names. Run `npm run check:autos` to check validation, code generation, symmetry, subpoints, turning, named points, branches, replay, speed checks, tag visibility, recorded runs, pre-match checks, file updates, editing, keyboard shortcuts, column sizes and field dragging.
+
+The code is in `src/features/autos/`. `AutoBuilderPanel.tsx` only lays out the columns; `useAutoBuilder.ts` puts the state together from one-job hooks (`useAutoFiles`, `useAutoSave`, `useAutoSelection`, `useReplayPlayback`, `useAutoShortcuts` and others). Each component is in its own file in `components/`. The data logic is in plain `.ts` files that `check:autos` tests: `autoModel.ts` (the auto document and Java generation), `autoReplay.ts`, `autoLimits.ts`, `autoVision.ts`, `autoEdits.ts` (edits to autos and steps), `autoRoute.ts`, `autoKeys.ts` (what each key does), `fieldDrag.ts` and `fieldGeometry.ts` (dragging and drawing on the field).
 
 The `allowScripts` entry in `package.json` approves the install scripts of Electron, esbuild and electron-winstaller, which npm 11 asks about and which `npm ci` needs to download Electron.
 
@@ -115,6 +117,11 @@ The `allowScripts` entry in `package.json` approves the install scripts of Elect
 ```text
 npm run dev      Start Vite and Electron for local development.
 npm run build    Type-check and build the renderer and Electron main process.
+npm run check:components
+                 Check the React rules: one component per file, named after it, with a
+                 named export and a <Component>Props type; one hook per use<Name>.ts file;
+                 component files under 250 lines. Older files that don't follow them yet
+                 are listed in scripts/component-rules-check.mjs.
 npm run package:app
                  Build a local Windows app under ../PowerTool-local.
 npm run package:publish
