@@ -19,6 +19,12 @@ const prematch = await load("../src/features/drive/preMatch.ts");
 const speed = await load("../src/features/autos/autoLimits.ts");
 const sight = await load("../src/features/autos/autoVision.ts");
 const obstacles = await load("../src/features/field/fieldObstacles.ts");
+const edits = await load("../src/features/autos/autoEdits.ts");
+const routing = await load("../src/features/autos/autoRoute.ts");
+const keys = await load("../src/features/autos/autoKeys.ts");
+const columns = await load("../src/features/autos/autoColumns.ts");
+const dragging = await load("../src/features/autos/fieldDrag.ts");
+const rows = await load("../src/features/autos/stepListRows.ts");
 const drawing = await load("../src/features/field/rebuiltDrawing.ts");
 
 const field = { length: 16.54, width: 8.07 };
@@ -671,5 +677,101 @@ assert.deepEqual(snap.snapHeading(178, [], 7), { heading: 180, label: "180°" })
 assert.deepEqual(snap.snapHeading(30, [], 7), { heading: 30, label: null }, "No snap far from every target");
 assert.deepEqual(snap.snapHeading(32, [{ value: 33.7, label: "along the path" }], 7), { heading: 33.7, label: "along the path" });
 assert.deepEqual(snap.snapHeading(45, [{ value: 45, label: "same as point 2" }], 7), { heading: 45, label: "same as point 2" }, "Named headings win ties");
+
+// Editing helpers behind the Auto Builder's hooks.
+{
+  const leg = (id, x, y, patch = {}) => drive({ id, x, y, ...patch });
+  const branchStep = { id: "b", type: "branch", condition: { kind: "timeLeft", seconds: 5 },
+    then: [leg("t1", 5, 5, { subpoints: [{ id: "sp", progress: 0.5, state: "SHOOT" }] })], otherwise: [leg("o1", 6, 1)] };
+  const copy = edits.cloneStep(branchStep);
+  assert.notEqual(copy.id, branchStep.id, "A cloned branch gets a new id");
+  assert.notEqual(copy.then[0].id, "t1", "Steps inside a cloned branch get new ids");
+  assert.notEqual(copy.then[0].subpoints[0].id, "sp", "Subpoints get new ids too");
+  assert.equal(copy.then[0].x, 5, "A clone keeps its pose");
+
+  assert.equal(edits.nextAutoName([]), "Auto 1");
+  assert.equal(edits.nextAutoName([{ name: "Auto 2" }, { name: "Left" }]), "Auto 3");
+  assert.equal(edits.nextAutoName([{ name: "Auto 2" }]), "Auto 3", "Skips names already taken");
+
+  const doc = { version: 1, periodSeconds: 20, points: [], cameras: [], autos: [{ id: "a", isDefault: true }, { id: "b", isDefault: false }] };
+  assert.deepEqual(edits.setDefaultIn(doc, "b", true).autos.map(auto => auto.isDefault), [false, true], "One default at a time");
+  assert.deepEqual(edits.setDefaultIn(doc, "a", false).autos.map(auto => auto.isDefault), [false, false]);
+  const { copy: dup, branchPairs } = edits.duplicateAuto({ id: "a", name: "Left", isDefault: true, steps: [branchStep] });
+  assert.equal(dup.name, "Left copy");
+  assert.equal(dup.isDefault, false, "A duplicate is never the default");
+  assert.deepEqual(branchPairs.map(pair => pair[0]), ["b"], "Branches pair with the original's in order");
+  assert.deepEqual(edits.insertAutoAfter(doc, "a", { id: "c" }).autos.map(auto => auto.id), ["a", "c", "b"], "Duplicates sit after the original");
+
+  const steps = [leg("1", 1, 1), { id: "r", type: "requestState", state: "SHOOT" }, branchStep, leg("2", 9, 4)];
+  assert.equal(routing.driveBefore(steps, {}, { after: "r" }).id, "1", "A new step after a request starts from the drive before it");
+  assert.equal(routing.driveBefore(steps, {}, { after: "b" }).id, "t1", "After a branch, the robot comes from the side the field shows");
+  assert.equal(routing.driveBefore(steps, { b: "otherwise" }, { after: "b" }).id, "o1");
+  assert.equal(routing.driveBefore(steps, {}, { into: { branchId: "b", arm: "otherwise" } }).id, "o1", "Adding into a side starts from its last drive");
+  assert.equal(routing.driveBefore(steps, {}, { after: null }).id, "2", "With nothing selected, the last drive");
+  const added = edits.newDriveStep(steps, {}, { after: "1" }, project, { x: 4, y: 2 });
+  assert.deepEqual([added.x, added.y, added.maxVelocity], [4, 2, 3], "A new leg takes the click position and the previous leg's limits");
+  assert.deepEqual(routing.insertTargetAfter(steps, ["2", "1"]), { after: "2" }, "New steps go after the selected step that runs last");
+  const numbering = routing.stepNumbering(steps);
+  assert.equal(numbering.stepNumbers.get("o1"), 5, "Steps are numbered over both sides of a branch");
+  assert.equal(numbering.driveNumbers.get("2"), 4, "So are drive points");
+
+  assert.equal(edits.alignAnchor(steps, ["1", "2"], "2").id, "2", "Points line up with the primary step");
+  assert.deepEqual(edits.alignIn(steps, ["1", "2"], steps[3], "y").filter(step => ["1", "2"].includes(step.id)).map(step => step.y), [4, 4]);
+  assert.deepEqual(edits.nudgeChanges(steps, ["1"], -2, 0.5, 0, field), [{ stepId: "1", x: 0, y: 1.5 }], "Nudges stay on the field");
+  assert.deepEqual(edits.nudgeChanges(steps, ["1"], 0, 0, 15, field), [{ stepId: "1", heading: 15 }]);
+  const flipped = edits.pointPatches([{ stepId: "1", x: 2 }], steps, { flipX: true, flipY: false }, field).get("1");
+  assert.ok(Math.abs(flipped.x - (field.length - 2)) < 1e-9 && flipped.y === 1, "Edits on the mirrored copy flip back onto the original");
+  assert.deepEqual(edits.turnWithMode(leg("x", 1, 1, { heading: 90 }), "face"), { mode: "face", x: 1, y: 3, pointId: null }, "Face point starts 2 m ahead");
+  assert.deepEqual(edits.conditionWithKind({ ...branchStep, condition: { kind: "state", state: "SHOOT", waitSeconds: 2 } }, "check", ["IDLE"], ["hasFuel"]),
+    { kind: "check", method: "hasFuel", waitSeconds: 2 }, "Switching what a branch checks keeps its wait");
+
+  const listRows = rows.stepListRows(steps, { b: "otherwise" });
+  assert.deepEqual(listRows.map(row => row.kind === "arm" ? `${row.arm}${row.offRoute ? "*" : ""}` : row.step.id), ["1", "r", "b", "then*", "t1", "otherwise", "o1", "2"],
+    "The step list shows each branch's sides under it, dimming the side the field isn't showing");
+}
+
+// Keyboard shortcuts.
+{
+  const press = (key, modifiers = {}) => ({ key, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, ...modifiers });
+  const ready = { typing: false, hasAuto: true, hasSteps: true, hasClipboard: true, hasSelection: true, selectionHasDrive: true };
+  assert.deepEqual(keys.keyAction(press("s", { ctrlKey: true }), { ...ready, typing: true }), { kind: "save" }, "Ctrl+S saves even while typing");
+  assert.equal(keys.keyAction(press("z", { ctrlKey: true }), { ...ready, typing: true }), null, "Ctrl+Z in a text field is the field's own undo");
+  assert.deepEqual(keys.keyAction(press("Z", { ctrlKey: true, shiftKey: true }), ready), { kind: "redo" });
+  assert.deepEqual(keys.keyAction(press("3"), ready), { kind: "addStep", type: "waitForState" });
+  assert.equal(keys.keyAction(press("3"), { ...ready, hasAuto: false }), null, "Step keys need an auto");
+  assert.deepEqual(keys.keyAction(press("ArrowLeft", { shiftKey: true }), ready), { kind: "nudge", dx: -0.25, dy: 0 });
+  assert.deepEqual(keys.keyAction(press("ArrowUp", { altKey: true }), ready), { kind: "moveSteps", offset: -1 });
+  assert.equal(keys.keyAction(press("ArrowUp"), { ...ready, selectionHasDrive: false }), null, "Arrows only move drive points");
+  assert.deepEqual(keys.keyAction(press("e"), ready), { kind: "turn", degrees: -15 });
+  assert.equal(keys.keyAction(press("Delete"), { ...ready, hasSelection: false }), null);
+  assert.deepEqual(keys.keyAction(press(" "), { ...ready, hasAuto: false }), { kind: "playPause" });
+  assert.equal(keys.neighborIndex(4, -1, 1), 0, "] with nothing selected picks the first step");
+  assert.equal(keys.neighborIndex(4, -1, -1), 3, "[ with nothing selected picks the last step");
+  assert.equal(keys.neighborIndex(4, 3, 1), 3, "] stops at the end");
+}
+
+// Column layout and dragging on the field.
+{
+  assert.deepEqual(columns.parseColumns(null, 1280), { left: 196, right: 300, leftOpen: true, rightOpen: true }, "Narrow windows start with narrower columns");
+  assert.equal(columns.parseColumns(null, 1920).right, 340);
+  assert.deepEqual(columns.parseColumns('{"left": 300, "right": "wide", "extra": 1}', 1920), { left: 300, right: 340, leftOpen: true, rightOpen: true },
+    "Saved sizes of the wrong type are ignored");
+  assert.equal(columns.draggedColumn(columns.defaultColumns, "right", 90).rightOpen, false, "Dragging a column past the edge closes it");
+  assert.equal(columns.draggedColumn(columns.defaultColumns, "left", 900).left, 420, "Widths are clamped");
+  assert.equal(columns.gridColumns({ left: 200, right: 300, leftOpen: false, rightOpen: true }), "0px 12px minmax(0, 1fr) 12px 300px");
+
+  const legs = [drive({ id: "a", x: 1, y: 1 }), drive({ id: "b", x: 3, y: 1 }), drive({ id: "c", x: 3, y: 3 })];
+  assert.deepEqual(dragging.boxSelection(legs, { x: 0, y: 0 }, { x: 3.5, y: 1.5 }), ["a", "b"]);
+  assert.deepEqual(dragging.moveGroup("b", ["a"], false), { select: "replace", group: ["b"] }, "Pressing an unselected robot selects just it");
+  assert.deepEqual(dragging.moveGroup("a", ["a", "c"], false), { select: null, group: ["a", "c"] }, "Pressing a selected robot drags the selection");
+  assert.deepEqual(dragging.moveGroup("b", ["a"], true), { select: "toggle", group: ["a", "b"] }, "Shift adds to the selection");
+  assert.deepEqual(dragging.aimHeading(legs, 1, { x: 4, y: 2.1 }, true, true), { heading: 45, label: "45°" }, "Shift aims in 15° steps");
+  assert.equal(dragging.aimHeading(legs, 1, { x: 3.02, y: 3 }, false, true).label, "toward point 3", "Aiming snaps toward the next point");
+  const move = { kind: "move", stepId: "b", ids: ["b", "c"], grab: { x: 3, y: 1 }, origins: new Map([["b", { x: 3, y: 1 }], ["c", { x: 3, y: 3 }]]),
+    clientX: 0, clientY: 0, moved: true, reselect: false };
+  const moved = dragging.dragMoves(legs, move, { x: 3.5, y: 1.03 }, true, 0.1, field);
+  assert.deepEqual(moved.moves, [{ stepId: "b", x: 3.5, y: 1 }, { stepId: "c", x: 3.5, y: 3 }], "The selection moves together; the grabbed point snaps to point 1's Y");
+  assert.equal(moved.guides[0].label, "Y of point 1");
+}
 
 console.log("Auto builder checks passed.");

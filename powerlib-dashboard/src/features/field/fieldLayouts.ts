@@ -1,4 +1,3 @@
-import { useSyncExternalStore } from "react";
 import rebuiltImage from "./wpilib/2026-rebuilt.png";
 import reefscapeImage from "./wpilib/2025-reefscape.png";
 import rebuiltWelded from "./wpilib/2026-rebuilt-welded.json";
@@ -86,12 +85,8 @@ export function setFieldLayoutId(id: string) {
   listeners.forEach(listener => listener());
 }
 
-function subscribe(listener: () => void) {
+/** Calls `listener` when the View → Field Layout choice changes; returns the unsubscribe. */
+export function subscribeFieldLayout(listener: () => void) {
   listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-export function useFieldLayout(): FieldLayout | null {
-  const id = useSyncExternalStore(subscribe, getFieldLayoutId);
-  return fieldLayouts.find(candidate => candidate.id === id) ?? null;
+  return () => { listeners.delete(listener); };
 }

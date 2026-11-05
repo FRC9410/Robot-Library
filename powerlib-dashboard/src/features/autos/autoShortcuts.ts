@@ -1,7 +1,5 @@
-import { Dialog, DialogContent, DialogTitle, IconButton, Typography } from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
-
-/** Keyboard shortcuts in the Auto Builder; editing shortcuts are ignored while typing in a field. */
+// Keyboard shortcuts in the Auto Builder, for the help dialog; autoKeys.ts handles them.
+// Editing shortcuts are ignored while typing in a field.
 export const autoShortcuts: { group: string; keys: string[]; action: string }[] = [
   { group: "Editing", keys: ["Ctrl+Z"], action: "Undo" },
   { group: "Editing", keys: ["Ctrl+Y", "Ctrl+Shift+Z"], action: "Redo" },
@@ -24,23 +22,3 @@ export const autoShortcuts: { group: string; keys: string[]; action: string }[] 
   { group: "Replay", keys: ["Space"], action: "Play or pause the replay" },
   { group: "Help", keys: ["?"], action: "Show these shortcuts" }
 ];
-
-export function ShortcutsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const groups = [...new Set(autoShortcuts.map(shortcut => shortcut.group))];
-  return <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-    <DialogTitle sx={{ display: "flex", alignItems: "center" }}>
-      <span style={{ flex: 1 }}>Auto Builder shortcuts</span>
-      <IconButton aria-label="Close" onClick={onClose}><CloseIcon /></IconButton>
-    </DialogTitle>
-    <DialogContent>
-      {groups.map(group => <section key={group} className="ab-shortcut-group">
-        <Typography variant="overline" color="text.secondary">{group}</Typography>
-        {autoShortcuts.filter(shortcut => shortcut.group === group).map(shortcut => <div key={shortcut.action} className="ab-shortcut">
-          <span className="ab-shortcut-keys">{shortcut.keys.map(key => <kbd key={key}>{key}</kbd>)}</span>
-          <Typography variant="body2">{shortcut.action}</Typography>
-        </div>)}
-      </section>)}
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>Right-click an auto in the list to duplicate, flip or delete it.</Typography>
-    </DialogContent>
-  </Dialog>;
-}

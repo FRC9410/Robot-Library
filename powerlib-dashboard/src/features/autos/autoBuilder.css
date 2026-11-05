@@ -74,11 +74,42 @@
   border-bottom: 1px solid rgba(250, 204, 21, 0.12);
 }
 
+/* A toolbar under another header, such as the field's. */
+.ab-pane-header.dense {
+  flex-wrap: wrap;
+  min-height: 40px;
+  padding: 4px 8px;
+}
+
+.ab-pane-count {
+  color: #71717a;
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
 .ab-pane-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   padding: 12px;
+}
+
+.ab-pane-body.flush { padding: 0; }
+
+/* With a step selected, the list shares the column with the inspector. */
+.ab-pane-body.shrink {
+  flex: 0 1 auto;
+  max-height: 45%;
+}
+
+/* What to do when a list is empty. */
+.ab-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px 12px;
+  text-align: center;
 }
 
 /* Auto list */
@@ -111,7 +142,10 @@
 .ab-alliance-dot.Blue { background: #3b82f6; }
 .ab-alliance-dot.Red { background: #ef4444; }
 
+.ab-auto-text { min-width: 0; }
+
 .ab-auto-name {
+  display: block;
   overflow: hidden;
   font-weight: 600;
   text-overflow: ellipsis;
@@ -120,8 +154,17 @@
 
 .ab-auto-meta {
   display: block;
+  overflow: hidden;
   color: #b8b8aa;
   font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ab-auto-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* Named points, below the autos */
@@ -131,15 +174,43 @@
   border-top: 1px solid rgba(250, 204, 21, 0.12);
 }
 
+.ab-points-title { padding: 0 6px; }
+
+.ab-empty-note {
+  display: block;
+  padding: 0 6px 6px;
+}
+
+.ab-point-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .ab-point {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 4px 4px 8px;
+  min-height: 44px;
+  padding: 2px 4px 2px 8px;
   border-radius: 6px;
 }
 
 .ab-point:hover { background: rgba(255, 255, 255, 0.04); }
+
+.ab-point-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* A point's actions show on hover or keyboard focus, so names and places get the width. */
+.ab-point-actions {
+  display: none;
+  flex: none;
+}
+
+.ab-point:hover .ab-point-actions,
+.ab-point:focus-within .ab-point-actions { display: flex; }
 
 .ab-point-dot {
   flex: none;
@@ -174,11 +245,34 @@
   min-height: 0;
 }
 
-.ab-toolbar {
+.ab-workspace { flex: 1; }
+
+/* The selected auto: name, settings, then the project's save state and undo at the right. */
+.ab-auto-header {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  gap: 4px 8px;
+  min-height: 52px;
+  padding: 6px 8px 6px 14px;
+  border-bottom: 1px solid rgba(250, 204, 21, 0.12);
+}
+
+.ab-auto-header > .ab-alliance-dot { flex: none; }
+
+.ab-auto-settings {
+  display: flex;
+  align-items: center;
   gap: 8px;
+}
+
+.ab-document-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  padding-left: 8px;
+  border-left: 1px solid rgba(250, 204, 21, 0.12);
 }
 
 .ab-toolbar-spacer { flex: 1; }
@@ -366,8 +460,8 @@
   grid-template-columns: 18px 22px minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
-  margin-bottom: 4px;
-  padding: 6px 6px 6px 8px;
+  margin-bottom: 3px;
+  padding: 5px 6px 5px 8px;
   border: 1px solid transparent;
   border-left: 3px solid #3f3f46;
   border-radius: 6px;
@@ -402,7 +496,7 @@
   white-space: nowrap;
 }
 
-.ab-step-title { font-size: 14px; font-weight: 600; }
+.ab-step-title { font-size: 13.5px; font-weight: 600; }
 .ab-step-summary { color: #b8b8aa; font-size: 12px; }
 
 .ab-step-time {
