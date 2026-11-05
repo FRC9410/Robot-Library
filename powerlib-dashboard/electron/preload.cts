@@ -2,8 +2,6 @@ import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("powerlib", {
   platform: process.platform,
-  readNt4: (host: string | null, port: number, watches: Record<string, string[]>) =>
-    ipcRenderer.invoke("powerlib:read-nt4", host, port, watches),
   readConstants: () => ipcRenderer.invoke("powerlib:read-constants"),
   saveConstants: (id: string, source: string, constants: unknown[]) =>
     ipcRenderer.invoke("powerlib:save-constants", id, source, constants),

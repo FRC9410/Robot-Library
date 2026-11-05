@@ -76,8 +76,6 @@ function unpublishTopic(topic: NetworkTablesTopic<NtPrimitive>) {
 
 export class PowerLibNt4Client {
   private nt: NetworkTables | null = null;
-  private telemetryTarget: { host: string; port: number } | null = null;
-  private telemetryTimes = new Map<string, number>();
   private topics = new Map<string, NetworkTablesTopic<NtPrimitive>>();
   private prefixTopics = new Map<string, NetworkTablesPrefixTopic>();
   private unsubscribers: Array<() => void> = [];
@@ -92,7 +90,6 @@ export class PowerLibNt4Client {
     this.stoppedSocketGuard = null;
     ensureNt4ProtocolCompatibility();
     this.nt = NetworkTables.getInstanceByURI(uri, port);
-    this.telemetryTarget = { host: uri, port };
     const nt = this.nt;
     const socket = nt.client.messenger.socket;
     let awaitingSocketClose = socket.isClosing();
@@ -131,7 +128,6 @@ export class PowerLibNt4Client {
         clock.bestRtt = -1;
         clock.heartbeat();
       }
-      if (!connected && wasConnected) this.telemetryTimes.clear();
       wasConnected = connected;
       // An initial notification while the handshake is pending is not a failure.
       if (connected || (!awaitingSocketClose && !socket.isConnecting())) onConnectionChange(connected);
@@ -139,8 +135,6 @@ export class PowerLibNt4Client {
   }
 
   disconnect() {
-    this.telemetryTarget = null;
-    this.telemetryTimes.clear();
     this.unsubscribers.forEach((unsubscribe) => unsubscribe());
     this.unsubscribers = [];
     this.topics.forEach((topic) => {
@@ -265,36 +259,7 @@ export class PowerLibNt4Client {
     return () => {
       topic.unsubscribe(id);
       if (topic.subscribers.size === 0) this.prefixTopics.delete(prefix);
-      for (const name of this.telemetryTimes.keys()) {
-        if (!this.isWatchedValue(name)) this.telemetryTimes.delete(name);
-      }
     };
-  }
-
-  getTelemetryTarget() {
-    return this.telemetryTarget;
-  }
-
-  getTelemetryWatches() {
-    const watches: Record<string, string[]> = {};
-    for (const [prefix, topic] of this.prefixTopics) {
-      for (const { options } of topic.subscribers.values()) {
-        if (options.topicsonly) continue;
-        const periodMs = Math.round((options.periodic ?? telemetryUpdateIntervalMs / 1000) * 1000);
-        const prefixes = watches[periodMs] ??= [];
-        if (!prefixes.includes(prefix)) prefixes.push(prefix);
-      }
-    }
-    return watches;
-  }
-
-  acceptTelemetry({ name, lastChangedTime }: NtTopicSnapshot) {
-    // Both clients report the robot's timestamp. Use it to avoid refreshing
-    // stale data or rolling back a reading when the other transport catches up.
-    if (lastChangedTime === undefined || lastChangedTime <= 0) return true;
-    if (lastChangedTime <= (this.telemetryTimes.get(name) ?? 0)) return false;
-    this.telemetryTimes.set(name, lastChangedTime);
-    return true;
   }
 
   isWatchedValue(name: string) {

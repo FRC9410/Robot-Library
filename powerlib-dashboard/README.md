@@ -34,19 +34,51 @@ Use the prefix explorer to watch areas like:
 
 Rows appear as matching topic values arrive from NetworkTables.
 
-### NT4 MCP server
+## NT4 MCP for agents on other devices
 
-Power Tool starts the read-only `mcp-wpilib-nt4` server in the background on
-launch. It follows the dashboard's selected host, port, and live topic watches,
-including custom cameras and the NetworkTables explorer. Both clients feed the
-same dashboard views, and the original TypeScript client handles writes.
+Run [mcp-wpilib-nt4](https://github.com/j0n5m1th/mcp-wpilib-nt4) on the device
+running the agent. Install Git and `uv`, then prepare the local checkout.
 
-Install `uv` and put the `mcp-wpilib-nt4` checkout beside `Robot-Library`. If
-the checkout lives elsewhere, or you are running an installed or packaged copy
-of Power Tool, set `POWERLIB_NT4_PROJECT` to the checkout's absolute path before
-launching. The first launch can take longer while `uv` prepares the server's
-locked Python environment. The original client can supply dashboard data while
-the MCP server starts or if it is unavailable.
+```text
+git clone https://github.com/j0n5m1th/mcp-wpilib-nt4.git
+cd mcp-wpilib-nt4
+uv sync --locked --no-dev --python 3.13
+```
+
+Use this configuration in a client that accepts an `mcpServers` JSON object.
+Replace the checkout path with its absolute path on that device. Use the
+absolute path to `uv` if the client cannot find it on PATH.
+
+```json
+{
+  "mcpServers": {
+    "wpilib-nt4": {
+      "command": "uv",
+      "args": [
+        "--directory", "<absolute path to mcp-wpilib-nt4>",
+        "run", "--locked", "--no-dev", "--python", "3.13", "mcp-wpilib-nt4"
+      ],
+      "env": {
+        "NT4_READ_ONLY": "1",
+        "NT4_TOOLSET": "core"
+      }
+    }
+  }
+}
+```
+
+For an agent launching the subprocess directly, use the same command and
+environment with an MCP stdio client that stays open for tool calls.
+
+1. Start the MCP server, complete MCP initialization, and call `nt4_status`
+   to verify it responds. A disconnected status is expected at this point.
+2. Once MCP responds, open Power Tool if requested. If Power Tool is already
+   open, use the existing window.
+3. When live data is requested, call `nt4_connect` with the robot or simulator
+   host and port, then use `nt4_list_topics` and `nt4_get_values`. Use the
+   same target shown in Power Tool's Connection Settings when applicable.
+   For a simulator on a different machine, use that machine's reachable IP.
+   `127.0.0.1` only reaches a simulator on the agent's own device.
 
 ## Custom dashboard
 

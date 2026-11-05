@@ -32,12 +32,6 @@
       "dist-renderer/**/*",
       "package.json"
     ],
-    "extraResources": [
-      {
-        "from": "electron/nt4Dashboard.py",
-        "to": "nt4Dashboard.py"
-      }
-    ],
     "win": {
       "target": [
         {
