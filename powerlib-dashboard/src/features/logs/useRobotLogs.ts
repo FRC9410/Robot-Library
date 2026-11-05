@@ -10,6 +10,7 @@ export function useRobotLogs() {
   const [files, setFiles] = useState<LogFileEntry[]>([]);
   const [robot, setRobot] = useState<string | null>(null);
   const [listing, setListing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
@@ -51,6 +52,26 @@ export function useRobotLogs() {
     }
   }
 
+  /** Deletes every file of `logs` from the robot, then lists it again. Returns false if anything wasn't deleted. */
+  async function remove(logs: SavedLog[]) {
+    if (!window.powerlib?.deleteRobotLogs) return false;
+    setDeleting(true);
+    setError(null);
+    try {
+      const result = await window.powerlib.deleteRobotLogs(logs.flatMap(log => log.files));
+      await list();
+      if (result.failed.length === 0) return true;
+      const names = result.failed.map(item => item.path.split("/").pop()).join(", ");
+      setError(`Couldn't delete ${names} (${result.failed[0].error}).`);
+      return false;
+    } catch (caught) {
+      setError(cleanError(caught));
+      return false;
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   const logs = useMemo(() => groupLogFiles(files), [files]);
-  return { logs, robot, listing, error, progress, list, download };
+  return { logs, robot, listing, deleting, error, progress, list, download, remove };
 }

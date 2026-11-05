@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld("powerlib", {
   listRobotLogs: () => ipcRenderer.invoke("powerlib:list-robot-logs"),
   downloadRobotLogs: (downloads: { remotePath: string; localFolder: string }[], localRoot: string) =>
     ipcRenderer.invoke("powerlib:download-robot-logs", downloads, localRoot),
+  deleteRobotLogs: (remotePaths: string[]) => ipcRenderer.invoke("powerlib:delete-robot-logs", remotePaths),
   onRobotDownloadProgress: (callback: (_event: unknown, progress: { done: number; total: number; file: string }) => void) => {
     ipcRenderer.on("powerlib:robot-download-progress", callback);
     return () => ipcRenderer.removeListener("powerlib:robot-download-progress", callback);

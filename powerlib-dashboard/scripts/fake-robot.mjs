@@ -5,7 +5,8 @@ import ssh2 from "ssh2";
 
 // Usage: node scripts/fake-robot.mjs <logs folder> [--port 2222]
 // A pretend roboRIO for testing Get logs from robot without a robot: an SFTP server on 127.0.0.1 that
-// serves <logs folder> read-only as /U/logs and takes the roboRIO's login (lvuser, no password).
+// serves <logs folder> as /U/logs and takes the roboRIO's login (lvuser, no password). Files can be read and
+// deleted (and empty folders removed) but not written. Deleting really deletes them from <logs folder>.
 // Start Power Tool with POWERLIB_ROBOT=127.0.0.1:2222 so it looks here instead of the real robot addresses.
 
 const { STATUS_CODE } = ssh2.utils.sftp;
@@ -71,6 +72,20 @@ export function startFakeRobot(folder, port = 2222) {
         open.sent = true;
         if (open.entries.length === 0) return sftp.status(id, STATUS_CODE.EOF);
         sftp.name(id, open.entries);
+      });
+      sftp.on("REMOVE", (id, remote) => {
+        const file = local(remote);
+        if (!file || !fs.existsSync(file)) return fail(id);
+        if (!fs.statSync(file).isFile()) return fail(id, STATUS_CODE.FAILURE);
+        fs.unlinkSync(file);
+        sftp.status(id, STATUS_CODE.OK);
+      });
+      sftp.on("RMDIR", (id, remote) => {
+        const dir = local(remote);
+        if (!dir || path.posix.normalize(remote) === robotRoot || !fs.existsSync(dir)) return fail(id);
+        if (!fs.statSync(dir).isDirectory() || fs.readdirSync(dir).length > 0) return fail(id, STATUS_CODE.FAILURE);
+        fs.rmdirSync(dir);
+        sftp.status(id, STATUS_CODE.OK);
       });
       sftp.on("CLOSE", (id, handle) => {
         const key = handle.toString("hex");

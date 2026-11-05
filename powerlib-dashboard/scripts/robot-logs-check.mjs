@@ -7,7 +7,7 @@ import { build } from "esbuild";
 import { startFakeRobot } from "./fake-robot.mjs";
 
 // Usage: node scripts/robot-logs-check.mjs
-// Runs Get logs from robot's Electron code (electron/robotLogs.ts) against the fake robot: find, log in, list, download.
+// Runs Get logs from robot's Electron code (electron/robotLogs.ts) against the fake robot: find, log in, list, download, delete.
 const root = fileURLToPath(new URL("..", import.meta.url));
 const bundlePath = path.join(root, "node_modules", ".cache", "robot-logs-check", "robotLogs.mjs");
 await build({ entryPoints: [path.join(root, "electron", "robotLogs.ts")], bundle: true, format: "esm", platform: "node",
@@ -60,6 +60,25 @@ try {
   await new Promise(resolve => setTimeout(resolve, 20));
   await robot.downloadRobotLogs(downloads.slice(0, 1), localFolder, () => {});
   assert.equal(fs.statSync(saved[0].path).mtimeMs, before, "A file already there at the same size isn't copied again");
+
+  assert.ok(robot.isRobotLogPath("/U/logs/KSLA_Q6_rio_2026-03-20_14-39-56.hoot"), "A log at the top of a log folder can be deleted");
+  assert.ok(robot.isRobotLogPath("/home/lvuser/logs/run/a.wpilog"), "A log one folder down can be deleted");
+  for (const bad of ["/U/logs/notes.txt", "/U/logs/../etc/passwd.hoot", "/etc/a.hoot", "/U/logs/a/b/c.hoot", "/U/logs/", "/U/logsX/a.hoot", "/U/logs//a.hoot"]) {
+    assert.ok(!robot.isRobotLogPath(bad), `${bad} can't be deleted`);
+  }
+  await assert.rejects(robot.deleteRobotLogs(["/U/logs/notes.txt"]), /Not a robot log file/, "Delete refuses anything that isn't a robot log");
+  assert.ok(fs.existsSync(path.join(robotFolder, "notes.txt")));
+
+  const run = "/U/logs/2026-04-03_14-15-37";
+  const removed = await robot.deleteRobotLogs([
+    `${run}/rio_2026-04-03_14-15-42.hoot`, `${run}/9F61CEC3394C4853202020503F0E19FF_2026-04-03_14-15-42.hoot`, "/U/logs/gone.hoot"
+  ]);
+  assert.deepEqual(removed.deleted, [`${run}/rio_2026-04-03_14-15-42.hoot`, `${run}/9F61CEC3394C4853202020503F0E19FF_2026-04-03_14-15-42.hoot`]);
+  assert.deepEqual(removed.failed.map(item => item.path), ["/U/logs/gone.hoot"], "A missing file is reported, not thrown");
+  assert.ok(!fs.existsSync(path.join(robotFolder, "2026-04-03_14-15-37")), "The run's folder goes once it's empty");
+  assert.deepEqual((await robot.listRobotLogs()).files.map(file => file.name), ["KSLA_Q6_rio_2026-03-20_14-39-56.hoot"], "Only the other run is left");
+  assert.ok(fs.existsSync(path.join(robotFolder, "notes.txt")), "Other files on the robot are left alone");
+  assert.ok(fs.existsSync(saved[0].path), "Deleting from the robot leaves the downloaded copy");
 
   process.env.POWERLIB_ROBOT = "127.0.0.1:2298";
   assert.equal(await robot.findRobot(500), null, "Nothing answering means no robot");

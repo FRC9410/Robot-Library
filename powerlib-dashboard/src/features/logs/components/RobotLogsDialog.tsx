@@ -6,6 +6,7 @@ import { groupSavedLogs, isDownloaded } from "../logLibraryModel";
 import type { SavedLog } from "../logLibraryModel";
 import { useLogLibrary } from "../useLogLibrary";
 import { useRobotLogs } from "../useRobotLogs";
+import { DeleteRobotLogsDialog } from "./DeleteRobotLogsDialog";
 import { LogsDialog } from "./LogsDialog";
 import { RobotLogRow } from "./RobotLogRow";
 import { RobotLogsFooter } from "./RobotLogsFooter";
@@ -19,14 +20,15 @@ type RobotLogsDialogProps = {
   onDownloaded: () => void;
 };
 
-/** The runs on the robot: tick some and download them into the logs folder; one ticked also opens it. */
+/** The runs on the robot: tick some and download them into the logs folder (one ticked also opens it), or delete them from the robot. */
 export function RobotLogsDialog({ open, onClose, onOpenLog, onDownloaded }: RobotLogsDialogProps) {
   const robot = useRobotLogs();
   const local = useLogLibrary();
   const [picked, setPicked] = useState<string[]>([]);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const groups = useMemo(() => groupSavedLogs(robot.logs, "all"), [robot.logs]);
   const chosen = robot.logs.filter(log => picked.includes(log.id));
-  const busy = robot.progress !== null;
+  const busy = robot.progress !== null || robot.deleting;
 
   const { list } = robot;
   useEffect(() => {
@@ -44,6 +46,12 @@ export function RobotLogsDialog({ open, onClose, onOpenLog, onDownloaded }: Robo
     void local.refresh();
     if (chosen.length === 1) onOpenLog(saved[0]);
     onClose();
+  }
+
+  async function remove() {
+    await robot.remove(chosen);
+    setConfirmDelete(false);
+    setPicked([]);
   }
 
   const status = robot.listing ? "Connecting to the robot…" : robot.robot ? `${robot.robot} · ${robot.logs.length} run${robot.logs.length === 1 ? "" : "s"}` : "";
@@ -72,8 +80,10 @@ export function RobotLogsDialog({ open, onClose, onOpenLog, onDownloaded }: Robo
             ))}
         </ScrollArea>
         <RobotLogsFooter count={chosen.length} bytes={chosen.reduce((sum, log) => sum + log.bytes, 0)} progress={robot.progress}
-          onCancel={onClose} onDownload={() => void download()} />
+          deleting={robot.deleting} onCancel={onClose} onDelete={() => setConfirmDelete(true)} onDownload={() => void download()} />
       </Stack>
+      <DeleteRobotLogsDialog open={confirmDelete} count={chosen.length} notDownloaded={chosen.filter(log => !isDownloaded(log, local.logs)).length}
+        deleting={robot.deleting} onCancel={() => setConfirmDelete(false)} onConfirm={() => void remove()} />
     </LogsDialog>
   );
 }

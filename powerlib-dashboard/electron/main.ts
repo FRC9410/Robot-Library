@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { readConstantsFiles, saveConstantsFile } from "./constantsFiles.js";
 import { generatedJsonPath } from "./projectPaths.js";
 import { convertHoot, sessionSiblings } from "./owlet.js";
-import { downloadRobotLogs, findRobot, listRobotLogs } from "./robotLogs.js";
+import { deleteRobotLogs, downloadRobotLogs, findRobot, isRobotLogPath, listRobotLogs } from "./robotLogs.js";
 import type { RobotDownload } from "./robotLogs.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -578,6 +578,13 @@ ipcMain.handle("powerlib:download-robot-logs", async (event, downloads: unknown,
   if (!valid || typeof localRoot !== "string" || !localRoot) throw new Error("Pick a logs folder and some logs to download.");
   return downloadRobotLogs(downloads as RobotDownload[], localRoot,
     (progress) => { if (!event.sender.isDestroyed()) event.sender.send("powerlib:robot-download-progress", progress); });
+});
+
+ipcMain.handle("powerlib:delete-robot-logs", async (_event, remotePaths: unknown) => {
+  const valid = Array.isArray(remotePaths) && remotePaths.length > 0
+    && remotePaths.every((item) => typeof item === "string" && isRobotLogPath(item));
+  if (!valid) throw new Error("Pick some robot logs to delete.");
+  return deleteRobotLogs(remotePaths as string[]);
 });
 
 ipcMain.handle("powerlib:choose-logs-folder", async (event) => {

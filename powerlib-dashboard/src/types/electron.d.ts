@@ -57,7 +57,9 @@ declare global {
       listRobotLogs: () => Promise<{ host: string; username: string; files: LogFileEntry[] }>;
       /** Copies robot files into `localRoot`, each into its relative `localFolder`; returns them as local files. */
       downloadRobotLogs: (downloads: { remotePath: string; localFolder: string }[], localRoot: string) => Promise<LogFileEntry[]>;
-      onRobotDownloadProgress: (callback: (_event: unknown, progress: { done: number; total: number; file: string }) => void) => () => void;
+      /** Deletes these log files from the robot (and a run's folder once it's empty). */
+      deleteRobotLogs: (remotePaths: string[]) => Promise<{ deleted: string[]; failed: { path: string; error: string }[] }>;
+      onRobotDownloadProgress:(callback: (_event: unknown, progress: { done: number; total: number; file: string }) => void) => () => void;
       /** Swerve drive and steer motor CAN IDs from the robot's TunerConstants.java; empty if not found. */
       readDriveMotorIds: () => Promise<number[]>;
       getPathForFile: (file: File) => string;

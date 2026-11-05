@@ -123,6 +123,45 @@ export async function listRobotLogs() {
   }
 }
 
+/** True for a .hoot or .wpilog inside one of the robot's log folders (or one subfolder down), and nothing else. */
+export function isRobotLogPath(remotePath: string) {
+  if (remotePath.includes("\\") || remotePath.split("/").includes("..")) return false;
+  return logFolders.some((root) => {
+    if (!remotePath.startsWith(`${root}/`)) return false;
+    const rest = remotePath.slice(root.length + 1).split("/");
+    return rest.length <= 2 && rest.every(Boolean) && isLogName(rest[rest.length - 1]);
+  });
+}
+
+/**
+ * Deletes log files from the robot. Only log files in its log folders are touched; a run's subfolder is removed
+ * too once it's empty. Returns the paths that were deleted and the ones that failed, with why.
+ */
+export async function deleteRobotLogs(remotePaths: string[]) {
+  const bad = remotePaths.find((remotePath) => !isRobotLogPath(remotePath));
+  if (bad) throw new Error(`Not a robot log file: ${bad}`);
+  const session = await openSession();
+  try {
+    const deleted: string[] = [];
+    const failed: { path: string; error: string }[] = [];
+    for (const remotePath of remotePaths) {
+      await new Promise<void>((resolve) => session.sftp.unlink(remotePath, (error) => {
+        if (error) failed.push({ path: remotePath, error: error.message }); else deleted.push(remotePath);
+        resolve();
+      }));
+    }
+    const runFolders = new Set(deleted.map((remotePath) => path.posix.dirname(remotePath)).filter((folder) => !logFolders.includes(folder)));
+    for (const folder of runFolders) {
+      if ((await readDirectory(session.sftp, folder)).length === 0) {
+        await new Promise<void>((resolve) => session.sftp.rmdir(folder, () => resolve()));
+      }
+    }
+    return { deleted, failed };
+  } finally {
+    session.close();
+  }
+}
+
 export type RobotDownload = { remotePath: string; localFolder: string };
 
 /**
