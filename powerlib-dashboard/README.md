@@ -54,11 +54,9 @@ fail, the list retries after four seconds. Healthy streams stay connected.
 An explicit stream URL in Crew tools overrides the published addresses; clear it
 to return to automatic discovery.
 
-The Limelights tab embeds each camera's configuration page. If its automatic
-`.local:5801` address is unreachable, enter a full Configuration URL such as
-`http://10.94.10.11:5801` and click Apply. The address is saved per camera on this
-laptop and used by both the frame and Open button. Reset restores the automatic
-address. This setting is separate from the camera's stream URL.
+The Limelights tab embeds each camera's configuration page and provides an Open
+button to launch it in a browser. Both use the automatic `.local:5801` address
+unless a configuration address was previously saved for that camera.
 
 ## Robot tuning
 

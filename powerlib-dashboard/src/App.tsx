@@ -557,7 +557,7 @@ function AppContent() {
   }
 
   // The Robot and Logs tabs fit the window and scroll inside their own widgets instead of scrolling the page.
-  const fillsWindow = activeView === "robot" || activeView === "logs";
+  const fillsWindow = activeView === "robot" || activeView === "logs" || activeView === "limelights";
 
   return (
     <Box sx={{ minHeight: fillsWindow ? 0 : "100vh", height: fillsWindow ? "100dvh" : undefined,
@@ -714,11 +714,17 @@ function AppContent() {
         </Alert>
       </Snackbar>
 
-      <Container maxWidth={false} disableGutters={activeView === "robot"} sx={activeView === "drive" ? { p: "0 !important" } : activeView === "robot"
+      <Container maxWidth={false} disableGutters={activeView === "robot" || activeView === "limelights"} sx={activeView === "drive" ? { p: "0 !important" } : activeView === "robot"
         ? { py: 0, pl: { xs: 2, sm: 3 }, flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }
-        : activeView === "logs" ? { pt: 1.5, pb: 0, flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" } : { py: 2 }}>
+        : fillsWindow
+          ? {
+              pt: activeView === "logs" ? 1.5 : 0.5,
+              pb: activeView === "logs" ? 0 : 0.5,
+              flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column"
+            }
+          : { py: 2 }}>
         {telemetryError && <Alert severity="warning" sx={{ m: 1 }}>{telemetryError}</Alert>}
-        <Stack spacing={2} sx={fillsWindow ? { flex: 1, minHeight: 0 } : undefined}>
+        <Stack spacing={2} useFlexGap={activeView === "limelights"} sx={fillsWindow ? { flex: 1, minHeight: 0 } : undefined}>
           {activeView === "drive" && <DashboardPanel subsystems={subsystemDocument.subsystems} />}
           {activeView === "robot" && (
             <RobotPanelWithTelemetry
