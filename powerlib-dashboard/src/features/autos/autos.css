@@ -10,6 +10,9 @@
   cursor: crosshair;
 }
 
+/* The field drawing sits a step behind the route and robots, which are what you're editing. */
+.ab-backdrop { opacity: 0.8; }
+
 .ab-node > g {
   cursor: grab;
 }

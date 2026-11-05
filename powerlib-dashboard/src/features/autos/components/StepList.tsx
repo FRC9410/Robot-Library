@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import type { AutoIssue, AutoStep, BranchArm, BranchChoices, ListRef } from "../autoModel";
 import { stepListRows, listKey } from "../stepListRows";
 import { stepAccent } from "../autoView";
 import type { BranchSide } from "../types";
+import { useKeepStepVisible } from "../useKeepStepVisible";
 import { useStepDrag } from "../useStepDrag";
 import { BranchArmItem } from "./BranchArmItem";
 import { StepListItem } from "./StepListItem";
@@ -35,11 +36,7 @@ export function StepList({ steps, choices, selectedStepIds, activeStepId, durati
   onShowArm, onAddTo }: StepListProps) {
   const listRef = useRef<HTMLOListElement>(null);
   const drag = useStepDrag(steps, selectedStepIds, onReorder);
-  const primary = selectedStepIds[selectedStepIds.length - 1];
-  // Keep the most recently selected step visible when it is picked on the field.
-  useEffect(() => {
-    listRef.current?.querySelector(`[data-step-id="${primary}"]`)?.scrollIntoView({ block: "nearest" });
-  }, [primary]);
+  useKeepStepVisible(listRef, selectedStepIds[selectedStepIds.length - 1]);
 
   return <ol className="ab-steps" ref={listRef} {...drag.listHandlers}>
     {stepListRows(steps, choices).map(row => {

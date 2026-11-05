@@ -1,4 +1,4 @@
-import { Alert, Divider } from "@mui/material";
+import { Alert } from "@mui/material";
 import { gridColumns } from "./autoColumns";
 import { AutoField } from "./components/AutoField";
 import { AutoHeader } from "./components/AutoHeader";
@@ -62,7 +62,6 @@ export function AutoBuilderPanel() {
                 actual={run && (run === runs.recording || runs.showActual) ? run.points : undefined} vision={builder.visionOverlay} />}
             {builder.view === "field" && moment.frame && <ReplayPill speed={moment.frame.speed} state={moment.state} />}
           </div>
-          <Divider />
           <AutoReplayBar replay={analysis.replay} playback={playback} activeStepId={moment.activeStepId} period={document.periodSeconds}
             stateColor={analysis.stateColor} stepColor={builder.stepColor} stepNumber={stepId => analysis.stepNumbers.get(stepId)}
             robotCheck={builder.robotCheck} vision={analysis.vision ?? undefined} onPeriod={editor.autos.setPeriod} onSelectStep={selection.selectStep} />

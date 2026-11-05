@@ -1,5 +1,14 @@
 /* Auto Builder panel layout. Field drawing styles live in autos.css. */
 .ab-root {
+  /* Neutral lines keep yellow for what's selected; muted text stays readable (about 5:1 on the panes). */
+  --ab-line: rgba(255, 255, 255, 0.09);
+  --ab-divider: rgba(255, 255, 255, 0.06);
+  --ab-muted: #8e8e98;
+  --ab-accent: #facc15;
+  --ab-scroll-thumb: rgba(255, 255, 255, 0.16);
+  --ab-scroll-thumb-hover: rgba(255, 255, 255, 0.3);
+  --ab-ease: 180ms ease;
+  color-scheme: dark;
   display: grid;
   /* Columns come from the resizable layout (AutoColumns.tsx); handles sit between them. */
   height: calc(100vh - 150px);
@@ -46,7 +55,7 @@
   width: 12px;
   height: 36px;
   border-radius: 6px;
-  color: #71717a;
+  color: var(--ab-muted);
   opacity: 0;
   transition: opacity 120ms ease;
 }
@@ -55,12 +64,18 @@
 .ab-splitter.closed { cursor: pointer; }
 .ab-splitter.closed .ab-splitter-grip { opacity: 1; background: #27272a; color: #facc15; }
 
+/* Buttons and toggles in sentence case read faster than all caps. */
+.ab-root .MuiButton-root,
+.ab-root .MuiToggleButton-root {
+  text-transform: none;
+}
+
 .ab-pane {
   display: flex;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid rgba(250, 204, 21, 0.18);
+  border: 1px solid var(--ab-line);
   border-radius: 8px;
   background: #18181b;
 }
@@ -71,7 +86,7 @@
   gap: 8px;
   min-height: 48px;
   padding: 8px 12px;
-  border-bottom: 1px solid rgba(250, 204, 21, 0.12);
+  border-bottom: 1px solid var(--ab-divider);
 }
 
 /* A toolbar under another header, such as the field's. */
@@ -82,26 +97,51 @@
 }
 
 .ab-pane-count {
-  color: #71717a;
+  color: var(--ab-muted);
   font-size: 13px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * Scrolling areas: a thin dark scrollbar that brightens on hover, room kept for it so text never
+ * shifts when it appears, smooth programmatic scrolling, and no scroll chaining to the page.
+ */
+.ab-pane-body,
+.ab-code {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ab-scroll-thumb) transparent;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+.ab-pane-body:hover,
+.ab-code:hover {
+  scrollbar-color: var(--ab-scroll-thumb-hover) transparent;
+}
+
 .ab-pane-body {
   flex: 1;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
-  padding: 12px;
+  scrollbar-gutter: stable;
+  padding: 12px 6px 12px 12px;
 }
 
 .ab-pane-body.flush { padding: 0; }
 
-/* With a step selected, the list shares the column with the inspector. */
-.ab-pane-body.shrink {
+/*
+ * The step list takes the room it needs. With a step selected it eases down to share the column
+ * with the inspector, instead of jumping.
+ */
+.ab-step-scroll {
   flex: 0 1 auto;
-  max-height: 45%;
+  max-height: 100%;
+  transition: max-height var(--ab-ease);
 }
+
+.ab-step-scroll.shrink { max-height: 45%; }
 
 /* What to do when a list is empty. */
 .ab-empty {
@@ -129,6 +169,7 @@
   cursor: pointer;
 }
 
+.ab-auto { transition: background-color var(--ab-ease); }
 .ab-auto:hover { background: rgba(255, 255, 255, 0.04); }
 .ab-auto.selected { background: rgba(250, 204, 21, 0.1); box-shadow: inset 2px 0 0 #facc15; }
 
@@ -171,7 +212,7 @@
 .ab-points {
   margin: 4px 6px 8px;
   padding-top: 6px;
-  border-top: 1px solid rgba(250, 204, 21, 0.12);
+  border-top: 1px solid var(--ab-divider);
 }
 
 .ab-points-title { padding: 0 6px; }
@@ -255,7 +296,7 @@
   gap: 4px 8px;
   min-height: 52px;
   padding: 6px 8px 6px 14px;
-  border-bottom: 1px solid rgba(250, 204, 21, 0.12);
+  border-bottom: 1px solid var(--ab-divider);
 }
 
 .ab-auto-header > .ab-alliance-dot { flex: none; }
@@ -272,7 +313,7 @@
   gap: 2px;
   margin-left: auto;
   padding-left: 8px;
-  border-left: 1px solid rgba(250, 204, 21, 0.12);
+  border-left: 1px solid var(--ab-divider);
 }
 
 .ab-toolbar-spacer { flex: 1; }
@@ -312,6 +353,7 @@
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
+  border-top: 1px solid var(--ab-divider);
 }
 
 .ab-replay-time {
@@ -410,7 +452,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 12px;
-  border: 1px solid rgba(250, 204, 21, 0.12);
+  border: 1px solid var(--ab-line);
   border-radius: 8px;
 }
 
@@ -467,16 +509,17 @@
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.025);
   cursor: pointer;
+  transition: background-color var(--ab-ease), border-color var(--ab-ease);
 }
 
 .ab-step:hover { background: rgba(255, 255, 255, 0.05); }
-.ab-step.selected { border-color: #facc15; background: rgba(250, 204, 21, 0.08); }
+.ab-step.selected { border-color: rgba(250, 204, 21, 0.55); background: rgba(250, 204, 21, 0.09); }
 .ab-step.active { box-shadow: inset 0 0 0 1px #38bdf8; }
 .ab-step.error .ab-step-summary { color: #f87171; }
 .ab-step.warning .ab-step-summary { color: #fbbf24; }
 
 .ab-step-index {
-  color: #71717a;
+  color: var(--ab-muted);
   font-size: 12px;
   text-align: right;
 }
@@ -500,7 +543,7 @@
 .ab-step-summary { color: #b8b8aa; font-size: 12px; }
 
 .ab-step-time {
-  color: #71717a;
+  color: var(--ab-muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -514,7 +557,20 @@
 .ab-step.selected .ab-step-time { display: none; }
 
 .ab-inspector {
-  border-top: 1px solid rgba(250, 204, 21, 0.12);
+  border-top: 1px solid var(--ab-divider);
+}
+
+/* The inspector's settings fade in, so switching steps doesn't flash. */
+.ab-inspector > * { animation: ab-fade-in var(--ab-ease); }
+
+@keyframes ab-fade-in {
+  from { opacity: 0; transform: translateY(3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ab-step-scroll { transition: none; }
+  .ab-inspector > * { animation: none; }
+  .ab-pane-body, .ab-code { scroll-behavior: auto; }
 }
 
 /* Keyboard shortcuts dialog */
@@ -550,7 +606,7 @@
   border: 0;
   border-bottom: 1px dashed transparent;
   background: none;
-  color: #71717a;
+  color: var(--ab-muted);
   font-family: inherit;
   font-size: 12px;
   line-height: 1.6;
@@ -559,7 +615,7 @@
 }
 
 .ab-period:hover {
-  border-bottom-color: #71717a;
+  border-bottom-color: var(--ab-muted);
   color: #b8b8aa;
 }
 
@@ -606,11 +662,11 @@
 }
 
 .ab-arm:hover { background: rgba(167, 139, 250, 0.08); }
-.ab-arm.off-route { border-left-color: #52525b; color: #71717a; }
-.ab-arm-empty { flex: 1; color: #71717a; font-weight: 400; letter-spacing: 0; text-transform: none; }
+.ab-arm.off-route { border-left-color: #52525b; color: var(--ab-muted); }
+.ab-arm-empty { flex: 1; color: var(--ab-muted); font-weight: 400; letter-spacing: 0; text-transform: none; }
 .ab-arm .MuiIconButton-root { margin-left: auto; color: inherit; }
 .ab-arm.drop-into { box-shadow: inset 0 0 0 2px #facc15; }
 
 /* Room below the last step to drop at the end of the auto. */
-.ab-steps-end { height: 10px; }
+.ab-steps-end { height: 20px; }
 .ab-steps-end.drop-here { box-shadow: 0 -3px 0 #facc15; }

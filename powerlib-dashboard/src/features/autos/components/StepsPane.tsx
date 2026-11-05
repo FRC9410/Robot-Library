@@ -64,7 +64,7 @@ export function StepsPane({ collapsed, auto, stepCount, selection, selectedStep,
         onAdd={type => steps.addStep(type, addMenu?.into ? { into: addMenu.into } : undefined)} />
     </PaneHeader>
     {!auto ? <div className="ab-pane-body"><div className="ab-empty"><Typography variant="body2" color="text.secondary">Pick an auto to see its steps.</Typography></div></div> : <>
-      <div className={`ab-pane-body${selection.length ? " shrink" : ""}`}>
+      <div className={`ab-pane-body ab-step-scroll${selection.length ? " shrink" : ""}`}>
         {auto.steps.length === 0
           ? <div className="ab-empty">
             <Typography variant="body2">No steps yet</Typography>
@@ -74,12 +74,12 @@ export function StepsPane({ collapsed, auto, stepCount, selection, selectedStep,
             stateColor={stateColor} onSelect={(stepId, toggle) => onSelectSteps([stepId], toggle ? "toggle" : "replace")} onReorder={steps.moveStepsTo}
             onDelete={stepId => steps.deleteSteps([stepId])} onShowArm={onShowArm} onAddTo={(into, anchor) => setAddMenu({ anchor, into })} />}
       </div>
-      {selection.length > 1 && <div className="ab-pane-body ab-inspector">
+      {selection.length > 1 && <div key="several" className="ab-pane-body ab-inspector">
         <MultiStepInspector steps={stepsInOrder(auto.steps, selection)} onApplyLimits={limits => steps.applyLimits(selection, limits)}
           onAlign={steps.alignSelected} onDuplicate={() => steps.duplicateSteps(selection)} onDelete={() => steps.deleteSteps(selection)} onClose={clear} />
       </div>}
-      {selection.length === 1 && selectedStep && <div className="ab-pane-body ab-inspector">
-        <StepInspector key={selectedStep.id} step={selectedStep} driveNumber={driveNumbers.get(selectedStep.id) ?? 0}
+      {selection.length === 1 && selectedStep && <div key={selectedStep.id} className="ab-pane-body ab-inspector">
+        <StepInspector step={selectedStep} driveNumber={driveNumbers.get(selectedStep.id) ?? 0}
           issues={issues.filter(issue => issue.stepId === selectedStep.id)} onClose={clear}>
           <StepSettings step={selectedStep} driveNumber={driveNumbers.get(selectedStep.id) ?? 0} states={states} legInfo={legInfo} drivetrain={drivetrain}
             branch={branch} mirrored={mirrored} points={points} onChange={patch => steps.updateStep(selectedStep.id, patch)}

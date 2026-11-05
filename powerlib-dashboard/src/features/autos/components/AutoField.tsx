@@ -78,7 +78,9 @@ export function AutoField({ auto, field, layout, robot, stateColor, selectedStep
       onPointerMove={drag.onPointerMove} onPointerUp={drag.onPointerUp} onPointerCancel={drag.onPointerCancel}>
       <rect className="auto-field-surface" width={frame.width} height={frame.height} rx="5" fill="#101e29" stroke="#7993a5" strokeWidth="3"
         onPointerDown={event => { if (auto) drag.startSurface(event); }} />
-      {layout ? <FieldBackdrop layout={layout} width={frame.width} height={frame.height} labels /> : <FieldGridBackdrop frame={frame} />}
+      <g className="ab-backdrop">
+        {layout ? <FieldBackdrop layout={layout} width={frame.width} height={frame.height} labels /> : <FieldGridBackdrop frame={frame} />}
+      </g>
       {vision && <CameraCoverage vision={vision} frame={frame} />}
       <PlannedRoute drives={drives} replay={replay} frame={frame} stateColor={stateColor} />
       {ghosts.map((ghost, index) => <BranchGhost key={index} ghost={ghost} frame={frame} driveNumbers={driveNumbers}
