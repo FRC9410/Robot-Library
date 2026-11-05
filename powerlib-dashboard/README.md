@@ -34,6 +34,20 @@ Use the prefix explorer to watch areas like:
 
 Rows appear as matching topic values arrive from NetworkTables.
 
+### NT4 MCP server
+
+Power Tool starts the read-only `mcp-wpilib-nt4` server in the background on
+launch. It follows the dashboard's selected host, port, and live topic watches,
+including custom cameras and the NetworkTables explorer. Both clients feed the
+same dashboard views, and the original TypeScript client handles writes.
+
+Install `uv` and put the `mcp-wpilib-nt4` checkout beside `Robot-Library`. If
+the checkout lives elsewhere, or you are running an installed or packaged copy
+of Power Tool, set `POWERLIB_NT4_PROJECT` to the checkout's absolute path before
+launching. The first launch can take longer while `uv` prepares the server's
+locked Python environment. The original client can supply dashboard data while
+the MCP server starts or if it is unavailable.
+
 ## Custom dashboard
 
 The Drive tab renders `dashboard/index.tsx`, which initially re-exports the

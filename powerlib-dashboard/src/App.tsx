@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   AppBar,
@@ -51,6 +51,8 @@ import { detectLimelights } from "./features/limelights/limelightUtils";
 import type { AppView } from "./types/app";
 import { TuningModeSync } from "./networktables/TuningModeSync";
 import { tuningUpdateIntervalMs } from "./networktables/telemetryTiming";
+import type { NtTopicSnapshot } from "./networktables/nt4Client";
+import { useMcpTelemetry } from "./networktables/useMcpTelemetry";
 
 type ToastState = {
   open: boolean;
@@ -91,6 +93,10 @@ function AppContent() {
     upsertTopic,
     pruneTopics
   } = useNetworkTables();
+  const upsertLiveTopic = useCallback((snapshot: NtTopicSnapshot) => {
+    if (clientRef.current.acceptTelemetry(snapshot)) upsertTopic(snapshot);
+  }, [clientRef, upsertTopic]);
+  useMcpTelemetry(clientRef, upsertLiveTopic);
   const topics = useTopics("app");
   const [activeView, setActiveView] = useState<AppView>("drive");
   const [subsystemDocument, setSubsystemDocument] = useState<SubsystemDocumentState>({
@@ -419,10 +425,10 @@ function AppContent() {
         setStatus(nextStatus);
       });
       networkTableWatchPrefixes.forEach((prefix) => {
-        clientRef.current.watchPrefix(prefix, upsertTopic);
+        clientRef.current.watchPrefix(prefix, upsertLiveTopic);
       });
-      clientRef.current.watchPrefix("/PowerLib/", upsertTopic, tuningUpdateIntervalMs);
-      clientRef.current.watchCameraAnnouncements(upsertTopic);
+      clientRef.current.watchPrefix("/PowerLib/", upsertLiveTopic, tuningUpdateIntervalMs);
+      clientRef.current.watchCameraAnnouncements(upsertLiveTopic);
     } catch (caught) {
       tuningSyncRef.current!.connectionChanged(false);
       clientRef.current.disconnect();
@@ -441,12 +447,12 @@ function AppContent() {
 
   useEffect(() => {
     if (status !== "connected" || activeView !== "networktables") return;
-    const stop = clientRef.current.watchPrefix("/", upsertTopic);
+    const stop = clientRef.current.watchPrefix("/", upsertLiveTopic);
     return () => {
       stop();
       pruneTopics(snapshot => clientRef.current.isWatchedValue(snapshot.name));
     };
-  }, [status, activeView, clientRef, upsertTopic, pruneTopics]);
+  }, [status, activeView, clientRef, upsertLiveTopic, pruneTopics]);
 
   function disconnectNetworkTables() {
     setAutoConnectPaused(true);
@@ -540,7 +546,7 @@ function AppContent() {
 
     const prefix = `/PowerLib/Characterization/${getCharacterizationName(subsystemForm.name)}/`;
     if (status === "connected" || status === "connecting") {
-      clientRef.current.watchPrefix(prefix, upsertTopic);
+      clientRef.current.watchPrefix(prefix, upsertLiveTopic);
     }
   }
 

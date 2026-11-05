@@ -1,10 +1,13 @@
 import type { ConstantRow, ConstantsFile } from "../features/constants/types";
+import type { NtWireSnapshot } from "../networktables/useMcpTelemetry";
 export {};
 
 declare global {
   interface Window {
     powerlib?: {
       platform: NodeJS.Platform;
+      readNt4: (host: string | null, port: number, watches: Record<string, string[]>) =>
+        Promise<NtWireSnapshot[] | null>;
       readConstants: () => Promise<ConstantsFile[]>;
       saveConstants: (id: string, source: string, constants: ConstantRow[]) => Promise<ConstantsFile>;
       readSubsystems: () => Promise<{

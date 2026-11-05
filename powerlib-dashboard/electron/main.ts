@@ -7,12 +7,19 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { readConstantsFiles, saveConstantsFile } from "./constantsFiles.js";
 import { generatedJsonPath } from "./projectPaths.js";
+import { startNt4McpServer } from "./nt4McpServer.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const execFileAsync = promisify(execFile);
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
+let nt4McpServer: ReturnType<typeof startNt4McpServer> = null;
+
+ipcMain.handle("powerlib:read-nt4", (event, host: string | null, port: number, watches: Record<string, string[]>) => {
+  if (event.senderFrame !== event.sender.mainFrame) return null;
+  return nt4McpServer?.read(host, port, watches) ?? null;
+});
 
 function createAppMenu(window: BrowserWindow) {
   const template: Electron.MenuItemConstructorOptions[] = [
@@ -490,6 +497,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  nt4McpServer = startNt4McpServer(app.getAppPath(), app.isPackaged);
   createWindow();
 
   app.on("activate", () => {
@@ -502,5 +510,9 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
+  } else {
+    void nt4McpServer?.read(null, 0, {});
   }
 });
+
+app.on("will-quit", () => nt4McpServer?.stop());
