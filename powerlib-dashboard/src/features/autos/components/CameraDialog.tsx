@@ -24,9 +24,9 @@ export function CameraDialog({ open, cameras, robotCameraNames, onChange, onClos
   const update = (id: string, patch: Partial<CameraMount>) => onChange(cameras.map(camera => camera.id === id ? { ...camera, ...patch } : camera));
   const missing = robotCameraNames.filter(name => !cameras.some(camera => camera.name === name));
 
-  return <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+  return <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth slotProps={{ paper: { className: "ab-dialog" } }}>
     <DialogTitleBar onClose={onClose}>Cameras</DialogTitleBar>
-    <DialogContent>
+    <DialogContent className="ab-dialog-body">
       <Stack spacing={2}>
         <Typography variant="body2" color="text.secondary">
           Where each Limelight sits on the robot, measured from the robot's center: X forward, Y left, Z up from the carpet.
