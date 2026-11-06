@@ -6,12 +6,13 @@
  * Where a shape carries AprilTags, its height is anchored to the tag centers in the WPILib layout
  * (which `npm run check:fields` checks): the hub's tags sit at 1.124 m and the trench bar's at
  * 0.889 m, so each must reach at least that high. The rest are rounded estimates from the game
- * manual's figures, and only matter for sight lines, never for the autos themselves.
+ * manual's figures. Elements that reach the carpet also count as obstacles for the Auto Builder's
+ * collision warnings (autoCollisions.ts).
  */
 import type { DrawingElement, DrawingRect } from "./rebuiltDrawing";
 
-/** A box that blocks sight lines, in field coordinates and meters. */
-export type Occluder = { element: DrawingElement; x0: number; x1: number; y0: number; y1: number; z0: number; z1: number };
+/** A box that blocks sight lines, in field coordinates and meters. `label` names it in warnings, such as "the blue hub". */
+export type Occluder = { element: DrawingElement; label?: string; x0: number; x1: number; y0: number; y1: number; z0: number; z1: number };
 
 /**
  * The height band each shape fills. Shapes left out are zones, tape or ramps that a camera can see
@@ -30,11 +31,16 @@ const heights: Partial<Record<DrawingElement, { z0: number; z1: number }>> = {
   towerRung: { z0: 1.5, z1: 1.55 }
 };
 
+const names: Partial<Record<DrawingElement, string>> = {
+  hub: "hub", trenchBar: "trench bar", trenchPost: "trench post", towerUpright: "tower upright", towerRung: "tower rung"
+};
+
 /** The drawing's shapes as sight-line blockers. The tower itself is open framing, so only its parts count. */
 export function fieldOccluders(drawing: DrawingRect[]): Occluder[] {
   return drawing.flatMap(shape => {
     const band = heights[shape.element];
-    return band ? [{ element: shape.element, x0: shape.x, x1: shape.x + shape.length,
+    const name = names[shape.element] ?? shape.element;
+    return band ? [{ element: shape.element, label: shape.alliance ? `the ${shape.alliance} ${name}` : `the ${name}`, x0: shape.x, x1: shape.x + shape.length,
       y0: shape.y, y1: shape.y + shape.width, ...band }] : [];
   });
 }

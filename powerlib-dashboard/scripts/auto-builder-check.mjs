@@ -19,6 +19,7 @@ const prematch = await load("../src/features/drive/preMatch.ts");
 const speed = await load("../src/features/autos/autoLimits.ts");
 const sight = await load("../src/features/autos/autoVision.ts");
 const obstacles = await load("../src/features/field/fieldObstacles.ts");
+const collisions = await load("../src/features/autos/autoCollisions.ts");
 const edits = await load("../src/features/autos/autoEdits.ts");
 const routing = await load("../src/features/autos/autoRoute.ts");
 const keys = await load("../src/features/autos/autoKeys.ts");
@@ -585,6 +586,29 @@ assert.ok(tagRoute.blindSeconds > 0 && tagRoute.longestBlind, "Driving away from
 assert.ok(tagRoute.longestBlind.end - tagRoute.longestBlind.start <= tagRoute.blindSeconds + 1e-9);
 assert.equal(sight.routeVision(tagReplay, [camera({ enabled: false })], blueHubTags, [], sightLimits).spans.length, 0, "A camera switched off sees nothing");
 assert.ok(sight.fixAt(tagRoute, 0).t === 0 && sight.fixAt(tagRoute, 1e6).t <= tagReplay.duration);
+
+// Collisions: the bumper rectangle at its replayed heading against elements that reach the carpet.
+const rebuiltBoxes = obstacles.fieldOccluders(drawing.rebuiltDrawing);
+const bumpers = { width: 0.914, length: 0.914 };
+const legHits = (steps, footprint = bumpers, boxes = rebuiltBoxes) =>
+  collisions.collisionIssues(replay.replayAuto({ ...auto, clearRequestsAtEnd: false, steps }), footprint, boxes);
+assert.ok(rebuiltBoxes.some(box => box.label === "the blue hub") && rebuiltBoxes.some(box => box.label === "the red trench post"), "Elements are named for warnings");
+assert.ok(!collisions.groundObstacles(rebuiltBoxes).some(box => box.element === "trenchBar" || box.element === "towerRung"),
+  "Overhead elements, like the bar robots drive under, don't block driving");
+const throughHub = legHits([drive({ id: "c1", x: 2, y: 4.03 }), drive({ id: "c2", x: 7, y: 4.03 })]);
+assert.deepEqual(throughHub.map(issue => issue.stepId), ["c2"], "Only the leg that drives through the hub is warned about");
+assert.match(throughHub[0].message, /may hit the blue hub/);
+const lane = drawing.rebuiltDrawing.find(shape => shape.element === "trench" && shape.alliance === "blue" && shape.y === 0);
+const laneY = lane.width / 2;
+assert.deepEqual(legHits([drive({ id: "t1", x: 2, y: laneY }), drive({ id: "t2", x: 7, y: laneY })]), [],
+  "A 36 in robot driving straight down the trench lane fits");
+const turnedInLane = legHits([drive({ id: "t1", x: 2, y: laneY, heading: 45 }), drive({ id: "t2", x: 7, y: laneY, heading: 45 })]);
+assert.match(turnedInLane[0]?.message ?? "", /the blue trench post/, "Turned 45 degrees in the lane, its corners reach the post");
+assert.deepEqual(legHits([drive({ id: "c1", x: 2, y: 4.03 }), drive({ id: "c2", x: 7, y: 4.03 })], bumpers, []), [], "No field layout, no warnings");
+const box = { element: "hub", x0: 1, x1: 2, y0: 0, y1: 1, z0: 0, z1: 1 };
+assert.equal(collisions.robotOverlaps({ width: 1, length: 1 }, { x: 0.5, y: 0.5, heading: 0 }, box), false, "Touching an edge isn't a hit");
+assert.equal(collisions.robotOverlaps({ width: 1, length: 1 }, { x: 0.6, y: 0.5, heading: 0 }, box), true);
+assert.equal(collisions.robotOverlaps({ width: 1, length: 1 }, { x: 0.4, y: 0.5, heading: 45 }, box), true, "A turned robot reaches further");
 
 // Saved cameras survive a round trip, and a broken one falls back instead of blinding the view.
 const cameraDoc = { version: 1, periodSeconds: 20, points: [], autos: [], cameras: [camera({ id: "left", name: "limelight-left", yaw: 12 })] };

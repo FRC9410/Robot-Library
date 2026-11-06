@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { FieldLayout } from "../field/fieldLayouts";
 import { fieldOccluders } from "../field/fieldObstacles";
+import { collisionIssues } from "./autoCollisions";
 import type { AutoDocument, AutoProject, AutoRoutine, BranchChoices } from "./autoModel";
 import { createAuto, mirroredAuto, routeSteps, validateAutos } from "./autoModel";
 import { drivetrainLimits, speedReport } from "./autoLimits";
@@ -50,9 +51,12 @@ export function useAutoAnalysis({ document, auto, files, field, layout, showMirr
   const vision = useMemo(() => showTags && layout && document.cameras.some(camera => camera.enabled)
     ? routeVision(replay, document.cameras, layout.tags, occluders, visionLimits) : null,
   [showTags, layout, document.cameras, replay, occluders, visionLimits]);
+  // Collisions: the robot's bumpers against the field layout's solid elements along the replay.
+  const collisions = useMemo(() => collisionIssues(replay, files.robot, occluders), [replay, files.robot, occluders]);
   const stateColor = useMemo(() => stateColorFor(files.states), [files.states]);
-  // Speed warnings come from the auto on the field, which may be the mirrored copy; its steps keep their ids.
-  const autoIssues = auto ? [...issues.filter(issue => issue.autoId === auto.id), ...(speed?.issues ?? []).map(issue => ({ ...issue, autoId: auto.id }))] : [];
+  // Speed and collision warnings come from the auto on the field, which may be the mirrored copy; its steps keep their ids.
+  const autoIssues = auto ? [...issues.filter(issue => issue.autoId === auto.id),
+    ...[...(speed?.issues ?? []), ...collisions].map(issue => ({ ...issue, autoId: auto.id }))] : [];
 
   return { project, issues, mirror, viewingMirror, shownAuto, routeAuto, ghosts, ...numbering, replay, durations, autoDurations, drivetrain, speed,
     visionLimits, vision, stateColor, autoIssues };
