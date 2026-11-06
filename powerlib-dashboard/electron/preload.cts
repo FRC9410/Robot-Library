@@ -31,6 +31,10 @@ contextBridge.exposeInMainWorld("powerlib", {
     ipcRenderer.on("powerlib:menu-update-power-tool", callback);
     return () => ipcRenderer.removeListener("powerlib:menu-update-power-tool", callback);
   },
+  onMenuAutoShortcuts: (callback: () => void) => {
+    ipcRenderer.on("powerlib:menu-auto-shortcuts", callback);
+    return () => ipcRenderer.removeListener("powerlib:menu-auto-shortcuts", callback);
+  },
   onMenuFieldLayout: (callback: (_event: unknown, id: string) => void) => {
     ipcRenderer.on("powerlib:menu-field-layout", callback);
     return () => ipcRenderer.removeListener("powerlib:menu-field-layout", callback);

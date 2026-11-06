@@ -44,6 +44,7 @@ import { UpdateCodeDialog } from "./features/subsystems/components/UpdateCodeDia
 import { NetworkTablesPanel } from "./features/networktables/NetworkTablesPanel";
 import { NetworkTablesProvider, useNetworkTables, useTopics } from "./features/networktables/NetworkTablesContext";
 import { ConnectionSettingsDialog } from "./features/networktables/ConnectionSettingsDialog";
+import { ShortcutsDialog } from "./features/autos/components/ShortcutsDialog";
 import { tuningModeRequestTopicName, tuningModeTopicName } from "./features/networktables/tuningUtils";
 import { RobotPanel } from "./features/robot/RobotPanel";
 import { DashboardPanel } from "../dashboard";
@@ -117,6 +118,7 @@ function AppContent() {
   const [deleteSubsystemIndex, setDeleteSubsystemIndex] = useState<number | null>(null);
   const [characterizationOpen, setCharacterizationOpen] = useState(false);
   const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(false);
+  const [autoShortcutsOpen, setAutoShortcutsOpen] = useState(false);
   const [desiredTuningMode, setDesiredTuningMode] = useState<boolean | null>(null);
   const tuningSyncRef = useRef<TuningModeSync | null>(null);
   if (tuningSyncRef.current === null) {
@@ -512,6 +514,9 @@ function AppContent() {
     const removeUpdatePowerTool = window.powerlib?.onMenuUpdatePowerTool?.(() => {
       void updatePowerToolRef.current();
     });
+    const removeAutoShortcuts = window.powerlib?.onMenuAutoShortcuts?.(() => {
+      setAutoShortcutsOpen(true);
+    });
     const removeFieldLayout = window.powerlib?.onMenuFieldLayout?.((_event, id) => {
       setFieldLayoutId(id);
     });
@@ -523,6 +528,7 @@ function AppContent() {
       removeUpdateSubsystemCode?.();
       removeUpdateInstallSection?.();
       removeUpdatePowerTool?.();
+      removeAutoShortcuts?.();
       removeFieldLayout?.();
     };
   }, []);
@@ -688,6 +694,9 @@ function AppContent() {
           showToast("Saved NetworkTables connection settings.", "success");
         }}
       />
+
+      {/* Help → Auto Builder Keyboard Shortcuts opens it from any tab. */}
+      <ShortcutsDialog open={autoShortcutsOpen} onClose={() => setAutoShortcutsOpen(false)} />
 
       <DeleteSubsystemDialog
         open={deleteSubsystemIndex !== null}

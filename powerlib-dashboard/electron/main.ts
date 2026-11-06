@@ -97,7 +97,13 @@ function createAppMenu(window: BrowserWindow) {
     },
     {
       label: "Help",
-      submenu: []
+      submenu: [
+        {
+          // No accelerator: "?" must still type in text fields. The Autos tab opens it with "?" itself.
+          label: "Auto Builder Keyboard Shortcuts",
+          click: () => window.webContents.send("powerlib:menu-auto-shortcuts")
+        }
+      ]
     }
   ];
 
