@@ -6,6 +6,26 @@ import { generatedJsonPath } from "./projectPaths.js";
 // Keep in sync with src/features/autos/autoModel.ts, which generates the Java source.
 const generatedHeader = "// POWERLIB GENERATED AUTOS - DO NOT EDIT";
 const autosJson = "powerlib-autos.json";
+
+/**
+ * The newest powerlib-autos.json format this Power Tool understands. Raise it (here and as
+ * autosFileVersion in src/features/autos/autoModel.ts) whenever older copies would lose something
+ * by reading and saving the file, such as a new step type. A file with a higher number is never
+ * written over: an older Power Tool would silently drop what it doesn't understand.
+ * Files without a version, and version 1, are from before this check.
+ */
+export const autosFileVersion = 2;
+
+/** The format version a saved document says it has; 1 when it has none. */
+export function autosFileVersionOf(document: unknown) {
+  const version = document && typeof document === "object" ? (document as { version?: unknown }).version : undefined;
+  return typeof version === "number" && Number.isInteger(version) && version > 0 ? version : 1;
+}
+
+export function newerAutosFileMessage(version: number) {
+  return `${autosJson} was saved by a newer Power Tool (file version ${version}; this one understands up to ${autosFileVersion}). `
+    + "Update Power Tool (File → Update Power Tool) before changing autos, or the newer parts would be lost.";
+}
 const javaRoot = (robotRoot: string) => path.join(robotRoot, "src", "main", "java", "frc", "robot");
 
 export type AutoFilesState = {
@@ -208,7 +228,7 @@ export async function readAutoFiles(robotRoot: string): Promise<AutoFilesState> 
   ]);
   const state: AutoFilesState = {
     path: jsonPath,
-    document: { version: 1, autos: [] },
+    document: { version: autosFileVersion, autos: [] },
     states: stateMachine ? parseRobotStates(stateMachine) : [],
     driveCommandInstalled,
     robotAutosHooked: robotAutos ? hasGeneratedAutosHook(robotAutos) : null,
@@ -221,7 +241,11 @@ export async function readAutoFiles(robotRoot: string): Promise<AutoFilesState> 
   };
   if (json !== null) {
     try {
-      state.document = JSON.parse(json.replace(/^﻿/, ""));
+      const document: unknown = JSON.parse(json.replace(/^﻿/, ""));
+      const version = autosFileVersionOf(document);
+      // Show nothing from a newer file, so nothing can be edited and saved back without its newer parts.
+      if (version > autosFileVersion) state.error = newerAutosFileMessage(version);
+      else state.document = document;
     } catch (error) {
       state.error = `Could not read ${autosJson}: ${error instanceof Error ? error.message : String(error)}`;
     }
@@ -233,11 +257,26 @@ function requireDocument(document: unknown) {
   if (!document || typeof document !== "object" || !Array.isArray((document as { autos?: unknown }).autos)) {
     throw new Error("Invalid auto document.");
   }
+  const version = autosFileVersionOf(document);
+  if (version > autosFileVersion) throw new Error(newerAutosFileMessage(version));
   return `${JSON.stringify(document, null, 2)}\n`;
 }
 
+/** Throws when the saved file is from a newer Power Tool, whatever the page sends. */
+async function refuseNewerFile(jsonPath: string) {
+  const saved = await readOptional(jsonPath);
+  if (saved === null) return;
+  let document: unknown;
+  try { document = JSON.parse(saved.replace(/^﻿/, "")); } catch { return; }
+  const version = autosFileVersionOf(document);
+  if (version > autosFileVersion) throw new Error(newerAutosFileMessage(version));
+}
+
 export async function saveAutoFiles(robotRoot: string, document: unknown) {
-  await replaceFile(await generatedJsonPath(robotRoot, autosJson), requireDocument(document));
+  const jsonPath = await generatedJsonPath(robotRoot, autosJson);
+  const json = requireDocument(document);
+  await refuseNewerFile(jsonPath);
+  await replaceFile(jsonPath, json);
   return readAutoFiles(robotRoot);
 }
 
@@ -257,7 +296,9 @@ export async function updateAutoCode(robotRoot: string, document: unknown, javaS
     throw new Error("GeneratedAutos.java was not written by Power Tool. Rename it before updating auto code.");
   }
   const hooked = addGeneratedAutosHook(robotAutos);
-  await replaceFile(await generatedJsonPath(robotRoot, autosJson), json);
+  const jsonPath = await generatedJsonPath(robotRoot, autosJson);
+  await refuseNewerFile(jsonPath);
+  await replaceFile(jsonPath, json);
   await replaceFile(generatedPath, javaSource);
   if (hooked !== robotAutos) await replaceFile(robotAutosPath, hooked);
   return { generatedPath, hookAdded: hooked !== robotAutos, state: await readAutoFiles(robotRoot) };

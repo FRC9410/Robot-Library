@@ -351,7 +351,7 @@ assert.deepEqual(shape(model.filterSteps(branchSteps, step => step.id !== "o1"))
 assert.deepEqual(model.outermostSteps(branchSteps, ["s2", "t1", "b"]).map(step => step.id), ["b", "s2"], "A selected branch carries its steps");
 
 // Code: a branch waits for its condition if asked, then Commands.either runs one side.
-const branchDoc = { version: 1, periodSeconds: 20, points: [], cameras: [], autos: [{ ...auto, isDefault: false, steps: [
+const branchDoc = { version: 2, periodSeconds: 20, points: [], cameras: [], autos: [{ ...auto, isDefault: false, steps: [
   drive({ id: "s1", x: 1, y: 1 }),
   branch({ condition: { kind: "state", state: "SHOOT", waitSeconds: 0.5 },
     then: [{ id: "r1", type: "requestState", state: "INTAKE" }, drive({ id: "t1", x: 3, y: 1 }), { id: "r2", type: "requestState", state: "IDLE" }] }),
@@ -416,6 +416,23 @@ const linkedBranch = model.setNamedPoint({ version: 1, periodSeconds: 20, points
   { id: "p", name: "P", x: 2, y: 2, heading: 45 });
 assert.equal(linkedBranch.autos[0].steps[0].then[0].heading, 45, "Named points move linked steps inside branches");
 assert.deepEqual(model.parseAutoDocument(JSON.parse(JSON.stringify(branchDoc))), branchDoc, "Branches round-trip through the saved file");
+
+// File versions: older files come in as the current version, and fields a newer copy wrote survive a save.
+assert.equal(model.autosFileVersion, files.autosFileVersion, "autoModel.ts and autoFiles.ts agree on the file version");
+assert.equal(model.parseAutoDocument({ version: 1, autos: [] }).version, model.autosFileVersion);
+assert.equal(model.emptyDocument().version, model.autosFileVersion);
+const futureDoc = { version: 2, periodSeconds: 20, futureTop: { keep: true }, cameras: [{ ...model.newCamera("limelight"), id: "cam", lensModel: "fisheye" }],
+  points: [{ id: "p", name: "P", x: 1, y: 1, heading: 0, color: "teal" }],
+  autos: [{ ...auto, isDefault: false, notes: "practice field only", symmetry: { flipX: false, flipY: false, pivot: "center" }, steps: [
+    drive({ id: "f1", speedProfile: "gentle", turn: { mode: "face", x: 2, y: 2, pointId: null, lead: 0.2 },
+      subpoints: [{ id: "s", progress: 0.5, state: "INTAKE", style: "pulse" }] }),
+    { id: "f2", type: "wait", seconds: 1, label: "settle" },
+    { id: "f3", type: "branch", condition: { kind: "state", state: "SHOOT", waitSeconds: 0, invert: false }, then: [], otherwise: [], color: "red" }
+  ] }] };
+assert.deepEqual(model.parseAutoDocument(JSON.parse(JSON.stringify(futureDoc))), futureDoc,
+  "Fields this Power Tool doesn't know are kept at every level, so saving never drops them");
+const edited = model.parseAutoDocument(futureDoc);
+assert.equal(model.setNamedPoint(edited, { id: "p", name: "P", x: 3, y: 3, heading: 0, color: "teal" }).points[0].color, "teal");
 assert.deepEqual(files.parseRobotChecks("public boolean hasFuel() {}\n// public boolean old() {}\npublic static boolean util() {}\npublic boolean hasRequest(RobotState s) {}\npublic final boolean isAligned( ) {}"),
   ["hasFuel", "isAligned"], "Robot checks are StateMachine's public boolean methods with no arguments");
 
@@ -611,7 +628,7 @@ assert.equal(collisions.robotOverlaps({ width: 1, length: 1 }, { x: 0.6, y: 0.5,
 assert.equal(collisions.robotOverlaps({ width: 1, length: 1 }, { x: 0.4, y: 0.5, heading: 45 }, box), true, "A turned robot reaches further");
 
 // Saved cameras survive a round trip, and a broken one falls back instead of blinding the view.
-const cameraDoc = { version: 1, periodSeconds: 20, points: [], autos: [], cameras: [camera({ id: "left", name: "limelight-left", yaw: 12 })] };
+const cameraDoc = { version: 2, periodSeconds: 20, points: [], autos: [], cameras: [camera({ id: "left", name: "limelight-left", yaw: 12 })] };
 assert.deepEqual(model.parseAutoDocument(JSON.parse(JSON.stringify(cameraDoc))), cameraDoc, "Cameras round-trip through the saved file");
 const patched = model.parseAutoDocument({ autos: [], cameras: [{ name: "Odd", hFov: 0, imageWidth: -5, x: "no" }] }).cameras[0];
 assert.ok(patched.hFov > 0 && patched.imageWidth > 0 && Number.isFinite(patched.x) && patched.enabled);
@@ -670,6 +687,23 @@ try {
   await assert.rejects(files.updateAutoCode(robotRoot, document, "class GeneratedAutos {}"), /Invalid generated auto source/);
   await fs.writeFile(path.join(autosDirectory, "GeneratedAutos.java"), "public final class GeneratedAutos {}\n");
   await assert.rejects(files.updateAutoCode(robotRoot, document, java), /was not written by Power Tool/);
+
+  // A file from a newer Power Tool is shown as an error and never written over, whatever the page sends.
+  const jsonPath = path.join(robotRoot, "power-tool", "generated", "powerlib-autos.json");
+  const newer = JSON.stringify({ version: files.autosFileVersion + 1, autos: [{ id: "n", name: "From the future", steps: [] }] });
+  await fs.writeFile(jsonPath, newer);
+  const newerState = await files.readAutoFiles(robotRoot);
+  assert.match(newerState.error ?? "", /saved by a newer Power Tool \(file version 3; this one understands up to 2\)/);
+  assert.deepEqual(newerState.document.autos, [], "Nothing from a newer file is handed to the page to edit");
+  await assert.rejects(files.saveAutoFiles(robotRoot, document), /saved by a newer Power Tool/);
+  await fs.writeFile(path.join(autosDirectory, "GeneratedAutos.java"), java);
+  await assert.rejects(files.updateAutoCode(robotRoot, document, java), /saved by a newer Power Tool/);
+  assert.equal(await fs.readFile(jsonPath, "utf8"), newer, "The newer file is untouched");
+  await fs.writeFile(jsonPath, JSON.stringify({ version: 1, autos: [] }));
+  await assert.rejects(files.saveAutoFiles(robotRoot, { version: files.autosFileVersion + 1, autos: [] }), /saved by a newer Power Tool/,
+    "A document claiming a newer version isn't written either");
+  await files.saveAutoFiles(robotRoot, { ...document, version: files.autosFileVersion });
+  assert.equal(JSON.parse(await fs.readFile(jsonPath, "utf8")).version, files.autosFileVersion, "Version 1 files are written over as the current version");
 } finally {
   await fs.rm(robotRoot, { recursive: true, force: true });
 }

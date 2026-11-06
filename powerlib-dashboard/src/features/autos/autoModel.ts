@@ -89,7 +89,15 @@ export type CameraMount = {
 };
 
 /** `periodSeconds` is the autonomous period the replay timeline marks (20 s in 2026 REBUILT). */
-export type AutoDocument = { version: 1; periodSeconds: number; points: NamedPoint[]; cameras: CameraMount[]; autos: AutoRoutine[] };
+/**
+ * The powerlib-autos.json format version. Keep in step with autosFileVersion in electron/autoFiles.ts,
+ * which refuses to write over a file with a higher number. Raise both when older copies would lose
+ * something by reading and saving the file, such as a new step type; new fields older copies can
+ * ignore don't need it, since parseAutoDocument keeps fields it doesn't know.
+ */
+export const autosFileVersion = 2;
+
+export type AutoDocument = { version: typeof autosFileVersion; periodSeconds: number; points: NamedPoint[]; cameras: CameraMount[]; autos: AutoRoutine[] };
 export const defaultPeriodSeconds = 20;
 
 /** A new camera, pointed straight ahead. The field of view matches a Limelight 3G or 4 (80° × 56°). */
@@ -123,7 +131,7 @@ export const defaultConstraints: LegConstraints = { maxVelocity: 3, maxAccelerat
 export const constraintKeys = Object.keys(defaultConstraints) as (keyof LegConstraints)[];
 export const noSymmetry: Symmetry = { flipX: false, flipY: false };
 
-export const emptyDocument = (): AutoDocument => ({ version: 1, periodSeconds: defaultPeriodSeconds, points: [], cameras: [], autos: [] });
+export const emptyDocument = (): AutoDocument => ({ version: autosFileVersion, periodSeconds: defaultPeriodSeconds, points: [], cameras: [], autos: [] });
 /** The robot's default drive-to-point turn rate (π rad/s), used when a leg has no limit of its own. */
 export const defaultTurnRate = 180;
 
@@ -378,7 +386,18 @@ export function mirroredAuto(auto: AutoRoutine, field: AutoProject["field"]): Au
     isDefault: false, symmetry: { ...noSymmetry }, steps: flipSteps(auto.steps, auto.symmetry, field) };
 }
 
-/** Reads a saved document defensively; unknown fields are dropped, missing ones get defaults. */
+/**
+ * Fields a saved object has that this Power Tool doesn't know, kept so saving never drops what a newer
+ * copy wrote. Each parser spreads them first and then sets the fields it knows.
+ */
+function extras(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+/**
+ * Reads a saved document defensively: missing fields get defaults, and fields it doesn't know are
+ * kept as they are. Unknown step types are dropped, which is why a new one needs a new file version.
+ */
 export function parseAutoDocument(value: unknown): AutoDocument {
   if (!value || typeof value !== "object" || !Array.isArray((value as { autos?: unknown }).autos)) return emptyDocument();
   const autos: AutoRoutine[] = [];
@@ -392,12 +411,13 @@ export function parseAutoDocument(value: unknown): AutoDocument {
     }
     const symmetry = auto.symmetry && typeof auto.symmetry === "object" ? auto.symmetry as Record<string, unknown> : {};
     autos.push({
+      ...auto,
       id: typeof auto.id === "string" && auto.id ? auto.id : createId(),
       name: typeof auto.name === "string" ? auto.name : "",
       alliance: auto.alliance === "Blue" || auto.alliance === "Red" ? auto.alliance : null,
       isDefault: auto.isDefault === true,
       clearRequestsAtEnd: auto.clearRequestsAtEnd !== false,
-      symmetry: { flipX: symmetry.flipX === true, flipY: symmetry.flipY === true },
+      symmetry: { ...symmetry, flipX: symmetry.flipX === true, flipY: symmetry.flipY === true },
       steps
     });
   }
@@ -409,7 +429,7 @@ export function parseAutoDocument(value: unknown): AutoDocument {
     const coordinate = (key: string) => typeof point[key] === "number" ? point[key] as number : Number.NaN;
     // A point without a usable spot would move its linked steps off the field, so it is dropped.
     if (!Number.isFinite(coordinate("x")) || !Number.isFinite(coordinate("y"))) return [];
-    return [{ id: typeof point.id === "string" && point.id ? point.id : createId(), name: typeof point.name === "string" ? point.name : "Point",
+    return [{ ...point, id: typeof point.id === "string" && point.id ? point.id : createId(), name: typeof point.name === "string" ? point.name : "Point",
       x: coordinate("x"), y: coordinate("y"), heading: typeof point.heading === "number" ? point.heading : 0 }];
   });
   // Links to a missing point are dropped; linked steps are brought in line with their point.
@@ -419,7 +439,7 @@ export function parseAutoDocument(value: unknown): AutoDocument {
     pointId: step.pointId && ids.has(step.pointId) ? step.pointId : null,
     turn: step.turn.mode === "face" && step.turn.pointId && !ids.has(step.turn.pointId) ? { ...step.turn, pointId: null } : step.turn
   }) }));
-  const document: AutoDocument = { version: 1, periodSeconds: typeof period === "number" && Number.isFinite(period) && period > 0 ? period : defaultPeriodSeconds,
+  const document: AutoDocument = { ...extras(value), version: autosFileVersion, periodSeconds: typeof period === "number" && Number.isFinite(period) && period > 0 ? period : defaultPeriodSeconds,
     points, cameras: parseCameras((value as { cameras?: unknown }).cameras), autos: linked };
   return points.reduce(setNamedPoint, document);
 }
@@ -434,6 +454,8 @@ function parseCameras(value: unknown): CameraMount[] {
       typeof saved[key] === "number" && Number.isFinite(saved[key]) ? saved[key] as number : fallback[key] as number;
     return [{
       ...fallback,
+      ...saved,
+      name: fallback.name,
       id: typeof saved.id === "string" && saved.id ? saved.id : fallback.id,
       x: number("x"), y: number("y"), z: number("z"), yaw: number("yaw"), pitch: number("pitch"),
       // A zero or negative field of view would see nothing at all, so it falls back too.
@@ -449,17 +471,17 @@ function parseTurn(value: unknown): LegTurn {
   if (!value || typeof value !== "object") return { mode: "now" };
   const turn = value as Record<string, unknown>;
   const number = (key: string) => typeof turn[key] === "number" ? turn[key] as number : Number.NaN;
-  if (turn.mode === "later") return { mode: "later", startProgress: number("startProgress") };
-  if (turn.mode === "face") return { mode: "face", x: number("x"), y: number("y"), pointId: typeof turn.pointId === "string" && turn.pointId ? turn.pointId : null };
-  return { mode: "now" };
+  if (turn.mode === "later") return { ...turn, mode: "later", startProgress: number("startProgress") };
+  if (turn.mode === "face") return { ...turn, mode: "face", x: number("x"), y: number("y"), pointId: typeof turn.pointId === "string" && turn.pointId ? turn.pointId : null };
+  return { ...turn, mode: "now" };
 }
 
 function parseCondition(value: unknown): BranchCondition {
   const condition = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const number = (key: string, fallback = Number.NaN) => typeof condition[key] === "number" ? condition[key] as number : fallback;
-  if (condition.kind === "timeLeft") return { kind: "timeLeft", seconds: number("seconds") };
-  if (condition.kind === "check") return { kind: "check", method: typeof condition.method === "string" ? condition.method : "", waitSeconds: number("waitSeconds", 0) };
-  return { kind: "state", state: typeof condition.state === "string" ? condition.state : "", waitSeconds: number("waitSeconds", 0) };
+  if (condition.kind === "timeLeft") return { ...condition, kind: "timeLeft", seconds: number("seconds") };
+  if (condition.kind === "check") return { ...condition, kind: "check", method: typeof condition.method === "string" ? condition.method : "", waitSeconds: number("waitSeconds", 0) };
+  return { ...condition, kind: "state", state: typeof condition.state === "string" ? condition.state : "", waitSeconds: number("waitSeconds", 0) };
 }
 
 function parseStep(value: unknown): AutoStep | null {
@@ -469,24 +491,24 @@ function parseStep(value: unknown): AutoStep | null {
   const number = (key: string, fallback = Number.NaN) => typeof step[key] === "number" ? step[key] as number : fallback;
   const state = typeof step.state === "string" ? step.state : "";
   switch (step.type) {
-    case "drive": return { id, type: "drive", x: number("x"), y: number("y"), heading: number("heading"),
+    case "drive": return { ...step, id, type: "drive", x: number("x"), y: number("y"), heading: number("heading"),
       subpoints: (Array.isArray(step.subpoints) ? step.subpoints : []).flatMap((raw: unknown) => {
         if (!raw || typeof raw !== "object") return [];
         const subpoint = raw as Record<string, unknown>;
-        return [{ id: typeof subpoint.id === "string" && subpoint.id ? subpoint.id : createId(),
+        return [{ ...subpoint, id: typeof subpoint.id === "string" && subpoint.id ? subpoint.id : createId(),
           progress: typeof subpoint.progress === "number" ? subpoint.progress : Number.NaN,
           state: typeof subpoint.state === "string" ? subpoint.state : "" }];
       }),
       turn: parseTurn(step.turn), pointId: typeof step.pointId === "string" && step.pointId ? step.pointId : null,
       maxTurnRate: typeof step.maxTurnRate === "number" ? step.maxTurnRate : null,
       ...Object.fromEntries(constraintKeys.map(key => [key, number(key, defaultConstraints[key])])) as LegConstraints };
-    case "requestState": return { id, type: "requestState", state };
-    case "waitForState": return { id, type: "waitForState", state, replaySeconds: number("replaySeconds", 0.5),
+    case "requestState": return { ...step, id, type: "requestState", state };
+    case "waitForState": return { ...step, id, type: "waitForState", state, replaySeconds: number("replaySeconds", 0.5),
       timeoutSeconds: step.timeoutSeconds === null || step.timeoutSeconds === undefined ? null : number("timeoutSeconds") };
-    case "wait": return { id, type: "wait", seconds: number("seconds") };
+    case "wait": return { ...step, id, type: "wait", seconds: number("seconds") };
     case "branch": {
       const arm = (key: string) => (Array.isArray(step[key]) ? step[key] as unknown[] : []).flatMap(raw => parseStep(raw) ?? []);
-      return { id, type: "branch", condition: parseCondition(step.condition), then: arm("then"), otherwise: arm("otherwise") };
+      return { ...step, id, type: "branch", condition: parseCondition(step.condition), then: arm("then"), otherwise: arm("otherwise") };
     }
     default: return null;
   }

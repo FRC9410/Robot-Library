@@ -34,6 +34,8 @@ export async function writeGeneratedAutos(): Promise<string | null> {
   if (!api?.readAutos) return null;
   await pendingSave?.();
   const state = await api.readAutos();
+  // A file Power Tool couldn't read, or one from a newer Power Tool, is never regenerated from.
+  if (state.error) throw new Error(`Autos not written: ${state.error}`);
   const document = parseAutoDocument(state.document);
   if (!document.autos.length && state.robotAutosHooked !== false) return null;
   const project = autoProject(state);
