@@ -49,7 +49,7 @@ export function AutoBuilderPanel() {
             recording={run !== undefined && run === runs.recording} showRun={runs.showActual} robotConnected={Boolean(builder.livePose)}
             showTags={builder.showTags} tagsAvailable={builder.layout !== null} onView={builder.setView} onShowMirror={builder.showMirrorCopy}
             onToggleRun={runs.toggleActual} onClearRun={runs.clearRun} onPointAtRobot={() => builder.livePose && editor.field.addPointAt(builder.livePose)}
-            onToggleTags={builder.toggleTags} onOpenCameras={() => builder.setCamerasOpen(true)} onOpenShortcuts={() => builder.setShortcutsOpen(true)} />
+            onToggleTags={builder.toggleTags} onOpenCameras={() => builder.setCamerasOpen(true)} />
           <div className="ab-stage">
             {builder.view === "code"
               ? <GeneratedCode document={document} project={analysis.project} />

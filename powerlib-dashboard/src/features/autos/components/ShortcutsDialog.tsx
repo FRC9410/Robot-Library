@@ -11,9 +11,9 @@ type ShortcutsDialogProps = {
 /** Every Auto Builder keyboard shortcut, grouped. */
 export function ShortcutsDialog({ open, onClose }: ShortcutsDialogProps) {
   const groups = [...new Set(autoShortcuts.map(shortcut => shortcut.group))];
-  return <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+  return <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth slotProps={{ paper: { className: "ab-dialog" } }}>
     <DialogTitleBar onClose={onClose}>Auto Builder shortcuts</DialogTitleBar>
-    <DialogContent>
+    <DialogContent className="ab-dialog-body">
       {groups.map(group => <section key={group} className="ab-shortcut-group">
         <Typography variant="overline" color="text.secondary">{group}</Typography>
         {autoShortcuts.filter(shortcut => shortcut.group === group).map(shortcut =>

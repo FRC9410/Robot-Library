@@ -1,5 +1,7 @@
 /* Auto Builder panel layout. Field drawing styles live in autos.css. */
-.ab-root {
+/* The tab's colors, shared with its dialogs, which MUI renders outside .ab-root. */
+.ab-root,
+.ab-dialog {
   /* Neutral lines keep yellow for what's selected; muted text stays readable (about 5:1 on the panes). */
   --ab-line: rgba(255, 255, 255, 0.09);
   --ab-divider: rgba(255, 255, 255, 0.06);
@@ -7,8 +9,12 @@
   --ab-accent: #facc15;
   --ab-scroll-thumb: rgba(255, 255, 255, 0.16);
   --ab-scroll-thumb-hover: rgba(255, 255, 255, 0.3);
+  --ab-pane: #18181b;
   --ab-ease: 180ms ease;
   color-scheme: dark;
+}
+
+.ab-root {
   display: grid;
   /* Columns come from the resizable layout (AutoColumns.tsx); handles sit between them. */
   height: calc(100vh - 150px);
@@ -77,7 +83,7 @@
   overflow: hidden;
   border: 1px solid var(--ab-line);
   border-radius: 8px;
-  background: #18181b;
+  background: var(--ab-pane);
 }
 
 .ab-pane-header {
@@ -108,7 +114,8 @@
  * shifts when it appears, smooth programmatic scrolling, and no scroll chaining to the page.
  */
 .ab-pane-body,
-.ab-code {
+.ab-code,
+.ab-dialog-body {
   scrollbar-width: thin;
   scrollbar-color: var(--ab-scroll-thumb) transparent;
   scroll-behavior: smooth;
@@ -116,8 +123,24 @@
 }
 
 .ab-pane-body:hover,
-.ab-code:hover {
+.ab-code:hover,
+.ab-dialog-body:hover {
   scrollbar-color: var(--ab-scroll-thumb-hover) transparent;
+}
+
+/*
+ * Dialogs look like the tab's panes: MUI's dark-mode elevation would otherwise lighten them. Two
+ * classes, so this wins over MUI's own Paper styles, which it adds to the page after this file.
+ */
+.MuiPaper-root.ab-dialog {
+  border: 1px solid var(--ab-line);
+  background-color: var(--ab-pane);
+  background-image: none;
+}
+
+.ab-dialog-body {
+  scrollbar-gutter: stable;
+  border-top: 1px solid var(--ab-divider);
 }
 
 .ab-pane-body {
