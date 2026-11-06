@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { readConstantsFiles, saveConstantsFile } from "./constantsFiles.js";
 import { readAutoFiles, saveAutoFiles, updateAutoCode } from "./autoFiles.js";
 import { generatedJsonPath } from "./projectPaths.js";
+import { cleanRendererSettings, joinRendererSettings, readRendererSettings, rendererSettingsFileName, writeRendererSettings } from "./rendererSettings.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -109,6 +110,23 @@ function createAppMenu(window: BrowserWindow) {
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
+
+// Page settings shared by the dev server and the built app (see rendererSettings.ts). Sync, because
+// the preload loads them before the page's own code reads localStorage.
+const rendererSettingsFile = () => path.join(app.getPath("userData"), rendererSettingsFileName);
+ipcMain.on("powerlib:settings-read", (event) => {
+  event.returnValue = readRendererSettings(rendererSettingsFile());
+});
+ipcMain.on("powerlib:settings-join", (event, local: unknown) => {
+  try {
+    event.returnValue = joinRendererSettings(rendererSettingsFile(), local);
+  } catch {
+    event.returnValue = null;
+  }
+});
+ipcMain.on("powerlib:settings-write", (_event, settings: unknown) => {
+  try { writeRendererSettings(rendererSettingsFile(), cleanRendererSettings(settings)); } catch { /* The page keeps its own copy. */ }
+});
 
 ipcMain.on("powerlib:set-field-layout-menu", (_event, id: unknown) => {
   const item = Menu.getApplicationMenu()?.getMenuItemById(`field-layout:${id}`);
