@@ -2,10 +2,17 @@ import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 contextBridge.exposeInMainWorld("powerlib", {
   platform: process.platform,
+  showAppMenu: (menuId: string, position: { x: number; y: number }) => ipcRenderer.invoke("powerlib:show-app-menu", menuId, position),
   readConstants: () => ipcRenderer.invoke("powerlib:read-constants"),
   saveConstants: (id: string, source: string, constants: unknown[]) =>
     ipcRenderer.invoke("powerlib:save-constants", id, source, constants),
   readSubsystems: () => ipcRenderer.invoke("powerlib:read-subsystems"),
+  readVisionConfig: () => ipcRenderer.invoke("powerlib:read-vision"),
+  readStateConfig: () => ipcRenderer.invoke("powerlib:read-states"),
+  saveStateConfig: (config: unknown) => ipcRenderer.invoke("powerlib:save-states", config),
+  readLocalizationConfig: () => ipcRenderer.invoke("powerlib:read-localization"),
+  saveLocalizationConfig: (config: unknown) => ipcRenderer.invoke("powerlib:save-localization", config),
+  saveVisionConfig: (vision: unknown) => ipcRenderer.invoke("powerlib:save-vision", vision),
   saveSubsystems: (subsystems: unknown[], swerve?: unknown) =>
     ipcRenderer.invoke("powerlib:save-subsystems", subsystems, swerve),
   updateSubsystemCode: () => ipcRenderer.invoke("powerlib:update-subsystem-code"),
@@ -31,6 +38,10 @@ contextBridge.exposeInMainWorld("powerlib", {
   onMenuConnectionSettings: (callback: () => void) => {
     ipcRenderer.on("powerlib:menu-connection-settings", callback);
     return () => ipcRenderer.removeListener("powerlib:menu-connection-settings", callback);
+  },
+  onMenuToggleNetworkTables: (callback: () => void) => {
+    ipcRenderer.on("powerlib:menu-toggle-network-tables", callback);
+    return () => ipcRenderer.removeListener("powerlib:menu-toggle-network-tables", callback);
   },
   onMenuUpdateSubsystemCode: (callback: () => void) => {
     ipcRenderer.on("powerlib:menu-update-subsystem-code", callback);

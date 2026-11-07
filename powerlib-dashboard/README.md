@@ -36,8 +36,8 @@ Rows appear as matching topic values arrive from NetworkTables.
 
 ## Custom dashboard
 
-The Drive tab renders `dashboard/index.tsx`, which initially re-exports the
-generic Drive dashboard. Customize that entry point and keep all custom
+The Dashboard tab renders `dashboard/index.tsx`, which initially re-exports the
+generic dashboard. Customize that entry point and keep all custom
 components, styles and assets in `dashboard/`. Installs and updates seed this
 folder only when it is missing and preserve an existing folder without merging
 or overwriting any files. The shared application and generic dashboard still
@@ -51,20 +51,103 @@ the thumbnail resumes when another view is selected.
 Published stream addresses are tried in order; a failed request or four
 seconds without a first frame advances to the next address. When all addresses
 fail, the list retries after four seconds. Healthy streams stay connected.
-An explicit stream URL in Crew tools overrides the published addresses; clear it
-to return to automatic discovery.
 
 The Limelights tab embeds each camera's configuration page and provides an Open
 button to launch it in a browser. Both use the automatic `.local:5801` address
 unless a configuration address was previously saved for that camera.
 
+## Configuration
+
+Open **Config** in the dashboard header for the settings modal. Select
+**Subsystems** on the left and expand a subsystem to inspect its read-only
+configuration. The **Edit** action stays in each expander header.
+
+**Add Subsystem** opens a wizard with Basics, Hardware, Controls and Review
+steps. The back arrow returns to settings; Previous returns to an earlier step.
+The final step shows the complete configuration and requires verification before
+saving. Edit uses the same wizard with the existing values prefilled. Saving
+updates the project configuration; use File > Update Code, rebuild and deploy
+to apply it to the robot. Run `npm run check:config` for validation checks.
+
+Select **Field** to change the full field length and width in meters. Save
+dimensions to update the main field and its thumbnail immediately. Dimensions
+must be positive and finite and are saved on this laptop. Reset to defaults
+loads the bundled template dimensions into the form; save to apply them.
+Field dimensions do not change robot calibration or constants.
+
 ## Robot tuning
 
-The Robot tab shows clickable subsystem cards with their live readings. Click a card to open all of its tunables in the side panel; there is no variable selection or separate Tuning/Constants tab. Other constants groups appear after the subsystem cards, including groups discovered from the project's constants files or live NetworkTables variables. Commands with tunables also get their own cards.
+With connected, acknowledged Tuning enabled, mechanism cards gain a glowing
+border, pointer cursor and hover highlight. With Tuning off they remain
+read-only, with no click action or tuning highlight.
+Click an enabled mechanism card on the Dashboard to open its live tuning
+sections: PID kP/kI/kD/kG, feedforward kS/kV/kA, and Motion Magic cruise velocity
+and acceleration. Sections start collapsed. A Sensor section appears when the
+mechanism publishes CANcoder tunables, with magnet offset and discontinuity
+point in rotations. A Custom section appears when that
+mechanism publishes supported values under `Variables/Custom/`; it supports
+numeric, boolean and text tunables. A Position section appears when the robot
+publishes `Position/Default`, with the default position in mechanism rotations.
+Configured `velocityTorque` mechanisms also expose Torque FF in Feedforward,
+using `Feedforward/Torque`; ordinary velocity mechanisms do not show that field.
+Edit values, then Apply; the reset beside a
+field clears its pending edit. Collapsing a section preserves pending edits.
+Editing requires a connected robot and acknowledged Tuning mode. Unpublished
+settings remain unavailable.
+The Drivetrain card uses the same tuning interaction, with 15 settings in
+collapsed Driver, Requests, Drive to Point and Heading PID sections. It reads
+and writes `Subsystems/Swerve/Variables/`, while pose telemetry stays under
+Drive. A Custom section appears for published Swerve custom tunables.
+A collapsed Localization section exposes Vision's target area threshold (average
+AprilTag area, percent of the image), maximum position target distance, maximum
+heading tag distance and single-tag heading maximum distance (meters).
+These write `Subsystems/Vision/Variables/Position/TargetAreaThreshold`,
+`Position/MaxTargetDistanceMeters`, `Heading/MaxTagDistanceMeters` and
+`Heading/SingleTagMaxDistanceMeters`. The updated Limelight reader applies valid
+edits at 5 Hz while Tuning is enabled and keeps the last applied values when
+disabled. Position filters and heading filters have independent distance limits.
+The overall heading distance also caps single-tag distance; single-tag recovery
+still requires its stricter ambiguity, freshness and stationary stability checks.
+Defaults preserve the prior policy: no minimum area and the configured maximum
+position distance (6.25 m), with heading limits of 4 m and 2 m for single tags.
+Older robots show unavailable fields until the library is updated.
+Apply changes live values. Save tuned values reviews the current card's live
+values and saves selected differences to project JSON. Localization defaults
+live under `localization.position` and `localization.heading` in
+`power-tool/generated/powerlib-subsystems.json`. File → Update Code writes the
+four scalar defaults to VisionConstants and applies them through CONFIG and
+HEADING_CONFIG, preserving other vision policy. Build and deploy to make those
+saved defaults take effect at startup. Localization defaults are excluded from
+the separate custom-constants JSON to avoid conflicting sources of truth.
+Configuration saves serialize updates and replace valid JSON atomically;
+malformed JSON is rejected rather than discarded. Vision and LED cards retain
+their existing behavior.
 
-The tuning switch stays in the header. Live edits require a connected robot and its acknowledgement that tuning is enabled. Apply publishes changes for that group; the Reset icon beside each field clears only that field's pending edit. Search filters the list without changing which variables belong to the group. Save Tuned Values saves that group's live values as project defaults.
+The app has Dashboard, Limelights and Logs tabs; NetworkTables opens in a drawer from the View menu. Subsystem
+configuration is accessed through Config on the Dashboard; mechanism tuning is
+accessed through the enabled mechanism cards.
 
-Existing constants appear directly in the same side panel, alongside the group's live tunables. A published constant has one live row rather than a duplicate saved row. Apply sends live edits through NetworkTables and saves edits to saved-only values in the project configuration. Live values show their baseline beneath the field. Saved values can also be changed while disconnected; run Update Code, rebuild, and deploy to apply those defaults. Names and Java types stay fixed, and constants cannot be added or deleted. Numeric edits must fit the declared Java type.
+Config → Vision manages an ordered list of Limelights, with Add, Edit and Delete.
+New names always use `limelight-` followed by lowercase letters, numbers and
+hyphen-separated words; duplicates are rejected. Camera entries contain only
+names. Horizontal FOV in degrees and positive integer image width/height are
+shared Vision settings that apply to every Limelight. These describe the
+cameras; actual camera pipeline settings remain in their Limelight web UIs.
+Configuration is saved in `power-tool/generated/powerlib-subsystems.json` under
+`vision`, with names under `vision.limelights`. Existing Java camera names are
+imported on first use. Older per-camera settings migrate to globals using the
+first camera's values when no global value exists.
+File → Update Code updates `VisionConstants.LIMELIGHT_NAMES` and shared scalar
+FOV/width/height constants while preserving other vision policy and custom code.
+Build and deploy to apply changed camera names to the robot.
+
+Config → States manages robot state names with the same inline Add, Edit and
+Delete list. Names use uppercase letters, numbers and underscores. Existing
+`StateMachine.RobotState` values are imported until the list is first saved to
+the `states` array in `power-tool/generated/powerlib-subsystems.json`.
+File → Update Code applies the names to the enum while preserving state logic.
+It rejects removal or renaming of values still referenced by commands, handlers
+or the default state. State behavior remains in the robot's Java state handlers.
 
 ## Scripts
 

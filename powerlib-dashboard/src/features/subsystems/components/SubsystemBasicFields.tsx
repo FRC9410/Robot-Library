@@ -1,14 +1,15 @@
 import { Checkbox, FormControl, FormControlLabel, InputLabel, MenuItem, Select, Stack, TextField } from "@mui/material";
-import type { SubsystemFormState } from "../types";
-import { toCamelCase } from "../subsystemUtils";
+import type { GeneratedSubsystem, SubsystemFormState } from "../types";
+import { createSubsystemId } from "../subsystemUtils";
 
 type SubsystemBasicFieldsProps = {
   form: SubsystemFormState;
+  subsystems?: GeneratedSubsystem[];
   setForm: (updater: (current: SubsystemFormState | null) => SubsystemFormState | null) => void;
   updateField: <K extends keyof SubsystemFormState>(field: K, value: SubsystemFormState[K]) => void;
 };
 
-export function SubsystemBasicFields({ form, setForm, updateField }: SubsystemBasicFieldsProps) {
+export function SubsystemBasicFields({ form, subsystems = [], setForm, updateField }: SubsystemBasicFieldsProps) {
   const subsystemNameHasWhitespace = /\s/.test(form.name);
 
   return (
@@ -26,19 +27,12 @@ export function SubsystemBasicFields({ form, setForm, updateField }: SubsystemBa
                 ? {
                     ...current,
                     name: event.target.value,
-                    id: current.mode === "create" ? toCamelCase(event.target.value) : current.id
+                    id: current.mode === "create" ? createSubsystemId(event.target.value, subsystems) : current.id
                   }
                 : current
             )
           }
           sx={{ flexGrow: 1 }}
-        />
-        <TextField
-          label="Stable ID"
-          size="small"
-          value={form.id}
-          onChange={(event) => setForm((current) => (current ? { ...current, id: event.target.value } : current))}
-          sx={{ minWidth: 220 }}
         />
         <FormControl size="small" sx={{ minWidth: 160 }}>
           <InputLabel id="subsystem-type-label">Type</InputLabel>

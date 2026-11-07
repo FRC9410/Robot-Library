@@ -1,6 +1,8 @@
 package frc.powerlib.subsystems.io;
 
 import edu.wpi.first.math.system.plant.DCMotor;
+import frc.powerlib.configs.MotorConfig;
+import java.util.List;
 
 /** Deterministic 20 ms mechanism model for control/readiness tests, not a calibrated digital twin. */
 final class MechanismSimulation {
@@ -12,7 +14,15 @@ final class MechanismSimulation {
   double position, velocity;
 
   MechanismSimulation(double ratio, double cruiseVelocity, double acceleration) {
-    freeSpeed = DCMotor.getKrakenX60(1).freeSpeedRadPerSec / (2 * Math.PI * Math.max(1e-9, Math.abs(ratio)));
+    this(ratio, cruiseVelocity, acceleration, MotorConfig.MotorType.X60);
+  }
+  MechanismSimulation(double ratio, double cruiseVelocity, double acceleration, List<MotorConfig> motors) {
+    this(ratio, cruiseVelocity, acceleration, motors.stream().filter(motor -> !motor.isFollower())
+        .findFirst().map(MotorConfig::motorType).orElse(MotorConfig.MotorType.X60));
+  }
+  private MechanismSimulation(double ratio, double cruiseVelocity, double acceleration, MotorConfig.MotorType motorType) {
+    DCMotor motor = motorType == MotorConfig.MotorType.X44 ? DCMotor.getKrakenX44(1) : DCMotor.getKrakenX60(1);
+    freeSpeed = motor.freeSpeedRadPerSec / (2 * Math.PI * Math.max(1e-9, Math.abs(ratio)));
     profile(cruiseVelocity, acceleration);
   }
   void profile(double cruiseVelocity, double acceleration) {

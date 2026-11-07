@@ -17,6 +17,25 @@ public class MechanismSimulationTest {
   private final MotionMagicConfig motion = new MotionMagicConfig(2, 10);
   private final List<MotorConfig> motors = List.of(MotorConfig.leader(20, NeutralModeValue.Brake, true));
 
+  @Test public void selectedMotorTypeControlsSimulatedFreeSpeedAndOldConfigsDefaultToX60() {
+    assertEquals(MotorConfig.MotorType.X60, motors.get(0).motorType());
+    for (var type : MotorConfig.MotorType.values()) {
+      var config = new VelocitySubsystemConfig(List.of(
+          MotorConfig.follower(21, NeutralModeValue.Brake, false, MotorConfig.MotorType.X60),
+          MotorConfig.leader(20, NeutralModeValue.Brake, false, type)), lead,
+          new MotionMagicConfig(0, 0), "MotorTypeCheck");
+      var io = new VelocitySubsystemIOSim(config);
+      var inputs = new VelocitySubsystemIO.Inputs();
+      io.setVoltage(12);
+      for (int i = 0; i < 200; i++) io.updateInputs(inputs);
+      var motor = type == MotorConfig.MotorType.X44
+          ? edu.wpi.first.math.system.plant.DCMotor.getKrakenX44(1)
+          : edu.wpi.first.math.system.plant.DCMotor.getKrakenX60(1);
+      assertEquals(motor.freeSpeedRadPerSec / (2 * Math.PI), inputs.velocityRotationsPerSecond, 0.01);
+    }
+    assertThrows(NullPointerException.class, () -> MotorConfig.leader(20, NeutralModeValue.Brake, false, null));
+  }
+
   @Test public void velocityChangesOverTimeAndVoltageUsesMotorUnits() {
     var io = new VelocitySubsystemIOSim(); var inputs = new VelocitySubsystemIO.Inputs();
     io.setVelocity(10); io.updateInputs(inputs);

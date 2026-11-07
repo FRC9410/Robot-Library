@@ -8,7 +8,7 @@ public class VelocitySubsystemIOSim implements VelocitySubsystemIO {
   public VelocitySubsystemIOSim() { model = new MechanismSimulation(1, 100, 100); }
   public VelocitySubsystemIOSim(VelocitySubsystemConfig config) {
     model = new MechanismSimulation(config.leadConfig().sensorToMechanismRatio() * config.leadConfig().rotorToSensorRatio(),
-        config.motionMagicConfig().cruiseVelocity(), config.motionMagicConfig().acceleration());
+        config.motionMagicConfig().cruiseVelocity(), config.motionMagicConfig().acceleration(), config.motorConfigs());
   }
   @Override public void updateInputs(Inputs inputs) {
     model.update();

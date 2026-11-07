@@ -14,6 +14,7 @@ import edu.wpi.first.networktables.PubSubOption;
 import frc.powerlib.configs.LimelightHeadingConfig;
 import frc.powerlib.configs.LimelightVisionConfig;
 import frc.powerlib.configs.VisionHeadingInitializationConfig;
+import frc.powerlib.PowerRobotContainer;
 import java.util.Arrays;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -47,6 +48,114 @@ public class LimelightVisionTest {
       values[start + 4] = 2; values[start + 5] = 2; values[start + 6] = 0.05;
     }
     return values;
+  }
+
+  @Test public void headingDistanceTunablesApplyToBothRecoveryPoliciesAndRetainValidLimits() {
+    try (var fixture = new Fixture()) {
+      var single = frame(1, 0);
+      single[8] = 0; single[9] = 2.5; single[15] = 2.5; single[16] = 2.5;
+      fixture.heading(single);
+      fixture.reader.update(0, 0, 0, 0, true);
+      assertTrue("Default single-tag limit is two meters", fixture.reader.getHeadingMeasurement().isEmpty());
+      PowerRobotContainer.updateSubsystemVariable("Vision", "Heading/SingleTagMaxDistanceMeters", 3.0);
+      PowerRobotContainer.updateSubsystemVariable("Vision", "Heading/MaxTagDistanceMeters", 7.0);
+      PowerRobotContainer.setTuningEnabled(true);
+      fixture.now += .25; fixture.heading(single);
+      fixture.reader.update(0, 0, 0, 0, true);
+      var accepted = fixture.reader.getHeadingMeasurement().orElseThrow();
+      assertTrue("Downstream single-tag checks honor the tuned limit", accepted.reliableSingleTag(fixture.now));
+      var collector = new VisionHeadingInitializer(VisionHeadingInitializationConfig.DEFAULT, .2);
+      java.util.Optional<Rotation2d> rotation = java.util.Optional.empty();
+      for (int index = 0; index < 13 && rotation.isEmpty(); index++) {
+        fixture.now += .05; fixture.heading(single);
+        fixture.reader.update(0, 0, 0, 0, true);
+        rotation = collector.observe(fixture.reader.getHeadingMeasurement().orElseThrow(), fixture.now, 0, 0);
+      }
+      assertTrue("Configured single-tag distance can complete stable heading recovery", rotation.isPresent());
+      var multi = frame(2, 0); multi[9] = 6.5;
+      for (int start = 11; start < multi.length; start += 7) { multi[start + 4] = 6.5; multi[start + 5] = 6.5; }
+      fixture.now += .25; fixture.heading(multi); fixture.update(0);
+      assertTrue("Heading distance is independent of the position distance limit", fixture.reader.getHeadingMeasurement().isPresent());
+      PowerRobotContainer.updateSubsystemVariable("Vision", "Heading/MaxTagDistanceMeters", 2.0);
+      fixture.now += .25; fixture.heading(single); fixture.reader.update(0, 0, 0, 0, true);
+      assertTrue("The overall heading limit also constrains single tags", fixture.reader.getHeadingMeasurement().isEmpty());
+      PowerRobotContainer.setTuningEnabled(false);
+      PowerRobotContainer.updateSubsystemVariable("Vision", "Heading/MaxTagDistanceMeters", 7.0);
+      fixture.now += .25; fixture.heading(multi); fixture.update(0);
+      assertTrue("Disabled tuning keeps the last applied heading limit", fixture.reader.getHeadingMeasurement().isEmpty());
+      PowerRobotContainer.setTuningEnabled(true);
+      PowerRobotContainer.updateSubsystemVariable("Vision", "Heading/MaxTagDistanceMeters", -1.0);
+      PowerRobotContainer.updateSubsystemVariable("Vision", "Heading/SingleTagMaxDistanceMeters", Double.NaN);
+      fixture.now += .25; fixture.heading(single); fixture.reader.update(0, 0, 0, 0, true);
+      assertTrue("Invalid edits keep the previous heading limits", fixture.reader.getHeadingMeasurement().isEmpty());
+    } finally {
+      PowerRobotContainer.updateSubsystemVariable("Vision", "Heading/MaxTagDistanceMeters", 4.0);
+      PowerRobotContainer.updateSubsystemVariable("Vision", "Heading/SingleTagMaxDistanceMeters", 2.0);
+      PowerRobotContainer.setTuningEnabled(false);
+    }
+  }
+
+  @Test public void localizationStartupConfigsPreserveCompatibilityAndRejectInvalidDistances() {
+    var heading = LimelightHeadingConfig.DEFAULT.withDistanceLimits(5.0, 3.0);
+    assertEquals(5.0, heading.maxTagDistanceMeters(), 0);
+    assertEquals(3.0, heading.singleTagMaxDistanceMeters(), 0);
+    assertEquals(LimelightHeadingConfig.DEFAULT.headingStdDevRadians(), heading.headingStdDevRadians(), 0);
+    var position = LimelightVisionConfig.DEFAULT.withPositionLimits(5.5, 1.0);
+    assertEquals(1.0, position.targetAreaThreshold(), 0);
+    assertEquals(5.5, position.maxTagDistanceMeters(), 0);
+    assertEquals(LimelightVisionConfig.DEFAULT.basePositionStdDev(), position.basePositionStdDev(), 0);
+    for (double invalid : new double[] { 0, -1, Double.NaN, Double.POSITIVE_INFINITY }) {
+      assertThrows(IllegalArgumentException.class, () -> LimelightHeadingConfig.DEFAULT.withDistanceLimits(invalid, 2));
+      assertThrows(IllegalArgumentException.class, () -> LimelightHeadingConfig.DEFAULT.withDistanceLimits(4, invalid));
+    }
+    assertThrows(IllegalArgumentException.class, () -> LimelightVisionConfig.DEFAULT.withPositionLimits(5, 101));
+  }
+
+  @Test public void locationTunablesFilterPositionAndRetainLastValidValuesWithoutChangingHeading() {
+    try (var fixture = new Fixture()) {
+      var values = frame(2, 0);
+      values[10] = 0.5;
+      PowerRobotContainer.updateSubsystemVariable("Vision", "Position/TargetAreaThreshold", 1.0);
+      PowerRobotContainer.updateSubsystemVariable("Vision", "Position/MaxTargetDistanceMeters", 5.0);
+      // Disabled tuning does not apply pending edits.
+      PowerRobotContainer.setTuningEnabled(false);
+      fixture.publish("first", "botpose_orb_wpiblue", values, fixture.now);
+      assertTrue(fixture.reader.update(0, 0, 0, 0).isPresent());
+      PowerRobotContainer.setTuningEnabled(true);
+      fixture.now += .25;
+      fixture.publish("first", "botpose_orb_wpiblue", values, fixture.now);
+      assertTrue(fixture.reader.update(0, 0, 0, 0).isEmpty());
+      values[10] = 2;
+      fixture.now += .25;
+      fixture.publish("first", "botpose_orb_wpiblue", values, fixture.now);
+      assertTrue(fixture.reader.update(0, 0, 0, 0).isPresent());
+      PowerRobotContainer.updateSubsystemVariable("Vision", "Position/MaxTargetDistanceMeters", 1.0);
+      fixture.now += .25;
+      fixture.publish("first", "botpose_orb_wpiblue", values, fixture.now);
+      fixture.heading(values);
+      assertTrue(fixture.reader.update(0, 0, 0, 0).isEmpty());
+      assertTrue("Heading retains its own filters", fixture.reader.getHeadingMeasurement().isPresent());
+      PowerRobotContainer.setTuningEnabled(false);
+      PowerRobotContainer.updateSubsystemVariable("Vision", "Position/MaxTargetDistanceMeters", 5.0);
+      fixture.now += .25;
+      fixture.publish("first", "botpose_orb_wpiblue", values, fixture.now);
+      assertTrue("Disabling tuning retains the last applied limits", fixture.reader.update(0, 0, 0, 0).isEmpty());
+      PowerRobotContainer.setTuningEnabled(true);
+      PowerRobotContainer.updateSubsystemVariable("Vision", "Position/MaxTargetDistanceMeters", -1.0);
+      PowerRobotContainer.updateSubsystemVariable("Vision", "Position/TargetAreaThreshold", Double.NaN);
+      fixture.now += .25;
+      fixture.publish("first", "botpose_orb_wpiblue", values, fixture.now);
+      assertTrue("Invalid edits retain valid limits", fixture.reader.update(0, 0, 0, 0).isEmpty());
+      PowerRobotContainer.updateSubsystemVariable("Vision", "Position/MaxTargetDistanceMeters", 6.25);
+      PowerRobotContainer.updateSubsystemVariable("Vision", "Position/TargetAreaThreshold", 0.0);
+      fixture.now += .25;
+      fixture.publish("first", "botpose_orb_wpiblue", values, fixture.now);
+      assertTrue(fixture.reader.update(0, 0, 0, 0).isPresent());
+    } finally {
+      PowerRobotContainer.updateSubsystemVariable("Vision", "Position/MaxTargetDistanceMeters", 6.25);
+      PowerRobotContainer.updateSubsystemVariable("Vision", "Position/TargetAreaThreshold", 0.0);
+      PowerRobotContainer.setTuningEnabled(false);
+    }
   }
 
   @Test public void selectsIndependentHeadingWithoutChangingMegaTag2Weights() {

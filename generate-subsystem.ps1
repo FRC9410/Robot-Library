@@ -298,6 +298,13 @@ function Format-IndentedList {
     return ($Expressions | ForEach-Object { "$Indent$_" }) -join ",`n"
 }
 
+function Get-MotorTypeExpression {
+    param([Parameter(Mandatory = $true)]$Motor)
+    $type = (Get-ObjectPropertyValue $Motor 'motorType' 'X60').ToString().ToUpperInvariant()
+    if ($type -notin @('X60', 'X44')) { throw "Unsupported motor type '$type'. Use X60 or X44." }
+    return "MotorConfig.MotorType.$type"
+}
+
 function Convert-MotorsToExpressions {
     param([Parameter(Mandatory = $true)]$Subsystem)
 
@@ -313,7 +320,7 @@ function Convert-MotorsToExpressions {
 
     $leaderNeutralMode = Get-ObjectPropertyValue $leader "neutralMode" "Brake"
     $leaderReversed = Get-ObjectPropertyValue $leader "reversed" $false
-    $lines = @("MotorConfig.leader($($leader.id), $(Get-NeutralModeExpression $leaderNeutralMode), $($leaderReversed.ToString().ToLowerInvariant()))")
+    $lines = @("MotorConfig.leader($($leader.id), $(Get-NeutralModeExpression $leaderNeutralMode), $($leaderReversed.ToString().ToLowerInvariant()), $(Get-MotorTypeExpression $leader))")
     foreach ($follower in ($motors | Where-Object { $_.role -eq "follower" })) {
         $followerNeutralMode = Get-ObjectPropertyValue $follower "neutralMode" $null
         $neutralMode = if ($null -ne $followerNeutralMode -and -not [string]::IsNullOrWhiteSpace($followerNeutralMode.ToString())) {
@@ -322,7 +329,7 @@ function Convert-MotorsToExpressions {
             $leaderNeutralMode
         }
         $followerReversed = Get-ObjectPropertyValue $follower "reversed" $false
-        $lines += "MotorConfig.follower($($follower.id), $(Get-NeutralModeExpression $neutralMode), $($followerReversed.ToString().ToLowerInvariant()))"
+        $lines += "MotorConfig.follower($($follower.id), $(Get-NeutralModeExpression $neutralMode), $($followerReversed.ToString().ToLowerInvariant()), $(Get-MotorTypeExpression $follower))"
     }
 
     return $lines
@@ -352,6 +359,7 @@ function Convert-MotorsToConstantDeclarations {
     $leaderReversed = Get-ObjectPropertyValue $leader "reversed" $false
     $lines = @(
         "  public static final int LEADER_MOTOR_ID = $($leader.id);",
+        "  public static final MotorConfig.MotorType LEADER_MOTOR_TYPE = $(Get-MotorTypeExpression $leader);",
         "  public static final NeutralModeValue LEADER_NEUTRAL_MODE = $(Get-NeutralModeExpression $leaderNeutralMode);",
         "  public static final boolean LEADER_REVERSED = $($leaderReversed.ToString().ToLowerInvariant());"
     )
@@ -366,6 +374,7 @@ function Convert-MotorsToConstantDeclarations {
         }
         $followerReversed = Get-ObjectPropertyValue $follower "reversed" $false
         $lines += "  public static final int FOLLOWER_${index}_MOTOR_ID = $($follower.id);"
+        $lines += "  public static final MotorConfig.MotorType FOLLOWER_${index}_MOTOR_TYPE = $(Get-MotorTypeExpression $follower);"
         $lines += "  public static final NeutralModeValue FOLLOWER_${index}_NEUTRAL_MODE = $neutralModeExpression;"
         $lines += "  public static final boolean FOLLOWER_${index}_REVERSED = $($followerReversed.ToString().ToLowerInvariant());"
         $index++
@@ -378,11 +387,11 @@ function Convert-MotorsToConstantExpressions {
     param([Parameter(Mandatory = $true)]$Subsystem)
 
     $null = Get-LeaderMotor $Subsystem
-    $lines = @("MotorConfig.leader(LEADER_MOTOR_ID, LEADER_NEUTRAL_MODE, LEADER_REVERSED)")
+    $lines = @("MotorConfig.leader(LEADER_MOTOR_ID, LEADER_NEUTRAL_MODE, LEADER_REVERSED, LEADER_MOTOR_TYPE)")
 
     $index = 1
     foreach ($follower in (@($Subsystem.motors) | Where-Object { $_.role -eq "follower" })) {
-        $lines += "MotorConfig.follower(FOLLOWER_${index}_MOTOR_ID, FOLLOWER_${index}_NEUTRAL_MODE, FOLLOWER_${index}_REVERSED)"
+        $lines += "MotorConfig.follower(FOLLOWER_${index}_MOTOR_ID, FOLLOWER_${index}_NEUTRAL_MODE, FOLLOWER_${index}_REVERSED, FOLLOWER_${index}_MOTOR_TYPE)"
         $index++
     }
 
@@ -653,6 +662,7 @@ function Normalize-SubsystemConfig {
         $defaultRole = if ($index -eq 0) { "leader" } else { "follower" }
         Ensure-ObjectProperty $motor "role" $defaultRole
         Ensure-ObjectProperty $motor "reversed" $false
+        Ensure-ObjectProperty $motor "motorType" "X60"
     }
 
     $leader = $motors |
@@ -1296,6 +1306,152 @@ function Write-ConstantsFile {
     return $outputFile
 }
 
+function Write-RobotStatesConfiguration {
+    param([Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$States)
+
+    if ($States.Count -eq 0) { throw 'Keep at least one robot state.' }
+    $names = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($name in $States) {
+        if ($name -cnotmatch '^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$' -or -not $names.Add($name)) {
+            throw 'State names must be unique uppercase identifiers, starting with a letter.'
+        }
+    }
+    $javaRoot = Join-Path (Get-Location) 'src/main/java'
+    $outputFile = Join-Path $javaRoot 'frc/robot/subsystems/StateMachine.java'
+    $source = Get-Content -LiteralPath $outputFile -Raw -Encoding UTF8
+    $enum = [regex]::Match($source, '(?s)\benum\s+RobotState\s*\{([^{}]*)\}')
+    if (-not $enum.Success) { throw 'Could not find a simple RobotState enum in StateMachine.java.' }
+    $original = [regex]::Replace($enum.Groups[1].Value, '(?s)/\*.*?\*/|//[^\r\n]*', '').Trim().TrimEnd(';')
+    $previous = @($original.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    foreach ($name in $previous) {
+        if ($name -cnotmatch '^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$') { throw 'RobotState contains custom enum logic; update its names in robot code.' }
+    }
+    # Removing an enum value must not silently break existing commands or state handlers.
+    $removed = @($previous | Where-Object { -not $names.Contains($_) })
+    if ($removed.Count -gt 0) {
+        foreach ($file in Get-ChildItem -LiteralPath $javaRoot -Recurse -Filter '*.java') {
+            $code = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8
+            if ($file.FullName -eq [IO.Path]::GetFullPath($outputFile)) { $code = $code.Remove($enum.Index, $enum.Length) }
+            $code = [regex]::Replace($code, '(?s)/\*.*?\*/|//[^\r\n]*', '')
+            foreach ($name in $removed) {
+                if ($code -cmatch ('\b(?:RobotState\s*\.\s*|case\s+(?:[A-Z0-9_]+\s*,\s*)*)' + [regex]::Escape($name) + '\b')) {
+                    throw "Cannot remove or rename state $name; $($file.Name) still references it. Update robot code references first."
+                }
+            }
+        }
+    }
+    $body = "`n    " + ($States -join ",`n    ") + "`n  "
+    $start = $enum.Groups[1].Index
+    $source = $source.Substring(0, $start) + $body + $source.Substring($start + $enum.Groups[1].Length)
+    [IO.File]::WriteAllText($outputFile, $source, [Text.UTF8Encoding]::new($false))
+    return $outputFile
+}
+
+function Write-LocalizationConstants {
+    param([Parameter(Mandatory = $true)]$Config)
+
+    $area = [double]$Config.position.targetAreaThreshold
+    $positionDistance = [double]$Config.position.maxTargetDistanceMeters
+    $headingDistance = [double]$Config.heading.maxTagDistanceMeters
+    $singleTagDistance = [double]$Config.heading.singleTagMaxDistanceMeters
+    if ([double]::IsNaN($area) -or [double]::IsInfinity($area) -or $area -lt 0 -or $area -gt 100) { throw 'Target area threshold must be from 0 to 100 percent.' }
+    foreach ($distance in @($positionDistance, $headingDistance, $singleTagDistance)) {
+        if ([double]::IsNaN($distance) -or [double]::IsInfinity($distance) -or $distance -le 0) { throw 'Localization distances must be positive and finite.' }
+    }
+    $outputFile = Join-Path (Get-Location) 'src/main/java/frc/robot/constants/VisionConstants.java'
+    $source = Get-Content -LiteralPath $outputFile -Raw -Encoding UTF8
+    $block = @"
+  // POWERLIB LOCALIZATION CONSTANTS START - DO NOT DELETE
+  public static final double POSITION_TARGET_AREA_THRESHOLD = $(Format-JavaDoubleLiteral $area);
+  public static final double POSITION_MAX_TARGET_DISTANCE_METERS = $(Format-JavaDoubleLiteral $positionDistance);
+  public static final double HEADING_MAX_TAG_DISTANCE_METERS = $(Format-JavaDoubleLiteral $headingDistance);
+  public static final double HEADING_SINGLE_TAG_MAX_DISTANCE_METERS = $(Format-JavaDoubleLiteral $singleTagDistance);
+  // POWERLIB LOCALIZATION CONSTANTS END - DO NOT DELETE
+"@
+    $blockPattern = '(?ms)^  // POWERLIB LOCALIZATION CONSTANTS START - DO NOT DELETE.*?^  // POWERLIB LOCALIZATION CONSTANTS END - DO NOT DELETE'
+    if ([regex]::IsMatch($source, $blockPattern)) { $source = [regex]::Replace($source, $blockPattern, $block) }
+    else {
+        $declaration = [regex]::Match($source, '\bpublic\s+class\s+VisionConstants\s*\{')
+        if (-not $declaration.Success) { throw 'Could not find VisionConstants class declaration.' }
+        $source = $source.Insert($declaration.Index + $declaration.Length, "`n$block`n")
+    }
+    foreach ($setting in @(
+        @('LimelightVisionConfig', 'CONFIG', 'withPositionLimits', 'POSITION_MAX_TARGET_DISTANCE_METERS', 'POSITION_TARGET_AREA_THRESHOLD'),
+        @('LimelightHeadingConfig', 'HEADING_CONFIG', 'withDistanceLimits', 'HEADING_MAX_TAG_DISTANCE_METERS', 'HEADING_SINGLE_TAG_MAX_DISTANCE_METERS')
+    )) {
+        $pattern = '(?s)(public\s+static\s+final\s+' + $setting[0] + '\s+' + $setting[1] + '\s*=\s*)(.*?);'
+        $match = [regex]::Match($source, $pattern)
+        if (-not $match.Success) { throw "VisionConstants is missing $($setting[1])." }
+        $expression = $match.Groups[2].Value.Trim()
+        $suffix = '\.' + $setting[2] + '\(\s*' + $setting[3] + '\s*,\s*' + $setting[4] + '\s*\)$'
+        if (-not [regex]::IsMatch($expression, $suffix)) {
+            $expression = '(' + $expression + ').' + $setting[2] + '(' + $setting[3] + ', ' + $setting[4] + ')'
+        }
+        $start = $match.Groups[2].Index
+        $source = $source.Substring(0, $start) + $expression + $source.Substring($start + $match.Groups[2].Length)
+    }
+    [IO.File]::WriteAllText($outputFile, $source, [Text.UTF8Encoding]::new($false))
+    return $outputFile
+}
+
+function Write-VisionCameraConfiguration {
+    param([Parameter(Mandatory = $true)]$VisionConfig)
+
+    $cameras = @($VisionConfig.limelights)
+    $names = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($camera in $cameras) {
+        if ($camera.name -cnotmatch '^limelight-[a-z0-9]+(?:-[a-z0-9]+)*$' -or -not $names.Add($camera.name)) {
+            throw 'Limelight names must be unique and start with limelight-, followed by lowercase letters, numbers or hyphen-separated words.'
+        }
+    }
+    # Migrate older per-camera descriptions to shared values using the first camera.
+    $settings = @{}
+    foreach ($setting in @(@('fovDegrees', 60), @('imageWidth', 320), @('imageHeight', 240))) {
+        $property = $VisionConfig.PSObject.Properties[$setting[0]]
+        if ($null -eq $property -and $cameras.Count -gt 0) { $property = $cameras[0].PSObject.Properties[$setting[0]] }
+        $settings[$setting[0]] = if ($null -eq $property) { $setting[1] } else { $property.Value }
+    }
+    $fov = [double]$settings.fovDegrees
+    if ([double]::IsNaN($fov) -or [double]::IsInfinity($fov) -or $fov -le 0 -or $fov -ge 180) { throw 'Limelight FOV must be between 0 and 180 degrees.' }
+    foreach ($dimension in @($settings.imageWidth, $settings.imageHeight)) {
+        $value = [double]$dimension
+        if ([double]::IsNaN($value) -or [double]::IsInfinity($value) -or $value -le 0 -or $value -ne [Math]::Floor($value) -or $value -gt [int]::MaxValue) {
+            throw 'Limelight image dimensions must be positive Java integers.'
+        }
+    }
+    $outputFile = Join-Path (Get-Location) 'src/main/java/frc/robot/constants/VisionConstants.java'
+    $source = Get-Content -LiteralPath $outputFile -Raw -Encoding UTF8
+    $cameraNames = ($cameras | ForEach-Object { '"' + $_.name + '"' }) -join ', '
+    $namesDeclaration = "public static final String[] LIMELIGHT_NAMES = {$cameraNames};"
+    $namesPattern = 'public\s+static\s+final\s+String\[\]\s+LIMELIGHT_NAMES\s*=\s*\{[^}]*\}\s*;'
+    if ([regex]::IsMatch($source, $namesPattern)) {
+        $source = [regex]::Replace($source, $namesPattern, $namesDeclaration)
+    } else {
+        throw 'VisionConstants must declare a literal LIMELIGHT_NAMES array before Vision config can be generated.'
+    }
+    $fovLiteral = Format-JavaDoubleLiteral $settings.fovDegrees
+    $block = @"
+  // POWERLIB CAMERA CONFIG START - DO NOT DELETE
+  // Shared camera descriptions; configure actual pipelines in the Limelight web UI.
+  public static final double LIMELIGHT_FOV_DEGREES = $fovLiteral;
+  public static final int LIMELIGHT_IMAGE_WIDTH = $([int]$settings.imageWidth);
+  public static final int LIMELIGHT_IMAGE_HEIGHT = $([int]$settings.imageHeight);
+  // POWERLIB CAMERA CONFIG END - DO NOT DELETE
+"@
+    $blockPattern = '(?ms)^  // POWERLIB CAMERA CONFIG START - DO NOT DELETE.*?^  // POWERLIB CAMERA CONFIG END - DO NOT DELETE'
+    if ([regex]::IsMatch($source, $blockPattern)) {
+        $source = [regex]::Replace($source, $blockPattern, $block)
+    } else {
+        $closing = $source.LastIndexOf('}')
+        if ($closing -lt 0) { throw 'VisionConstants has no closing class brace.' }
+        $source = $source.Substring(0, $closing) + "$block`n" + $source.Substring($closing)
+    }
+    [IO.File]::WriteAllText($outputFile, $source.TrimEnd() + "`n", [Text.UTF8Encoding]::new($false))
+    foreach ($setting in $settings.Keys) { $VisionConfig | Add-Member -NotePropertyName $setting -NotePropertyValue $settings[$setting] -Force }
+    $VisionConfig.limelights = @($cameras | ForEach-Object { [pscustomobject]@{ name = $_.name } })
+    return $outputFile
+}
+
 function Write-SwerveConstantsFile {
     param([Parameter(Mandatory = $true)]$SwerveConfig)
 
@@ -1703,18 +1859,29 @@ function Get-ConstantsConfigurationTargets {
     }
 }
 
+function Test-LocalizationConstantName {
+    param([string]$Name)
+    return @('POSITION_TARGET_AREA_THRESHOLD', 'POSITION_MAX_TARGET_DISTANCE_METERS', 'HEADING_MAX_TAG_DISTANCE_METERS', 'HEADING_SINGLE_TAG_MAX_DISTANCE_METERS') -ccontains $Name
+}
+
 function Import-ConstantsConfiguration {
     param([Parameter(Mandatory = $true)]$Configuration, [Parameter(Mandatory = $true)][AllowEmptyCollection()]$Subsystems, [Parameter(Mandatory = $true)]$CustomBlocksById)
     $directory = Join-Path (Get-Location) 'src/main/java/frc/robot/constants'
     foreach ($target in @(Get-ConstantsConfigurationTargets $Subsystems)) {
-        if ($null -ne $Configuration.files.PSObject.Properties[$target.key]) { continue }
+        if ($null -ne $Configuration.files.PSObject.Properties[$target.key]) {
+            if ($target.name -eq 'Vision') {
+                $entry = $Configuration.files.PSObject.Properties[$target.key].Value
+                $entry.constants = @($entry.constants | Where-Object { -not (Test-LocalizationConstantName $_.name) })
+            }
+            continue
+        }
         $path = Join-Path $directory "$($target.name)Constants.java"
         $source = if (Test-Path $path) { Get-Content -Encoding UTF8 -LiteralPath $path -Raw } else { '' }
         if ($target.customOnly -and $CustomBlocksById.ContainsKey($target.key.Substring('subsystem:'.Length))) {
             $source = "public class Imported {`n$CustomConstantsStartMarker`n$($CustomBlocksById[$target.key.Substring('subsystem:'.Length)])`n$CustomConstantsEndMarker`n}"
         }
         if ([string]::IsNullOrWhiteSpace($source) -and -not $target.customOnly) { continue }
-        $constants = @(Get-JavaConstantRows $source | Where-Object { (-not $target.customOnly -or $_.custom) -and ($target.name -ne 'Swerve' -or $_.custom) } | ForEach-Object {
+        $constants = @(Get-JavaConstantRows $source | Where-Object { (-not $target.customOnly -or $_.custom) -and ($target.name -ne 'Swerve' -or $_.custom) -and ($target.name -ne 'Vision' -or -not (Test-LocalizationConstantName $_.name)) } | ForEach-Object {
             [pscustomobject]@{ name = $_.name; type = $_.type; value = $_.value; custom = $_.custom; tunable = Test-NumericConstantType $_.type }
         })
         $Configuration.files | Add-Member -MemberType NoteProperty -Name $target.key -Value ([pscustomobject]@{ constants = $constants })
@@ -1788,7 +1955,7 @@ function Write-ConfiguredConstants {
         $constants = @($Configuration.files.PSObject.Properties[$target.key].Value.constants)
         $parsed = @(Get-JavaConstantRows $source)
         foreach ($original in @($parsed | Sort-Object start -Descending)) {
-            if ($original.custom -or $target.customOnly -or $target.name -eq 'Swerve') { continue }
+            if ($original.custom -or $target.customOnly -or $target.name -eq 'Swerve' -or ($target.name -eq 'Vision' -and (Test-LocalizationConstantName $original.name))) { continue }
             $constant = $constants | Where-Object { -not $_.custom -and $_.name -ceq $original.name } | Select-Object -First 1
             if ($null -eq $constant) { continue }
             if ($constant.type -cne $original.type) { throw "Saved type of $($constant.name) does not match robot code." }
@@ -1962,6 +2129,8 @@ function Update-SubsystemsFromJson {
     $null = Get-PowerDashboardTemplate
 
     $written = @()
+    $statesConfig = Get-ObjectPropertyValue $document 'states' $null
+    if ($null -ne $statesConfig) { $written += Write-RobotStatesConfiguration @($statesConfig) }
     $characterizationWritten = @()
     $constantsDir = Join-Path (Get-Location) "src/main/java/frc/robot/constants"
     $customBlocksById = Get-CustomConstantsBySubsystemId $constantsDir
@@ -1984,6 +2153,10 @@ function Update-SubsystemsFromJson {
     Ensure-PowerDashboardRawNetworkTablesSupport $powerDashboardFile
     Ensure-SubsystemTelemetrySupport $powerDashboardFile
     Write-ConfiguredConstants $constantsConfiguration $subsystems
+    $localizationConfig = Get-ObjectPropertyValue $document 'localization' $null
+    if ($null -ne $localizationConfig) { $written += Write-LocalizationConstants $localizationConfig }
+    $visionConfig = Get-ObjectPropertyValue $document 'vision' $null
+    if ($null -ne $visionConfig) { $written += Write-VisionCameraConfiguration $visionConfig }
     Write-TunableConstantsRegistry $subsystems
     Ensure-TunableConstantsSupport $powerDashboardFile
     Ensure-SwerveCachedTuningSupport (Join-Path (Get-Location) 'src/main/java/frc/robot/subsystems/Swerve.java')

@@ -63,8 +63,8 @@ export function SubsystemEditor({
               <SubsystemBasicFields form={form} setForm={setForm} updateField={updateField} />
               <Divider />
               <MotorListEditor motors={form.motors} onAddMotor={addMotor} onDeleteMotor={deleteMotor} onUpdateMotor={updateMotor} />
-              <Divider />
               <CancoderFields form={form} updateField={updateField} />
+              <Divider />
               <RelativePositionFields form={form} updateField={updateField} />
               <ControlConstantsGrid form={form} updateField={updateField} />
             </Stack>

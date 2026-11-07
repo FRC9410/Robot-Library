@@ -17,8 +17,9 @@ import type { NtTopicSnapshot } from "../../networktables/nt4Client";
 import type { GeneratedSubsystem, GeneratedSwerveConstants } from "../subsystems/types";
 import type { ConstantsFile } from "../constants/types";
 import { formatNumericConstantValue } from "../constants/types";
+import { defaultLocalizationConfig, localizationVariableMappings, type LocalizationConfig } from "../../../electron/localizationConfig";
 
-type SaveTarget = "subsystem" | "swerve" | "constant";
+type SaveTarget = "subsystem" | "swerve" | "localization" | "constant";
 type JsonPathSegment = string | number;
 type JsonContainer = Record<string | number, unknown>;
 type SaveValue = number | boolean | string;
@@ -34,6 +35,7 @@ type SaveValueChange = {
   subsystemIndex?: number;
   subsystemPath?: JsonPathSegment[];
   swervePath?: JsonPathSegment[];
+  localizationPath?: JsonPathSegment[];
   constantsFileId?: string;
   constantName?: string;
 };
@@ -47,6 +49,7 @@ type SaveTunedValuesDialogProps = {
 type LoadedDocuments = {
   subsystems: GeneratedSubsystem[];
   swerve: GeneratedSwerveConstants;
+  localization: LocalizationConfig;
   constants: ConstantsFile[];
 };
 
@@ -431,13 +434,27 @@ function valuesDiffer(oldValue: unknown, newValue: SaveValue) {
 function buildSubsystemChanges(
   topics: NtTopicSnapshot[],
   subsystems: GeneratedSubsystem[],
-  swerve: GeneratedSwerveConstants
+  swerve: GeneratedSwerveConstants,
+  localization: LocalizationConfig
 ) {
   const changes: SaveValueChange[] = [];
 
   topics.forEach((topic) => {
     const parsed = parseVariableTopic(topic.name, subsystemVariablesPrefix);
     if (!parsed) {
+      return;
+    }
+
+    if (parsed.ownerName === "Vision") {
+      const mapping = localizationVariableMappings[parsed.variableKey as keyof typeof localizationVariableMappings];
+      const newValue = getTopicNumber(topic);
+      if (mapping && newValue !== null) {
+        if (mapping.field === "targetAreaThreshold" ? newValue < 0 || newValue > 100 : newValue <= 0) return;
+        const jsonPath = [mapping.section, mapping.field];
+        const oldValue = getNestedValue(localization, jsonPath);
+        if (valuesDiffer(oldValue, newValue)) changes.push({ id: topic.name, selected: true, target: "localization",
+          label: `Localization: ${mapping.label}`, oldValueText: formatValue(oldValue), newValue, localizationPath: jsonPath });
+      }
       return;
     }
 
@@ -501,7 +518,7 @@ function buildSubsystemChanges(
   return changes;
 }
 
-function buildChanges(topics: NtTopicSnapshot[], documents: LoadedDocuments) {
+export function buildChanges(topics: NtTopicSnapshot[], documents: LoadedDocuments) {
   const constantChanges: SaveValueChange[] = [];
   for (const topic of topics) {
     const parsed = parseVariableTopic(topic.name, subsystemVariablesPrefix);
@@ -517,7 +534,7 @@ function buildChanges(topics: NtTopicSnapshot[], documents: LoadedDocuments) {
     constantChanges.push({ id: topic.name, selected: true, target: "constant", label: `${parsed.ownerName}: ${name}`,
       oldValueText: row.value, newValue: value, constantsFileId: file.id, constantName: name });
   }
-  return [...buildSubsystemChanges(topics, documents.subsystems, documents.swerve), ...constantChanges]
+  return [...buildSubsystemChanges(topics, documents.subsystems, documents.swerve, documents.localization), ...constantChanges]
     .sort((left, right) => left.label.localeCompare(right.label));
 }
 
@@ -525,6 +542,7 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
   const [documents, setDocuments] = useState<LoadedDocuments>({
     subsystems: [],
     swerve: {},
+    localization: defaultLocalizationConfig,
     constants: []
   });
   const [changes, setChanges] = useState<SaveValueChange[]>([]);
@@ -552,11 +570,13 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
     setMessage(null);
 
     try {
-      if (!window.powerlib?.readSubsystems || !window.powerlib?.readConstants) {
+      if (!window.powerlib?.readSubsystems || !window.powerlib?.readConstants || !window.powerlib?.readLocalizationConfig) {
         throw new Error("PowerLib file bridge is not available.");
       }
 
-      const [subsystemsResult, constants] = await Promise.all([window.powerlib.readSubsystems(), window.powerlib.readConstants()]);
+      const [subsystemsResult, constants, localization] = await Promise.all([
+        window.powerlib.readSubsystems(), window.powerlib.readConstants(), window.powerlib.readLocalizationConfig()
+      ]);
       if (subsystemsResult.error) {
         throw new Error(subsystemsResult.error);
       }
@@ -564,6 +584,7 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
       const loaded = {
         subsystems: subsystemsResult.subsystems as GeneratedSubsystem[],
         swerve: (subsystemsResult.swerve ?? {}) as GeneratedSwerveConstants,
+        localization: localization.config,
         constants
       };
       setDocuments(loaded);
@@ -597,17 +618,19 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
     setMessage(null);
 
     try {
-      if (!window.powerlib?.saveSubsystems || !window.powerlib?.saveConstants) {
+      if (!window.powerlib?.saveSubsystems || !window.powerlib?.saveConstants || !window.powerlib?.saveLocalizationConfig) {
         throw new Error("PowerLib file bridge is not available.");
       }
 
       const nextSubsystems = cloneJson(documents.subsystems);
       const nextSwerve = cloneJson(documents.swerve);
+      const nextLocalization = cloneJson(documents.localization);
       const nextConstants = cloneJson(documents.constants);
       const changedFiles = new Set<string>();
       const unselectedIds = new Set(changes.filter((change) => !change.selected).map((change) => change.id));
       let subsystemChanged = false;
       let swerveChanged = false;
+      let localizationChanged = false;
 
       selectedChanges.forEach((change) => {
         if (change.target === "subsystem" && change.subsystemIndex !== undefined && change.subsystemPath) {
@@ -618,6 +641,10 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
         if (change.target === "swerve" && change.swervePath) {
           setNestedValue(nextSwerve, change.swervePath, change.newValue);
           swerveChanged = true;
+        }
+        if (change.target === "localization" && change.localizationPath) {
+          setNestedValue(nextLocalization, change.localizationPath, change.newValue);
+          localizationChanged = true;
         }
         if (change.target === "constant" && change.constantsFileId && change.constantName && typeof change.newValue === "number") {
           const file = nextConstants.find((candidate) => candidate.id === change.constantsFileId);
@@ -631,6 +658,7 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
       const savedDocuments = {
         subsystems: nextSubsystems,
         swerve: nextSwerve,
+        localization: nextLocalization,
         constants: nextConstants
       };
 
@@ -638,6 +666,10 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
         const result = await window.powerlib.saveSubsystems(nextSubsystems, nextSwerve);
         savedDocuments.subsystems = result.subsystems as GeneratedSubsystem[];
         savedDocuments.swerve = (result.swerve ?? nextSwerve) as GeneratedSwerveConstants;
+      }
+      if (localizationChanged) {
+        const result = await window.powerlib.saveLocalizationConfig(nextLocalization);
+        savedDocuments.localization = result.config;
       }
       for (const id of changedFiles) {
         const index = savedDocuments.constants.findIndex((file) => file.id === id);
@@ -729,7 +761,7 @@ export function SaveTunedValuesDialog({ open, topics, onClose }: SaveTunedValues
                         label={
                           change.target === "subsystem"
                             ? "Subsystem JSON"
-                            : change.target === "swerve" ? "Swerve JSON" : "Constants JSON"
+                            : change.target === "swerve" ? "Swerve JSON" : change.target === "localization" ? "Localization JSON" : "Constants JSON"
                         }
                         size="small"
                         variant="outlined"

@@ -587,7 +587,7 @@ automatically. If both locations contain a file, the generated copy stays active
 and the old root copy is archived under `power-tool/generated/legacy/`.
 Power Tool updates preserve generated configuration and refresh the scripts.
 
-The Drive tab renders `power-tool/dashboard/index.tsx`. This project-owned
+The Dashboard tab renders `power-tool/dashboard/index.tsx`. This project-owned
 folder starts with the generic Drive dashboard and is preserved in full during
 updates and reinstalls. Put custom dashboard components, CSS, configuration and
 assets here; files under `power-tool/src/` are managed by Robot-Library and
@@ -618,7 +618,7 @@ powershell -ExecutionPolicy Bypass -File .\power-tool\scripts\power-tool.ps1
 
 Power Tool includes NetworkTables tools and generated subsystem editing. Install builds the app once, then the launchers run the built Electron app with `npm start`. Its `node_modules` folder is created during install and should not be committed.
 
-Power Tool opens on a generic **Drive** dashboard with discovered camera streams, a field view, an autonomous dropdown, and optional drivetrain and robot telemetry. Fresh installations collect feedback through `DriveTelemetry` at the normal robot loop rate and publish it every 100 ms. Power Tool requests and batches telemetry at the same 100 ms cadence. See [Drive dashboard setup](powerlib-dashboard/DRIVE-DASHBOARD.md) for existing-project integration, camera discovery, and topic mappings.
+Power Tool opens on a generic **Dashboard** view with discovered camera streams, a field view, an autonomous dropdown, and optional drivetrain and robot telemetry. Fresh installations collect feedback through `DriveTelemetry` at the normal robot loop rate and publish it every 100 ms. Power Tool requests and batches telemetry at the same 100 ms cadence. See [Dashboard setup](powerlib-dashboard/DASHBOARD.md) for existing-project integration, camera discovery, and topic mappings.
 
 Use `Update Power Tool` inside the app to download the latest Power Tool source, refresh the scripts and project-local skills, reinstall npm dependencies, and restart the app.
 

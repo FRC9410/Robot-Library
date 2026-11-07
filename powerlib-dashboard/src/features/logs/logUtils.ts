@@ -1,4 +1,4 @@
-import { template } from "../drive/driveModel";
+import { template } from "../dashboard/dashboardModel";
 import { indexAt } from "./logModel";
 import type { LogMechanism, LogModel, Series } from "./logModel";
 
@@ -79,7 +79,7 @@ export const formatMatchClock = (seconds: number) => {
   return `${Math.floor(whole / 60)}:${(whole % 60).toString().padStart(2, "0")}`;
 };
 
-/** The same field size and flip the Drive tab is set to on this machine. */
+/** The same field size and flip the Dashboard tab is set to on this machine. */
 export function readFieldSettings() {
   const defaults = { length: template.field.lengthMeters, width: template.field.widthMeters, flip: false };
   try {

@@ -10,7 +10,7 @@ public class RelativePositionSubsystemIOSim implements RelativePositionSubsystem
   public RelativePositionSubsystemIOSim(RelativePositionSubsystemConfig config) {
     this.config = config;
     model = new MechanismSimulation(config.leadConfig().sensorToMechanismRatio() * config.leadConfig().rotorToSensorRatio(),
-        config.motionMagicConfig().cruiseVelocity(), config.motionMagicConfig().acceleration());
+        config.motionMagicConfig().cruiseVelocity(), config.motionMagicConfig().acceleration(), config.motorConfigs());
     zeroEncoder(config.homePosition());
   }
   @Override public void updateInputs(Inputs inputs) {

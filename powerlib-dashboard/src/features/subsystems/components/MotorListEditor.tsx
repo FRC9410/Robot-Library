@@ -1,6 +1,7 @@
 import {
   Box,
   Button,
+  ButtonBase,
   Card,
   CardContent,
   Checkbox,
@@ -33,9 +34,6 @@ export function MotorListEditor({ motors, onAddMotor, onDeleteMotor, onUpdateMot
         <Typography variant="subtitle1" sx={{ flexGrow: 1, fontWeight: 700 }}>
           Motors
         </Typography>
-        <Button startIcon={<AddIcon />} variant="outlined" size="small" onClick={onAddMotor}>
-          Add Motor
-        </Button>
       </Stack>
 
       <Box
@@ -100,6 +98,27 @@ export function MotorListEditor({ motors, onAddMotor, onDeleteMotor, onUpdateMot
             </CardContent>
           </Card>
         ))}
+        <ButtonBase
+          onClick={onAddMotor}
+          aria-label="Add motor"
+          sx={{
+            display: "grid",
+            gridTemplateRows: "1fr auto",
+            minHeight: 240,
+            p: 2,
+            border: "1px dashed",
+            borderColor: "divider",
+            borderRadius: 1,
+            color: "text.secondary",
+            bgcolor: "action.hover",
+            "&:hover": { borderColor: "primary.main", color: "primary.main" },
+            "&.Mui-focusVisible": { outline: "2px solid", outlineColor: "primary.main", outlineOffset: 2 },
+            "&:disabled": { opacity: 0.5 }
+          }}
+        >
+          <AddIcon sx={{ fontSize: 48, justifySelf: "center", alignSelf: "center" }} />
+          <Typography component="span" variant="subtitle2">Add motor</Typography>
+        </ButtonBase>
       </Box>
     </Stack>
   );

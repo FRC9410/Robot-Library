@@ -1,12 +1,12 @@
 import type { NtTopicSnapshot } from "./nt4Client";
 
-export type TopicView = "all" | "app" | "drive" | "robot" | "tuning";
+export type TopicView = "all" | "app" | "dashboard" | "robot" | "tuning";
 const cameraMetadata = (name: string) => /^\/limelight[^/]*\//.test(name)
   || /^\/[^/]+\/(?:tv|tx|ty|ta|hb|heartbeat|getpipe|pipeline|botpose|json)$/.test(name);
 const matches = (view: TopicView, name: string) => {
   if (view === "all") return true;
   if (view === "app") return name.startsWith("/PowerLib/Tuning/") || name.startsWith("/PowerLib/Characterization/") || cameraMetadata(name);
-  if (view === "drive") return /^\/PowerLib\/Subsystems\/[^/]+\/Data\//.test(name) || name.startsWith("/PowerLib/Drive/")
+  if (view === "dashboard") return /^\/PowerLib\/Subsystems\/[^/]+\/Data\//.test(name) || name.startsWith("/PowerLib/Drive/")
     || name.startsWith("/SmartDashboard/Auto Chooser/") || name.startsWith("/SmartDashboard/Field/")
     || name.startsWith("/Robot/") || name.startsWith("/CameraPublisher/") || /^\/limelight[^/]*\//.test(name);
   if (view === "tuning") return /^\/PowerLib\/(?:Subsystems|Commands)\/[^/]+\/Variables\//.test(name) || name.startsWith("/PowerLib/Tuning/");
@@ -15,7 +15,7 @@ const matches = (view: TopicView, name: string) => {
 
 /** Stable snapshots let React skip consumers whose selected topics did not change. */
 export class TopicViews {
-  private views = new Map<TopicView, NtTopicSnapshot[]>(["all", "app", "drive", "robot", "tuning"].map(view => [view as TopicView, []]));
+  private views = new Map<TopicView, NtTopicSnapshot[]>(["all", "app", "dashboard", "robot", "tuning"].map(view => [view as TopicView, []]));
   private listeners = new Set<() => void>();
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   get = (view: TopicView) => this.views.get(view)!;

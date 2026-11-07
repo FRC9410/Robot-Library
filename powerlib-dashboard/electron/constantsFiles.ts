@@ -2,6 +2,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { generatedJsonPath } from "./projectPaths.js";
+import { withRobotDocumentLock } from "./robotDocument.js";
+import { localizationConstantNames } from "./localizationConfig.js";
 
 const customStart = "// POWERLIB CUSTOM CONSTANTS START - DO NOT DELETE";
 const customEnd = "// POWERLIB CUSTOM CONSTANTS END - DO NOT DELETE";
@@ -48,7 +50,7 @@ function applyConfiguration(source: string, target: ConstantsTarget, constants: 
   let content = source;
   const parsed = declarations(source);
   for (const original of [...parsed].reverse()) {
-    if (original.custom || isNativeSwerveTunable(target, original.name)) continue;
+    if (original.custom || isNativeSwerveTunable(target, original.name) || isLocalizationConstant(target, original.name)) continue;
     const row = constants.find((candidate) => !candidate.custom && candidate.name === original.name);
     if (!row) continue;
     if (row.type !== original.type) throw new Error(`The Java type of ${row.name} changed. Refresh its saved configuration.`);
@@ -169,7 +171,7 @@ async function readTarget(target: ConstantsTarget, configuration?: ConstantsConf
     }
     const parsed = declarations(source);
     if (target.kind === "subsystem" && !customRange(source)) throw new Error("Run Update Code to create the custom constants section.");
-    return { ...target, exists: true, source, constants: parsed.filter((row) => target.kind === "robot" || row.custom).map(({ start: _start, end: _end, ...row }) => ({ ...row,
+    return { ...target, exists: true, source, constants: parsed.filter((row) => (target.kind === "robot" || row.custom) && !isLocalizationConstant(target, row.name)).map(({ start: _start, end: _end, ...row }) => ({ ...row,
       tunable: row.tunable || isNativeSwerveTunable(target, row.name)
     })) };
   } catch (error) {
@@ -244,6 +246,10 @@ function isNativeSwerveTunable(target: ConstantsTarget, name: string) {
   return target.id === "robot:Swerve" && Object.hasOwn(swervePaths, name);
 }
 
+function isLocalizationConstant(target: ConstantsTarget, name: string) {
+  return target.id === "robot:Vision" && localizationConstantNames.has(name);
+}
+
 function formatDeclaration(row: ConstantRow, target: ConstantsTarget) {
   const tunable = row.tunable && !isNativeSwerveTunable(target, row.name);
   const annotation = tunable ? "@frc.powerlib.tuning.TunableConstant\n  " : "";
@@ -263,7 +269,7 @@ async function replaceFile(filePath: string, content: string) {
 // Serialize saves so two windows cannot both pass the stale-source check before writing.
 let pendingSave: Promise<unknown> = Promise.resolve();
 export function saveConstantsFile(robotRoot: string, id: string, expectedSource: string, rows: ConstantRow[]) {
-  const result = pendingSave.then(() => writeConstantsFile(robotRoot, id, expectedSource, rows));
+  const result = pendingSave.then(() => withRobotDocumentLock(robotRoot, () => writeConstantsFile(robotRoot, id, expectedSource, rows)));
   pendingSave = result.catch(() => {});
   return result;
 }
@@ -277,13 +283,13 @@ async function writeConstantsFile(robotRoot: string, id: string, expectedSource:
   if (file.error) throw new Error(file.error);
   const comparable = (source: string) => {
     return JSON.stringify(declarations(source)
-      .filter((row) => (target.kind === "robot" || row.custom) && !isNativeSwerveTunable(target, row.name))
+      .filter((row) => (target.kind === "robot" || row.custom) && !isNativeSwerveTunable(target, row.name) && !isLocalizationConstant(target, row.name))
       .map(({ name, type, value, custom }) => ({ name, type, value, custom })));
   };
   if (comparable(file.source) !== comparable(expectedSource)) throw new Error("This file changed since it was loaded. Refresh before saving.");
   if (!Array.isArray(rows)) throw new Error("Invalid constants list.");
   const parsed = declarations(expectedSource);
-  const editable = parsed.filter((row) => target.kind === "robot" || row.custom);
+  const editable = parsed.filter((row) => (target.kind === "robot" || row.custom) && !isLocalizationConstant(target, row.name));
   const originals = new Map(editable.map((row) => [row.name, row]));
   rows = rows.map((row) => {
     if (!row || typeof row.name !== "string" || typeof row.type !== "string") throw new Error("Invalid constant row.");
@@ -295,6 +301,7 @@ async function writeConstantsFile(robotRoot: string, id: string, expectedSource:
   const names = new Set(parsed.filter((row) => !editable.includes(row)).map((row) => row.name));
   const usedOriginals = new Set<string>();
   for (const row of rows) {
+    if (isLocalizationConstant(target, row.name)) throw new Error(`${row.name} is managed by Localization tuning.`);
     validateRow(row, row.originalName === null ? undefined : originals.get(row.originalName));
     if (names.has(row.name)) throw new Error(`Duplicate constant name: ${row.name}.`);
     names.add(row.name);
@@ -336,6 +343,7 @@ async function writeConstantsFile(robotRoot: string, id: string, expectedSource:
     jsonPath = await generatedJsonPath(robotRoot, "powerlib-subsystems.json");
     try { previousJson = await fs.readFile(jsonPath, "utf8"); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
     const document = JSON.parse(previousJson ?? '{"subsystems":[]}');
+    if (!document || typeof document !== "object" || Array.isArray(document)) throw Error("Invalid robot configuration document.");
     document.swerve ??= {};
     let defaultsChanged = false;
     for (const row of rows) {
@@ -364,7 +372,7 @@ async function writeConstantsFile(robotRoot: string, id: string, expectedSource:
         .map(({ name, type, value, custom }) => ({ name, type, value, custom, tunable: isNumericType(type) })) };
     }
     configuration.files[target.storageKey] = { constants: declarations(content)
-      .filter((row) => (target.kind === "robot" || row.custom) && !isNativeSwerveTunable(target, row.name))
+      .filter((row) => (target.kind === "robot" || row.custom) && !isNativeSwerveTunable(target, row.name) && !isLocalizationConstant(target, row.name))
       .map(({ name, type, value, custom }) => ({ name, type, value, custom, tunable: isNumericType(type) })) };
     await replaceFile(await generatedJsonPath(robotRoot, "powerlib-constants.json"), `${JSON.stringify(configuration, null, 2)}\n`);
   } catch (error) {
