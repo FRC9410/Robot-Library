@@ -1,4 +1,5 @@
-.config-dialog.MuiDialog-paper { height: calc(100dvh - 64px); max-height: calc(100dvh - 64px); background: #1b1c20; border: 1px solid #3b3d44; border-radius: 12px; background-image: none; overflow: hidden; color-scheme: dark; }
+.config-modal.MuiDialog-root { top: 40px; }
+.config-dialog.MuiDialog-paper { height: calc(100dvh - 104px); max-height: calc(100dvh - 104px); background: #1b1c20; border: 1px solid #3b3d44; border-radius: 12px; background-image: none; overflow: hidden; color-scheme: dark; }
 .config-dialog * { scrollbar-width: thin; scrollbar-color: #555962 #1b1c20; }
 .config-dialog ::-webkit-scrollbar { width: 8px; height: 8px; }
 .config-dialog ::-webkit-scrollbar-track, .config-dialog ::-webkit-scrollbar-corner { background: #1b1c20; }
