@@ -1339,7 +1339,10 @@ public class $className implements State<RobotState, StateMachine> {
 }
 
 function Write-RobotStatesConfiguration {
-    param([Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$States)
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$States,
+        [AllowEmptyCollection()][string[]]$ConfirmedDeletions = @()
+    )
 
     if ($States.Count -eq 0) { throw 'Keep at least one robot state.' }
     $names = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -1349,6 +1352,11 @@ function Write-RobotStatesConfiguration {
         }
     }
     if (-not $names.Contains('IDLE')) { throw 'Keep IDLE as the fallback robot state.' }
+    foreach ($name in $ConfirmedDeletions) {
+        if ($name -cnotmatch '^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$' -or $name -eq 'IDLE' -or $names.Contains($name)) {
+            throw 'Only removed custom states can have their Java handlers deleted.'
+        }
+    }
     $States = @($States | Where-Object { $_ -ne 'IDLE' }) + @('IDLE')
     $classNames = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($name in $States) {
@@ -1411,10 +1419,13 @@ function Write-RobotStatesConfiguration {
     $removed = @($previous | Where-Object { -not $names.Contains($_) })
     $deleteFiles = @{}
     foreach ($name in $removed) {
+        if ($classNames.Contains((Get-RobotStateClassName $name))) { throw "Cannot remove or rename state $name; its handler class name conflicts with a retained state." }
         $path = Join-Path $handlerDirectory ((Get-RobotStateClassName $name) + '.java')
         if (Test-Path -LiteralPath $path) {
             $content = [IO.File]::ReadAllText($path).Replace("`r`n", "`n").TrimEnd()
-            if ($content -ceq (New-RobotStateContent $name).Replace("`r`n", "`n").TrimEnd()) { $deleteFiles[[IO.Path]::GetFullPath($path)] = $name }
+            if ($name -cin $ConfirmedDeletions -or $content -ceq (New-RobotStateContent $name).Replace("`r`n", "`n").TrimEnd()) {
+                $deleteFiles[[IO.Path]::GetFullPath($path)] = $name
+            } else { throw "Cannot remove customized $(Split-Path -Leaf $path) without confirmation. Delete the state in Config and confirm removal of its Java file." }
         }
     }
     # Removing an enum value must not silently break existing commands or state handlers.
@@ -2270,7 +2281,11 @@ function Update-SubsystemsFromJson {
 
     $written = @()
     $statesConfig = Get-ObjectPropertyValue $document 'states' $null
-    if ($null -ne $statesConfig) { $written += Write-RobotStatesConfiguration @($statesConfig) }
+    if ($null -ne $statesConfig) {
+        $confirmedDeletions = @(Get-ObjectPropertyValue $document 'stateHandlerDeletions' @())
+        $written += Write-RobotStatesConfiguration -States @($statesConfig) -ConfirmedDeletions $confirmedDeletions
+        $document.PSObject.Properties.Remove('stateHandlerDeletions')
+    }
     $characterizationWritten = @()
     $constantsDir = Join-Path (Get-Location) "src/main/java/frc/robot/constants"
     $customBlocksById = Get-CustomConstantsBySubsystemId $constantsDir

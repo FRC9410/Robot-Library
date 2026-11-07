@@ -13,10 +13,10 @@ app.whenReady().then(async () => {
     import { createRoot } from "react-dom/client";
     import { ConfigDialog } from ${JSON.stringify(path.join(project, "src/features/config/ConfigDialog.tsx"))};
     window.vision = {fovDegrees:60,imageWidth:320,imageHeight:240,limelights:[]};window.saves=[];window.failSave=false;
-    window.states=['IDLE','READY'];window.stateSaves=[];window.failStateSave=false;
+    window.states=['IDLE','READY'];window.stateSaves=[];window.stateDeletes=[];window.failStateSave=false;
     window.powerlib={readVisionConfig:async()=>({path:'fixture',vision:structuredClone(window.vision)}),
       readStateConfig:async()=>({path:'fixture',config:{states:[...window.states]}}),
-      saveStateConfig:async config=>{if(window.failStateSave)throw Error('Simulated state write failure');window.states=[...config.states];window.stateSaves.push([...window.states]);return {path:'fixture',config:{states:window.states}};},
+      saveStateConfig:async config=>{if(window.failStateSave)throw Error('Simulated state write failure');window.states=[...config.states];window.stateSaves.push([...window.states]);window.stateDeletes.push(config.deleteHandlers??[]);return {path:'fixture',config:{states:window.states}};},
       saveVisionConfig:async vision=>{if(window.failSave)throw Error('Simulated write failure');window.vision=structuredClone(vision);window.saves.push(window.vision);return {path:'fixture',vision:window.vision};}};
     createRoot(document.getElementById('root')).render(React.createElement(ConfigDialog,{
       document:{loading:false,exists:true,path:'fixture',subsystems:[],error:null},onRefresh(){},onSave:async()=>{},onClose(){}
@@ -89,8 +89,16 @@ app.whenReady().then(async () => {
     await wait(()=>document.querySelector('form[aria-label="State name editor"] [role="alert"]')?.textContent.includes('Simulated state write failure'));
     assert(window.states.includes('HOMING')&&input('State name').value==='BROKEN','Failed state save preserves the existing name and pending edit');
     window.failStateSave=false;button('Cancel').click();await wait(()=>!input('State name')&&button('Add State'));
-    document.querySelector('[aria-label="Delete READY"]').click();await wait(()=>window.stateSaves.length===3&&!document.querySelector('[aria-label="Delete READY"]'));
-    document.querySelector('[aria-label="Delete HOMING"]').click();await wait(()=>window.stateSaves.length===4&&!document.querySelector('[aria-label="Delete HOMING"]'));
+    document.querySelector('[aria-label="Delete READY"]').click();await wait(()=>button('Delete State'));
+    assert(document.querySelector('[aria-describedby="delete-state-description"]')&&document.body.textContent.includes('including your changes to execute()'),'Confirmation describes deletion of customized Java');
+    button('Cancel').click();await wait(()=>!button('Delete State'));
+    assert(window.stateSaves.length===2&&window.states.includes('READY'),'Cancel leaves the state unchanged');
+    document.querySelector('[aria-label="Delete READY"]').click();await wait(()=>button('Delete State'));window.failStateSave=true;button('Delete State').click();
+    await wait(()=>document.querySelector('[role="dialog"] [role="alert"]')?.textContent.includes('Simulated state write failure'));
+    assert(window.states.includes('READY'),'Failed confirmed deletion keeps the state');
+    window.failStateSave=false;button('Delete State').click();await wait(()=>window.stateSaves.length===3&&!button('Delete State')&&!document.querySelector('[aria-label="Delete READY"]'));
+    assert(window.stateDeletes.at(-1).join(',')==='READY','Confirmation authorizes only the selected handler removal');
+    document.querySelector('[aria-label="Delete HOMING"]').click();await wait(()=>button('Delete State'));button('Delete State').click();await wait(()=>window.stateSaves.length===4&&!button('Delete State')&&!document.querySelector('[aria-label="Delete HOMING"]'));
     assert(!document.querySelector('[aria-label^="Edit "]')&&window.states.join(',')==='IDLE'&&button('Add State'),'All custom states can be deleted while implicit Idle remains');
     button('Vision').click();await wait(()=>button('Add Limelight'));button('States').click();await wait(()=>button('Add State'));
     assert(!document.querySelector('[aria-label^="Edit "]')&&window.states.join(',')==='IDLE','Saved empty custom list reloads with implicit Idle retained');

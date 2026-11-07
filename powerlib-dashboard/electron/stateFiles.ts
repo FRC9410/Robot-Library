@@ -20,6 +20,15 @@ export async function readStateConfig(robotRoot: string) {
 
 export async function saveStateConfig(robotRoot: string, config: StateConfig) {
   validateStateConfig(config);
-  const result = await updateRobotDocument(robotRoot, document => ({ ...document, states: config.states }));
-  return { path: result.path, config };
+  const result = await updateRobotDocument(robotRoot, document => {
+    const pending = document.stateHandlerDeletions ?? [];
+    if (!Array.isArray(pending) || pending.some(name => typeof name !== "string")) throw Error("Invalid pending state handler deletions.");
+    const deletions = [...new Set([...pending, ...(config.deleteHandlers ?? [])])].filter(name => !config.states.includes(name));
+    validateStateConfig({ states: config.states, deleteHandlers: deletions });
+    const next: Record<string, unknown> = { ...document, states: config.states };
+    if (deletions.length) next.stateHandlerDeletions = deletions;
+    else delete next.stateHandlerDeletions;
+    return next;
+  });
+  return { path: result.path, config: { states: config.states } };
 }

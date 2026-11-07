@@ -4,6 +4,7 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import { StateNameEditor } from "./StateNameEditor";
+import { DeleteStateDialog } from "./DeleteStateDialog";
 
 export function StatesSettings() {
   const [states, setStates] = useState<string[]>([]);
@@ -13,6 +14,8 @@ export function StatesSettings() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [reload, setReload] = useState(0);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState("");
   const visibleStates = states.map((name, index) => ({ name, index }))
     .filter(({ name }) => name !== "IDLE");
   useEffect(() => {
@@ -27,21 +30,24 @@ export function StatesSettings() {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [reload]);
-  async function save(next: string[]) {
+  async function save(next: string[], deleteHandlers?: string[]) {
     if (!window.powerlib?.saveStateConfig) throw Error("PowerLib file bridge is not available.");
     setSaving(true);
     setSaved(false);
     try {
-      const result = await window.powerlib.saveStateConfig({ states: next });
+      const result = await window.powerlib.saveStateConfig({ states: next, ...(deleteHandlers ? { deleteHandlers } : {}) });
       setStates(result.config.states);
       setEditing(null);
       setError("");
       setSaved(true);
     } finally { setSaving(false); }
   }
-  async function remove(index: number) {
-    try { await save(states.filter((_, current) => current !== index)); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "Could not delete state."); }
+  async function remove() {
+    if (!deleting) return;
+    try {
+      await save(states.filter(name => name !== deleting), [deleting]);
+      setDeleting(null);
+    } catch (caught) { setDeleteError(caught instanceof Error ? caught.message : "Could not delete state."); }
   }
   function editor(index: number | "new") {
     return <StateNameEditor name={index === "new" ? "" : states[index]} others={states.filter((_, current) => current !== index)} saving={saving}
@@ -59,7 +65,7 @@ export function StatesSettings() {
                 <Stack direction="row" spacing={1} sx={{ py: 1, alignItems: "center" }}>
                   <Typography sx={{ flex: 1, minWidth: 0, fontWeight: 650, overflowWrap: "anywhere" }}>{name}</Typography>
                   <IconButton aria-label={`Edit ${name}`} disabled={saving || editing !== null} onClick={() => { setEditing(index); setSaved(false); }}><EditOutlinedIcon /></IconButton>
-                  <IconButton aria-label={`Delete ${name}`} disabled={saving || editing !== null} onClick={() => void remove(index)}><DeleteIcon /></IconButton>
+                  <IconButton aria-label={`Delete ${name}`} disabled={saving || editing !== null} onClick={() => { setDeleting(name); setDeleteError(""); }}><DeleteIcon /></IconButton>
                 </Stack>
                 {editing === index && <Box sx={{ pb: 2 }}>{editor(index)}</Box>}
               </Box>)}
@@ -71,5 +77,6 @@ export function StatesSettings() {
           {saved && <Alert severity="success">States saved. Use File → Update Code to generate handlers and update the state machine.</Alert>}
         </>}
     </Stack></Box>
+    <DeleteStateDialog name={deleting} saving={saving} error={deleteError} onCancel={() => setDeleting(null)} onConfirm={() => void remove()} />
   </Box>;
 }

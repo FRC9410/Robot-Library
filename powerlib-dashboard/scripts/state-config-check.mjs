@@ -21,6 +21,15 @@ try {
   await saveStateConfig(fixture, config);
   assert.deepEqual((await readStateConfig(fixture)).config, config);
   assert.deepEqual(JSON.parse(await fs.readFile(initial.path, "utf8")), { ...otherSections, states: config.states });
+  await saveStateConfig(fixture, { states: ["IDLE"], deleteHandlers: ["HOMING"] });
+  assert.deepEqual(JSON.parse(await fs.readFile(initial.path, "utf8")).stateHandlerDeletions, ["HOMING"], "Confirmed handler removal persists for Update Code");
+  await saveStateConfig(fixture, { states: ["IDLE", "READY"] });
+  assert.deepEqual(JSON.parse(await fs.readFile(initial.path, "utf8")).stateHandlerDeletions, ["HOMING"], "Other edits retain pending confirmation");
+  await saveStateConfig(fixture, config);
+  assert.ok(!("stateHandlerDeletions" in JSON.parse(await fs.readFile(initial.path, "utf8"))), "Re-adding a state cancels its pending handler deletion");
+  for (const deleteHandlers of [["IDLE"], ["HOMING"], ["../READY"], [null], "READY"]) {
+    await assert.rejects(saveStateConfig(fixture, { ...config, deleteHandlers }));
+  }
   for (const states of [[], ["READY"], ["IDLE", "FOO_BAR", "FOOBAR"], ["IDLE", "IDLE"], ["idle"], ["1_READY"], ["READY STATE"], ["READY-STATE"], [null]]) {
     await assert.rejects(saveStateConfig(fixture, { states }));
   }

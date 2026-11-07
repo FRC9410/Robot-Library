@@ -152,8 +152,12 @@ generated code and it is retained in saved configuration. Existing handler
 code, constructor arguments and registration priority are preserved; missing
 handlers are inserted before Idle. New handlers match their requested state and
 report it as actual; add mechanism actions and readiness conditions in Java.
-Removing a state deletes its untouched generated starter file. Generation rejects
-removal of values still referenced by custom handlers, commands or the default state.
+Deleting a state asks for confirmation to remove its Java file, including custom
+code. This choice is saved until Update Code removes the handler and registration.
+Cancel leaves the configuration unchanged. Generation still rejects removal of
+values referenced elsewhere in robot code, including commands or the default state.
+Removing a customized state directly in JSON requires confirmation through Config;
+untouched generated starter files can be removed without it.
 
 ## Scripts
 

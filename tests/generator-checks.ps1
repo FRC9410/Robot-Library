@@ -186,5 +186,20 @@ try {
         try { Write-RobotStatesConfiguration $list | Out-Null } catch { $rejected = $true }
         if (-not $rejected -or $preserved -cne [IO.File]::ReadAllText($statesPath)) { throw 'Invalid handler names changed Java.' }
     }
+    $spinningPath = Join-Path $handlers 'SpinningUpState.java'
+    $customSpinning = [IO.File]::ReadAllText($spinningPath).Replace('// TODO: implement SPINNING_UP behavior and readiness conditions.', 'System.out.println("Team-owned execute code");')
+    [IO.File]::WriteAllText($spinningPath, $customSpinning)
+    $rejected = $false
+    try { Write-RobotStatesConfiguration @('IDLE', 'READY') | Out-Null } catch { $rejected = $true }
+    if (-not $rejected -or $customSpinning -cne [IO.File]::ReadAllText($spinningPath)) { throw 'Unconfirmed deletion removed customized execute code.' }
+    $reference = Join-Path $statesDirectory 'SpinningRequest.java'
+    [IO.File]::WriteAllText($reference, 'class SpinningRequest { Object state = StateMachine.RobotState.SPINNING_UP; }')
+    $rejected = $false
+    try { Write-RobotStatesConfiguration -States @('IDLE', 'READY') -ConfirmedDeletions @('SPINNING_UP') | Out-Null } catch { $rejected = $true }
+    if (-not $rejected -or $customSpinning -cne [IO.File]::ReadAllText($spinningPath) -or $preserved -cne [IO.File]::ReadAllText($statesPath)) { throw 'Confirmed deletion ignored references elsewhere in Java.' }
+    [IO.File]::Delete($reference)
+    Write-RobotStatesConfiguration -States @('IDLE', 'READY') -ConfirmedDeletions @('SPINNING_UP') | Out-Null
+    if ((Test-Path -LiteralPath $spinningPath) -or [IO.File]::ReadAllText($statesPath).Contains('SpinningUpState')) { throw 'Confirmed custom handler was not removed.' }
+    if ($customReady -cne [IO.File]::ReadAllText($readyPath)) { throw 'Deleting another handler modified retained custom code.' }
 } finally { Pop-Location }
 Write-Host 'Installer inventory, dashboard migrations, Vision and state handlers passed; Idle-last order, cached instances, custom code, cleanup and repeated generation verified.'

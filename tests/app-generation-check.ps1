@@ -35,6 +35,22 @@ public class AuditGlobalConstants {
   public static volatile double CUSTOM_GAIN = 2.0;
 }
 '@)
+    # Exercise deletion of an existing, team-edited handler through production Config IPC.
+    $machinePath = Join-Path $fixture 'src/main/java/frc/robot/subsystems/StateMachine.java'
+    $machineSource = [IO.File]::ReadAllText($machinePath).Replace('    IDLE', "    IDLE,`n    RETIRING").Replace('List.of(new IdleState())', 'List.of(new frc.robot.subsystems.states.RetiringState(), new IdleState())')
+    [IO.File]::WriteAllText($machinePath, $machineSource)
+    [IO.File]::WriteAllText((Join-Path $fixture 'src/main/java/frc/robot/subsystems/states/RetiringState.java'), @'
+package frc.robot.subsystems.states;
+public class RetiringState implements frc.powerlib.statemachine.State<frc.robot.subsystems.StateMachine.RobotState, frc.robot.subsystems.StateMachine> {
+  public boolean match(frc.robot.subsystems.StateMachine.RobotState request, frc.robot.subsystems.StateMachine machine) {
+    return request == frc.robot.subsystems.StateMachine.RobotState.RETIRING;
+  }
+  public void execute(frc.robot.subsystems.StateMachine.RobotState request, frc.robot.subsystems.StateMachine machine) {
+    System.out.println("Team-edited execute behavior");
+    machine.setActualState(frc.robot.subsystems.StateMachine.RobotState.RETIRING);
+  }
+}
+'@)
     $electron = Join-Path $root 'powerlib-dashboard/node_modules/electron/dist/electron.exe'
     $arguments = '"' + (Join-Path $root 'powerlib-dashboard/scripts/app-generation-electron-check.cjs') + '" "' + $fixture + '"'
     $process = Start-Process -FilePath $electron -ArgumentList $arguments -WorkingDirectory $fixture -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $fixture 'app.stdout.log') -RedirectStandardError (Join-Path $fixture 'app.stderr.log')

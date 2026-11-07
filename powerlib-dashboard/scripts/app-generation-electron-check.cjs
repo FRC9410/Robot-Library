@@ -75,7 +75,8 @@ async function wizardAndConfig() {
     await click('Continue');await wait(()=>input('CAN ID'));await click('Continue');await wait(()=>input('kP'));await click('Continue');await click('Save changes');await wait(()=>document.querySelector('[aria-label="Edit AuditArm"]'));
     await click('States');await wait(()=>button('Add State'));
     for(const name of ['READY','HOMING','TEMP']){await click('Add State');await fill('State name',name);await click('Save State');await wait(()=>!input('State name'));}
-    document.querySelector('[aria-label="Edit TEMP"]').click();await wait(()=>input('State name'));await fill('State name','CLIMB');await click('Save State');await wait(()=>document.querySelector('[aria-label="Delete CLIMB"]'));document.querySelector('[aria-label="Delete CLIMB"]').click();await wait(()=>!document.querySelector('[aria-label="Delete CLIMB"]'));
+    document.querySelector('[aria-label="Edit TEMP"]').click();await wait(()=>input('State name'));await fill('State name','CLIMB');await click('Save State');await wait(()=>document.querySelector('[aria-label="Delete CLIMB"]'));
+    for(const name of ['CLIMB','RETIRING']){document.querySelector('[aria-label="Delete '+name+'"]').click();await wait(()=>button('Delete State'));await click('Delete State');await wait(()=>!button('Delete State')&&!document.querySelector('[aria-label="Delete '+name+'"]'));}
     await click('Vision');await wait(()=>button('Add Limelight'));
     for(const camera of (await window.powerlib.readVisionConfig()).vision.limelights){document.querySelector('[aria-label="Delete '+camera.name+'"]').click();await wait(()=>!document.querySelector('[aria-label="Delete '+camera.name+'"]'));}
     for(const name of ['front','back','spare']){await click('Add Limelight');await fill('Limelight name',name);await click('Save Limelight');await wait(()=>!input('Limelight name'));}
@@ -165,6 +166,7 @@ async function run() {
   const configured=await wizardAndConfig();
   assert.equal(configured.document.subsystems.length,4);assert.equal(configured.document.subsystems[2].id,'auditabsolute','Rename must preserve stable ID');
   let document=readJson();assert.deepEqual(document.states,['IDLE','READY','HOMING']);assert.equal(document.vision.limelights.length,2);
+  assert.ok(document.stateHandlerDeletions.includes('RETIRING'),'Customized handler deletion confirmed through Config');
   assert.ok(!('field'in document),'Field dimensions must stay laptop-local');
   fs.writeFileSync(path.join(fixture,'configured-from-app.json'),JSON.stringify(document,null,2));
   const tuned=await saveTunedValues();assert.equal(tuned.topicCount,60);
@@ -174,6 +176,8 @@ async function run() {
   const first=await renderRun(`return window.powerlib.updateSubsystemCode();`);
   fs.writeFileSync(path.join(fixture,'update-code-first.log'),first.stdout+'\n'+first.stderr);assert.ok(first.stdout.includes('BUILD SUCCESSFUL'));
   document=readJson();const inventory=checkGenerated(document);
+  assert.ok(!fs.existsSync(path.join(fixture,'src/main/java/frc/robot/subsystems/states/RetiringState.java')),'Confirmed customized execute handler deleted');
+  assert.ok(!('stateHandlerDeletions' in document),'Successful generation consumes pending confirmations');
   const javaRoot=path.join(fixture,'src/main/java');
   const javaFiles=fs.readdirSync(javaRoot,{recursive:true}).filter(name=>name.endsWith('.java')).sort();
   const before=new Map(javaFiles.map(name=>[name,fs.readFileSync(path.join(javaRoot,name),'utf8')]));

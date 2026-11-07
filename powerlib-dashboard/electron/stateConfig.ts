@@ -1,4 +1,4 @@
-export type StateConfig = { states: string[] };
+export type StateConfig = { states: string[]; deleteHandlers?: string[] };
 
 export function validateStateConfig(value: unknown): asserts value is StateConfig {
   if (!value || typeof value !== "object" || !Array.isArray((value as StateConfig).states)) throw Error("States must be a list of names.");
@@ -13,6 +13,11 @@ export function validateStateConfig(value: unknown): asserts value is StateConfi
   if (!used.has("IDLE")) throw Error("Keep IDLE as the fallback robot state.");
   const classes = states.map(name => name.replaceAll("_", "").toLowerCase());
   if (new Set(classes).size !== classes.length) throw Error("State names must generate distinct handler class names.");
+  const deletions = (value as StateConfig).deleteHandlers;
+  if (deletions !== undefined && (!Array.isArray(deletions) || deletions.some(name =>
+    typeof name !== "string" || !/^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/.test(name) || name === "IDLE" || used.has(name)))) {
+    throw Error("Only removed custom states can have their Java handlers deleted.");
+  }
 }
 
 export function stateNamesFromJava(source: string): string[] {
