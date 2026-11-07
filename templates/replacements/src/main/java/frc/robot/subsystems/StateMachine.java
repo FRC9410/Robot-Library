@@ -31,10 +31,10 @@ public class StateMachine extends SubsystemBase {
   private RobotState wantedState = Constants.StateMachine.DEFAULT_STATE;
   private RobotState currentState = Constants.StateMachine.DEFAULT_STATE;
   private final Map<Object, RobotState> requests = new LinkedHashMap<>();
-  private boolean requestsChanged;
+  private boolean requestsChanged = true;
   // Registration order is priority: the first matching handler wins.
   private final List<State<RobotState, StateMachine>> states = List.of(new IdleState());
-  private State<RobotState, StateMachine> activeState = states.get(0);
+  private State<RobotState, StateMachine> activeState = states.get(states.size() - 1);
 
   public RobotState getWantedState() {
     return wantedState;

@@ -10,6 +10,9 @@ export function validateStateConfig(value: unknown): asserts value is StateConfi
     if (used.has(name)) throw Error(`A state named ${name} already exists.`);
     used.add(name);
   }
+  if (!used.has("IDLE")) throw Error("Keep IDLE as the fallback robot state.");
+  const classes = states.map(name => name.replaceAll("_", "").toLowerCase());
+  if (new Set(classes).size !== classes.length) throw Error("State names must generate distinct handler class names.");
 }
 
 export function stateNamesFromJava(source: string): string[] {

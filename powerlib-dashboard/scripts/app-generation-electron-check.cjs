@@ -146,7 +146,10 @@ function checkGenerated(document) {
   assert.ok(vision.includes('"limelight-front", "limelight-rear"')||/"limelight-front"[\s\S]*"limelight-rear"/.test(vision));assert.ok(!vision.includes('limelight-spare'));
   numberConstant(vision,'LIMELIGHT_FOV_DEGREES',63.4);numberConstant(vision,'LIMELIGHT_IMAGE_WIDTH',1280);numberConstant(vision,'LIMELIGHT_IMAGE_HEIGHT',720);
   numberConstant(vision,'POSITION_TARGET_AREA_THRESHOLD',1.5);numberConstant(vision,'POSITION_MAX_TARGET_DISTANCE_METERS',5.5);numberConstant(vision,'HEADING_MAX_TAG_DISTANCE_METERS',4.5);numberConstant(vision,'HEADING_SINGLE_TAG_MAX_DISTANCE_METERS',2.5);
-  for(const state of ['IDLE','READY','HOMING'])assert.ok(source('subsystems/StateMachine.java').includes(state));
+  const stateMachine=source('subsystems/StateMachine.java');
+  for(const state of ['Idle','Ready','Homing'])assert.ok(source(`subsystems/states/${state}State.java`).includes(`class ${state}State`),`${state} handler generated`);
+  assert.match(stateMachine,/enum RobotState\s*\{\s*READY,\s*HOMING,\s*IDLE\s*\}/,'Idle enum last');
+  assert.match(stateMachine,/List\.of\(\s*new frc\.robot\.subsystems\.states\.ReadyState\(\),\s*new frc\.robot\.subsystems\.states\.HomingState\(\),\s*new IdleState\(\)\)/,'All state handlers checked, Idle last');
   numberConstant(source('constants/AuditGlobalConstants.java'),'CUSTOM_GAIN',3.75);assert.ok(source('constants/GeneratedTunableConstants.java').includes('AuditGlobalConstants.class'));
   for(const call of ['driveTelemetry.publish();','SubsystemTelemetry.publish();','TunableConstants.sync();'])assert.ok(source('subsystems/PowerDashboard.java').includes(call),`Dashboard missing ${call}`);
   for(const name of ['AuditVelocity','AuditTorque']){

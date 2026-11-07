@@ -145,9 +145,14 @@ Config → States manages robot state names with the same inline Add, Edit and
 Delete list. Names use uppercase letters, numbers and underscores. Existing
 `StateMachine.RobotState` values are imported until the list is first saved to
 the `states` array in `power-tool/generated/powerlib-subsystems.json`.
-File → Update Code applies the names to the enum while preserving state logic.
-It rejects removal or renaming of values still referenced by commands, handlers
-or the default state. State behavior remains in the robot's Java state handlers.
+File → Update Code updates the enum, creates missing Java files in
+`frc/robot/subsystems/states`, and registers the handlers for state-machine checks.
+IDLE stays last in the list and cannot be renamed or deleted. Existing handler
+code, constructor arguments and registration priority are preserved; missing
+handlers are inserted before Idle. New handlers match their requested state and
+report it as actual; add mechanism actions and readiness conditions in Java.
+Removing a state deletes its untouched generated starter file. Generation rejects
+removal of values still referenced by custom handlers, commands or the default state.
 
 ## Scripts
 

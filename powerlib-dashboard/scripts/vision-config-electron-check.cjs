@@ -74,6 +74,7 @@ app.whenReady().then(async () => {
     assert(input('Horizontal FOV (degrees)').value==='63.3'&&input('Image width (px)').value==='640','Global settings persist after all cameras are deleted and navigation');
     button('States').click();await wait(()=>button('Add State')&&!button('Add State').disabled);
     assert(document.querySelector('h3').textContent==='States','States view owns its header');
+    assert(document.querySelector('[aria-label="Edit IDLE"]').disabled&&document.querySelector('[aria-label="Delete IDLE"]').disabled,'Idle cannot be renamed or deleted');
     button('Add State').click();await wait(()=>input('State name'));assert(!button('Add State'),'Add State hides while editing');
     await fill('State name','ready');assert(input('State name').value==='READY','State names normalize to uppercase');button('Save State').click();
     await wait(()=>document.querySelector('form[aria-label="State name editor"] [role="alert"]')?.textContent.includes('already exists'));
@@ -83,6 +84,7 @@ app.whenReady().then(async () => {
     document.querySelector('[aria-label="Edit CLIMB"]').click();await wait(()=>input('State name'));await fill('State name','HOMING');button('Save State').click();
     await wait(()=>window.stateSaves.length===2&&!input('State name')&&button('Add State'));
     assert(window.states.join(',')==='IDLE,READY,HOMING','Editing renames the selected state');
+    assert([...document.querySelectorAll('[aria-label^="Edit "]')].at(-1).getAttribute('aria-label')==='Edit IDLE','Idle stays at the bottom of the state list');
     document.querySelector('[aria-label="Edit HOMING"]').click();await wait(()=>input('State name'));await fill('State name','BROKEN');window.failStateSave=true;button('Save State').click();
     await wait(()=>document.querySelector('form[aria-label="State name editor"] [role="alert"]')?.textContent.includes('Simulated state write failure'));
     assert(window.states.includes('HOMING')&&input('State name').value==='BROKEN','Failed state save preserves the existing name and pending edit');

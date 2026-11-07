@@ -34,7 +34,8 @@ The generated-robot check runs the actual installer in an isolated fixture, comp
 The app-generation check uses the actual Config wizard and Save Tuned Values dialog with the production preload, IPC handlers, file saves, and Update Code command. In a disposable robot it creates all four mechanism types, edits a subsystem name, configures leader/follower motors and a CANcoder, adds/edits/deletes states and cameras, and saves field dimensions locally. It saves 60 deterministic tunable samples (mechanism, sensor, default position, torque feedforward, drivetrain, localization, and custom constants), checks the generated Java values and registrations, builds twice, and verifies that repeat generation preserves the files and configuration. Robot connections are blocked; no running robot or existing robot project is modified. Logs and `result.json` stay under `build/app-generation-check-*`.
 
 The state-machine check runs the template state logic and real WPILib instant command
-with hardware stubs and one test-only enum value. It checks first-match priority,
+with hardware stubs and a state handler produced by the generator. It checks
+generated handler execution, Idle-last registration, first-match priority,
 guarded transitions, retrying pending requests, skipping the search when already in the
 requested state, continued active execution, returning to Idle and request/actual separation.
 

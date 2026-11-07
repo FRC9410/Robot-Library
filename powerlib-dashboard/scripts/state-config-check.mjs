@@ -21,7 +21,7 @@ try {
   await saveStateConfig(fixture, config);
   assert.deepEqual((await readStateConfig(fixture)).config, config);
   assert.deepEqual(JSON.parse(await fs.readFile(initial.path, "utf8")), { ...otherSections, states: config.states });
-  for (const states of [[], ["IDLE", "IDLE"], ["idle"], ["1_READY"], ["READY STATE"], ["READY-STATE"], [null]]) {
+  for (const states of [[], ["READY"], ["IDLE", "FOO_BAR", "FOOBAR"], ["IDLE", "IDLE"], ["idle"], ["1_READY"], ["READY STATE"], ["READY-STATE"], [null]]) {
     await assert.rejects(saveStateConfig(fixture, { states }));
   }
   assert.deepEqual((await readStateConfig(fixture)).config, config, "Invalid edits preserve the saved list");

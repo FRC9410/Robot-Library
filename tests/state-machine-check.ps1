@@ -18,9 +18,21 @@ function Write-FixtureSource([string]$relativePath, [string]$source) {
 
 $robotTemplate = Join-Path $root 'templates/replacements/src/main/java'
 $machine = [IO.File]::ReadAllText((Join-Path $robotTemplate 'frc/robot/subsystems/StateMachine.java'))
-# Add one test-only request to exercise transitions without expanding the shipped IDLE enum.
-$machine = $machine.Replace("    IDLE", "    IDLE, CHECK")
-Write-FixtureSource 'frc/robot/subsystems/StateMachine.java' $machine
+# Generate a real CHECK handler and registration, without changing the shipped IDLE enum.
+$generationRoot = Join-Path $fixture 'generated'
+$generationMachine = Join-Path $generationRoot 'src/main/java/frc/robot/subsystems/StateMachine.java'
+New-Item -ItemType Directory -Path (Split-Path $generationMachine) -Force | Out-Null
+[IO.File]::WriteAllText($generationMachine, $machine)
+$tokens = $null; $errors = $null
+$ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'generate-subsystem.ps1'), [ref]$tokens, [ref]$errors)
+foreach ($name in @('Get-RobotStateClassName', 'New-RobotStateContent', 'Write-RobotStatesConfiguration')) {
+    $function = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
+    Invoke-Expression $function.Extent.Text
+}
+Push-Location $generationRoot
+try { Write-RobotStatesConfiguration @('IDLE', 'CHECK') | Out-Null } finally { Pop-Location }
+Write-FixtureSource 'frc/robot/subsystems/StateMachine.java' ([IO.File]::ReadAllText($generationMachine))
+Write-FixtureSource 'frc/robot/subsystems/states/CheckState.java' ([IO.File]::ReadAllText((Join-Path $generationRoot 'src/main/java/frc/robot/subsystems/states/CheckState.java')))
 foreach ($path in @('frc/robot/subsystems/states/IdleState.java', 'frc/robot/commands/RequestState.java', 'frc/robot/commands/SwerveDriveCommand.java')) {
     Write-FixtureSource $path ([IO.File]::ReadAllText((Join-Path $robotTemplate $path)))
 }
@@ -52,7 +64,7 @@ Write-FixtureSource 'frc/robot/Constants.java' @'
 package frc.robot;
 public class Constants {
   public static class StateMachine {
-    public static final frc.robot.subsystems.StateMachine.RobotState DEFAULT_STATE = frc.robot.subsystems.StateMachine.RobotState.IDLE;
+    public static frc.robot.subsystems.StateMachine.RobotState DEFAULT_STATE = frc.robot.subsystems.StateMachine.RobotState.IDLE;
   }
   public static class Tuner {
     public static frc.robot.subsystems.Swerve createDrivetrain() { return new frc.robot.subsystems.Swerve(); }

@@ -1306,6 +1306,38 @@ function Write-ConstantsFile {
     return $outputFile
 }
 
+function Get-RobotStateClassName {
+    param([Parameter(Mandatory = $true)][string]$Name)
+    return (($Name.Split('_') | ForEach-Object { $_.Substring(0, 1) + $_.Substring(1).ToLowerInvariant() }) -join '') + 'State'
+}
+
+function New-RobotStateContent {
+    param([Parameter(Mandatory = $true)][string]$Name)
+    $className = Get-RobotStateClassName $Name
+    return @"
+package frc.robot.subsystems.states;
+
+// POWERLIB GENERATED STATE: $Name
+// Add this state's behavior here. Update Code preserves existing handler files.
+import frc.powerlib.statemachine.State;
+import frc.robot.subsystems.StateMachine;
+import frc.robot.subsystems.StateMachine.RobotState;
+
+public class $className implements State<RobotState, StateMachine> {
+  @Override
+  public boolean match(RobotState requestedState, StateMachine stateMachine) {
+    return requestedState == RobotState.$Name;
+  }
+
+  @Override
+  public void execute(RobotState requestedState, StateMachine stateMachine) {
+    // TODO: implement $Name behavior and readiness conditions.
+    stateMachine.setActualState(RobotState.$Name);
+  }
+}
+"@
+}
+
 function Write-RobotStatesConfiguration {
     param([Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$States)
 
@@ -1315,6 +1347,12 @@ function Write-RobotStatesConfiguration {
         if ($name -cnotmatch '^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$' -or -not $names.Add($name)) {
             throw 'State names must be unique uppercase identifiers, starting with a letter.'
         }
+    }
+    if (-not $names.Contains('IDLE')) { throw 'Keep IDLE as the fallback robot state.' }
+    $States = @($States | Where-Object { $_ -ne 'IDLE' }) + @('IDLE')
+    $classNames = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($name in $States) {
+        if (-not $classNames.Add((Get-RobotStateClassName $name))) { throw 'State names must generate distinct handler class names.' }
     }
     $javaRoot = Join-Path (Get-Location) 'src/main/java'
     $outputFile = Join-Path $javaRoot 'frc/robot/subsystems/StateMachine.java'
@@ -1326,25 +1364,127 @@ function Write-RobotStatesConfiguration {
     foreach ($name in $previous) {
         if ($name -cnotmatch '^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$') { throw 'RobotState contains custom enum logic; update its names in robot code.' }
     }
-    # Removing an enum value must not silently break existing commands or state handlers.
+    $maskJava = {
+        param([string]$text)
+        [regex]::Replace($text, '/\*[\s\S]*?\*/|//[^\r\n]*|"(?:\\[\s\S]|[^"\\])*"|''(?:\\[\s\S]|[^''\\])*''', {
+            param($match)
+            [regex]::Replace($match.Value, '[^\r\n]', ' ')
+        })
+    }
+    $masked = & $maskJava $source
+    $registration = [regex]::Match($masked, '\b(?:java\.util\.)?List\s*<\s*(?:frc\.powerlib\.statemachine\.)?State\s*<\s*RobotState\s*,\s*StateMachine\s*>\s*>\s+states\s*=\s*(?:java\.util\.)?List\s*\.\s*of\s*\(')
+    if (-not $registration.Success) { throw 'Cannot update state handlers: StateMachine.states must use List.of(...). Existing Java was preserved.' }
+    $argumentStart = $registration.Index + $registration.Length
+    $depth = 1
+    $segmentStart = $argumentStart
+    $arguments = @()
+    $closing = -1
+    for ($index = $argumentStart; $index -lt $masked.Length; $index++) {
+        $char = $masked[$index]
+        if ('([{'.Contains($char)) { $depth++ }
+        if (')]}'.Contains($char)) { $depth-- }
+        if ($depth -eq 0) {
+            $arguments += $source.Substring($segmentStart, $index - $segmentStart).Trim()
+            $closing = $index
+            break
+        }
+        if ($char -eq ',' -and $depth -eq 1) {
+            $arguments += $source.Substring($segmentStart, $index - $segmentStart).Trim()
+            $segmentStart = $index + 1
+        }
+    }
+    if ($closing -lt 0) { throw 'Could not read StateMachine.states registration. Existing Java was preserved.' }
+    $entries = @()
+    foreach ($argument in @($arguments | Where-Object { $_ })) {
+        $code = (& $maskJava $argument).Trim()
+        $constructor = [regex]::Match($code, '^new\s+(?:frc\.robot\.subsystems\.states\.)?([A-Za-z_$][\w$]*)\s*\(')
+        $class = if ($constructor.Success) { $constructor.Groups[1].Value } else { '' }
+        if (-not $class -and $code -match '^(?:this\.)?([A-Za-z_$][\w$]*)$') {
+            $fieldName = $Matches[1]
+            $field = [regex]::Match($masked, '\b(?:frc\.robot\.subsystems\.states\.)?([A-Za-z_$][\w$]*)\s+' + [regex]::Escape($fieldName) + '\s*=')
+            if ($field.Success) { $class = $field.Groups[1].Value }
+        }
+        if (-not $class) { throw "Cannot identify state handler registration '$argument'. Existing Java was preserved." }
+        $entries += [pscustomobject]@{ className = $class; expression = $argument }
+    }
+    $handlerDirectory = Join-Path $javaRoot 'frc/robot/subsystems/states'
     $removed = @($previous | Where-Object { -not $names.Contains($_) })
+    $deleteFiles = @{}
+    foreach ($name in $removed) {
+        $path = Join-Path $handlerDirectory ((Get-RobotStateClassName $name) + '.java')
+        if (Test-Path -LiteralPath $path) {
+            $content = [IO.File]::ReadAllText($path).Replace("`r`n", "`n").TrimEnd()
+            if ($content -ceq (New-RobotStateContent $name).Replace("`r`n", "`n").TrimEnd()) { $deleteFiles[[IO.Path]::GetFullPath($path)] = $name }
+        }
+    }
+    # Removing an enum value must not silently break existing commands or state handlers.
     if ($removed.Count -gt 0) {
         foreach ($file in Get-ChildItem -LiteralPath $javaRoot -Recurse -Filter '*.java') {
+            if ($deleteFiles.ContainsKey($file.FullName)) { continue }
             $code = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8
-            if ($file.FullName -eq [IO.Path]::GetFullPath($outputFile)) { $code = $code.Remove($enum.Index, $enum.Length) }
+            if ($file.FullName -eq [IO.Path]::GetFullPath($outputFile)) {
+                foreach ($range in @(@{ start = $argumentStart; length = $closing - $argumentStart }, @{ start = $enum.Index; length = $enum.Length }) | Sort-Object { $_.start } -Descending) {
+                    $code = $code.Remove($range.start, $range.length)
+                }
+                foreach ($name in $removed) {
+                    $class = Get-RobotStateClassName $name
+                    $code = [regex]::Replace($code, '(?m)^import frc\.robot\.subsystems\.states\.' + [regex]::Escape($class) + ';\r?\n', '')
+                }
+            }
             $code = [regex]::Replace($code, '(?s)/\*.*?\*/|//[^\r\n]*', '')
             foreach ($name in $removed) {
                 if ($code -cmatch ('\b(?:RobotState\s*\.\s*|case\s+(?:[A-Z0-9_]+\s*,\s*)*)' + [regex]::Escape($name) + '\b')) {
                     throw "Cannot remove or rename state $name; $($file.Name) still references it. Update robot code references first."
                 }
+                $class = Get-RobotStateClassName $name
+                $path = [IO.Path]::GetFullPath((Join-Path $handlerDirectory "$class.java"))
+                if ($deleteFiles.ContainsKey($path) -and $code -cmatch ('\b' + [regex]::Escape($class) + '\b')) {
+                    throw "Cannot remove state $name; $($file.Name) still uses $class. Update robot code references first."
+                }
             }
         }
     }
+    $idleEntries = @($entries | Where-Object { $_.className -ceq 'IdleState' })
+    if ($idleEntries.Count -gt 1) { throw 'Register IdleState only once; existing Java was preserved.' }
+    $idleEntry = if ($idleEntries.Count -eq 1) { $idleEntries[0].expression } else { 'new frc.robot.subsystems.states.IdleState()' }
+    $removedClasses = @($removed | ForEach-Object { Get-RobotStateClassName $_ })
+    $entries = @($entries | Where-Object { $_.className -notin $removedClasses -and $_.className -ne 'IdleState' })
+    # Retain constructor arguments and cached handler instances already owned by robot code.
+    foreach ($name in $States) {
+        $class = Get-RobotStateClassName $name
+        if ($name -ne 'IDLE' -and -not @($entries | Where-Object { $_.className -ceq $class }).Count) {
+            $entries += [pscustomobject]@{ className = $class; expression = "new frc.robot.subsystems.states.$class()" }
+        }
+    }
+    $expressions = @(@($entries | ForEach-Object { $_.expression }) + @($idleEntry) | ForEach-Object {
+        if ($_ -match '//[^\r\n]*$') { $_ + "`n          " } else { $_ }
+    })
+    $registrationBody = "`n          " + ($expressions -join ",`n          ") + ")"
+    $source = $source.Substring(0, $argumentStart) + $registrationBody + $source.Substring($closing + 1)
+    foreach ($name in $removed) {
+        $class = Get-RobotStateClassName $name
+        if ($deleteFiles.ContainsKey([IO.Path]::GetFullPath((Join-Path $handlerDirectory "$class.java")))) {
+            $source = [regex]::Replace($source, '(?m)^import frc\.robot\.subsystems\.states\.' + [regex]::Escape($class) + ';\r?\n', '')
+        }
+    }
+    $source = $source.Replace('activeState = states.get(0);', 'activeState = states.get(states.size() - 1);')
+    $source = [regex]::Replace($source, '(?m)^(\s*private boolean requestsChanged);', '$1 = true;')
     $body = "`n    " + ($States -join ",`n    ") + "`n  "
+    $enum = [regex]::Match($source, '(?s)\benum\s+RobotState\s*\{([^{}]*)\}')
     $start = $enum.Groups[1].Index
     $source = $source.Substring(0, $start) + $body + $source.Substring($start + $enum.Groups[1].Length)
     [IO.File]::WriteAllText($outputFile, $source, [Text.UTF8Encoding]::new($false))
-    return $outputFile
+    New-Item -ItemType Directory -Force -Path $handlerDirectory | Out-Null
+    $written = @($outputFile)
+    foreach ($name in $States) {
+        $path = Join-Path $handlerDirectory ((Get-RobotStateClassName $name) + '.java')
+        if (-not (Test-Path -LiteralPath $path)) {
+            [IO.File]::WriteAllText($path, (New-RobotStateContent $name).TrimEnd() + "`n", [Text.UTF8Encoding]::new($false))
+            $written += $path
+        }
+    }
+    foreach ($path in $deleteFiles.Keys) { [IO.File]::Delete($path) }
+    return $written
 }
 
 function Write-LocalizationConstants {

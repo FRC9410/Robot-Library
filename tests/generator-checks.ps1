@@ -3,7 +3,7 @@ $root = Split-Path $PSScriptRoot -Parent
 $tokens = $null; $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'generate-subsystem.ps1'), [ref]$tokens, [ref]$errors)
 if ($errors.Count) { throw ($errors | Out-String) }
-foreach ($name in @('Get-PowerDashboardTemplate', 'Ensure-PowerDashboardRawNetworkTablesSupport', 'Ensure-SubsystemTelemetrySupport', 'Ensure-RobotStateTelemetrySupport', 'Ensure-SwerveCachedTuningSupport', 'Format-JavaDoubleLiteral', 'Write-VisionCameraConfiguration', 'Write-RobotStatesConfiguration', 'Write-LocalizationConstants')) {
+foreach ($name in @('Get-PowerDashboardTemplate', 'Ensure-PowerDashboardRawNetworkTablesSupport', 'Ensure-SubsystemTelemetrySupport', 'Ensure-RobotStateTelemetrySupport', 'Ensure-SwerveCachedTuningSupport', 'Format-JavaDoubleLiteral', 'Write-VisionCameraConfiguration', 'Get-RobotStateClassName', 'New-RobotStateContent', 'Write-RobotStatesConfiguration', 'Write-LocalizationConstants')) {
     $function = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
     Invoke-Expression $function.Extent.Text
 }
@@ -141,11 +141,22 @@ Push-Location $fixture
 try {
     Write-RobotStatesConfiguration @('IDLE', 'READY', 'SHOOTING') | Out-Null
     $first = [IO.File]::ReadAllText($statesPath)
+    if ($first -notmatch '(?s)enum RobotState\s*\{\s*READY,\s*SHOOTING,\s*IDLE\s*\}') { throw 'Idle enum value is not last.' }
+    $handlers = Join-Path $statesDirectory 'states'
+    foreach ($name in @('Idle', 'Ready', 'Shooting')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $handlers "${name}State.java"))) { throw "Missing generated ${name}State." }
+    }
+    if ($first.IndexOf('ReadyState()') -gt $first.IndexOf('IdleState()') -or $first.IndexOf('ShootingState()') -gt $first.IndexOf('IdleState()')) { throw 'Idle handler is not last.' }
+    if (-not $first.Contains('activeState = states.get(states.size() - 1);')) { throw 'Initial active state does not use the final Idle handler.' }
+    $readyPath = Join-Path $handlers 'ReadyState.java'
+    $customReady = [IO.File]::ReadAllText($readyPath).Replace('  @Override', "  // Team-owned readiness and actions.`n  @Override")
+    [IO.File]::WriteAllText($readyPath, $customReady)
     foreach ($expected in @('READY,', 'SHOOTING', 'public void requestState', 'private void selectState')) {
         if (-not $first.Contains($expected)) { throw "State generation lost $expected" }
     }
     Write-RobotStatesConfiguration @('IDLE', 'READY', 'SHOOTING') | Out-Null
     if ($first -cne [IO.File]::ReadAllText($statesPath)) { throw 'State generation is not idempotent.' }
+    if ($customReady -cne [IO.File]::ReadAllText($readyPath)) { throw 'Existing handler code was overwritten.' }
     $requestFile = Join-Path $statesDirectory 'StateRequestCheck.java'
     [IO.File]::WriteAllText($requestFile, 'class StateRequestCheck { Object state = StateMachine.RobotState.READY; }')
     foreach ($list in @(@('IDLE', 'SHOOTING'), @('READY', 'SHOOTING'), @('IDLE', 'IDLE'))) {
@@ -155,5 +166,25 @@ try {
     }
     Write-RobotStatesConfiguration @('IDLE', 'READY') | Out-Null
     if ([IO.File]::ReadAllText($statesPath).Contains('SHOOTING')) { throw 'Unreferenced removed state remains in the enum.' }
+    if (Test-Path -LiteralPath (Join-Path $handlers 'ShootingState.java')) { throw 'Untouched removed state scaffold was not cleaned up.' }
+    if ([IO.File]::ReadAllText($statesPath).Contains('ShootingState')) { throw 'Removed state remains registered.' }
+    $customRegistry = $stateTemplate.Replace('  private final List<State<RobotState, StateMachine>> states = List.of(new IdleState());', @'
+  private final frc.robot.subsystems.states.IdleState fallback = new frc.robot.subsystems.states.IdleState();
+  private final frc.robot.subsystems.states.ReadyState ready = new frc.robot.subsystems.states.ReadyState(42);
+  private final List<State<RobotState, StateMachine>> states = List.of(fallback, ready);
+'@).Replace('states.get(states.size() - 1)', 'states.get(0)')
+    [IO.File]::WriteAllText($statesPath, $customRegistry)
+    Write-RobotStatesConfiguration @('IDLE', 'READY', 'SPINNING_UP') | Out-Null
+    $preserved = [IO.File]::ReadAllText($statesPath)
+    if (-not $preserved.Contains('new frc.robot.subsystems.states.ReadyState(42)') -or $preserved.IndexOf('          ready,') -gt $preserved.LastIndexOf('          fallback)')) { throw 'Cached handlers, constructor arguments or Idle ordering were changed.' }
+    if (-not (Test-Path -LiteralPath (Join-Path $handlers 'SpinningUpState.java'))) { throw 'Underscore state name did not generate SpinningUpState.' }
+    if ($customReady -cne [IO.File]::ReadAllText($readyPath)) { throw 'Cached handler migration changed team code.' }
+    Write-RobotStatesConfiguration @('IDLE', 'READY', 'SPINNING_UP') | Out-Null
+    if ($preserved -cne [IO.File]::ReadAllText($statesPath)) { throw 'Cached handler migration is not idempotent.' }
+    foreach ($list in @(@('READY'), @('IDLE', 'READY', 'FOO_BAR', 'FOOBAR'))) {
+        $rejected = $false
+        try { Write-RobotStatesConfiguration $list | Out-Null } catch { $rejected = $true }
+        if (-not $rejected -or $preserved -cne [IO.File]::ReadAllText($statesPath)) { throw 'Invalid handler names changed Java.' }
+    }
 } finally { Pop-Location }
-Write-Host 'Installer inventory, dashboard migrations, Vision generation and state enum generation passed; custom code and Unicode preserved.'
+Write-Host 'Installer inventory, dashboard migrations, Vision and state handlers passed; Idle-last order, cached instances, custom code, cleanup and repeated generation verified.'

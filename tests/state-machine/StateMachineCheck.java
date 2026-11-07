@@ -43,7 +43,25 @@ public class StateMachineCheck {
 
   public static void main(String[] args) throws Exception {
     check(HAL.initialize(500, 0), "HAL initialization");
+    frc.robot.Constants.StateMachine.DEFAULT_STATE = RobotState.CHECK;
+    StateMachine nonIdleDefault = new StateMachine();
+    nonIdleDefault.periodic();
+    check(nonIdleDefault.getCurrentState() == RobotState.CHECK, "First cycle selects a non-Idle default before executing");
+    frc.robot.Constants.StateMachine.DEFAULT_STATE = RobotState.IDLE;
     StateMachine machine = new StateMachine();
+    Field generatedStates = StateMachine.class.getDeclaredField("states");
+    generatedStates.setAccessible(true);
+    List<?> generatedHandlers = (List<?>) generatedStates.get(machine);
+    check(generatedHandlers.get(generatedHandlers.size() - 1) instanceof IdleState, "Generated Idle handler is last");
+    machine.periodic();
+    check(machine.getCurrentState() == RobotState.IDLE, "Priority handlers do not execute on initial Idle startup");
+    Object generatedOwner = new Object();
+    machine.requestState(RobotState.CHECK, generatedOwner);
+    machine.periodic();
+    check(machine.getCurrentState() == RobotState.CHECK, "Generated CHECK handler is registered and executes");
+    machine.clearRequest(generatedOwner);
+    machine.periodic();
+    check(machine.getCurrentState() == RobotState.IDLE, "Generated handlers return to the final Idle fallback");
     Object owner = new Object();
     SwerveDriveCommand drive = new SwerveDriveCommand(
         machine.drivetrain, new CommandXboxController(0), machine::getCurrentState);
