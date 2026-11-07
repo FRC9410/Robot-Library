@@ -32,6 +32,15 @@ public class TelemetryContractTest {
     assertThrows(IllegalArgumentException.class, () -> PowerRobotContainer.setSubsystemData("Intake/Wrist", "Position", 1));
     assertThrows(IllegalArgumentException.class, () -> PowerRobotContainer.setSubsystemData("Wrist", " ", 1));
   }
+  @Test public void swerveModulesAreLoggedOnlyWhenEveryReadingIsFinite() {
+    var good = new edu.wpi.first.math.kinematics.SwerveModuleState(1.5, Rotation2d.fromDegrees(30));
+    assertTrue(DriveTelemetry.validModules(new edu.wpi.first.math.kinematics.SwerveModuleState[] {good, good, good, good}));
+    assertFalse(DriveTelemetry.validModules(null));
+    assertFalse(DriveTelemetry.validModules(new edu.wpi.first.math.kinematics.SwerveModuleState[0]));
+    assertFalse(DriveTelemetry.validModules(new edu.wpi.first.math.kinematics.SwerveModuleState[] {
+        good, new edu.wpi.first.math.kinematics.SwerveModuleState(Double.NaN, Rotation2d.kZero)}));
+    assertFalse(DriveTelemetry.validModules(new edu.wpi.first.math.kinematics.SwerveModuleState[] {good, null}));
+  }
   @Test public void logsRunEveryLoopWhileNetworkPublicationIsThrottled() {
     int[] logs = {0};
     for (int index = 0; index < 50; index++) SubsystemTelemetry.publish(index * 0.02, data -> logs[0]++);

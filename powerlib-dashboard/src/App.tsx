@@ -20,6 +20,7 @@ import ConstructionIcon from "@mui/icons-material/Construction";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import ElectricBoltIcon from "@mui/icons-material/ElectricBolt";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
+import TimelineIcon from "@mui/icons-material/Timeline";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import type {
   CharacterizationCommand,
@@ -47,6 +48,7 @@ import { tuningModeRequestTopicName, tuningModeTopicName } from "./features/netw
 import { RobotPanel } from "./features/robot/RobotPanel";
 import { DashboardPanel } from "../dashboard";
 import { LimelightsPanel } from "./features/limelights/LimelightsPanel";
+import { LogsPanel } from "./features/logs/LogsPanel";
 import { detectLimelights } from "./features/limelights/limelightUtils";
 import type { AppView } from "./types/app";
 import { TuningModeSync } from "./networktables/TuningModeSync";
@@ -507,7 +509,7 @@ function AppContent() {
 
   useEffect(() => {
     if (
-      (activeView === "robot" || activeView === "subsystems") &&
+      (activeView === "robot" || activeView === "subsystems" || activeView === "logs") &&
       !subsystemDocument.loading &&
       !subsystemDocument.path
     ) {
@@ -554,9 +556,12 @@ function AppContent() {
     }
   }
 
+  // The Robot and Logs tabs fit the window and scroll inside their own widgets instead of scrolling the page.
+  const fillsWindow = activeView === "robot" || activeView === "logs" || activeView === "limelights";
+
   return (
-    <Box sx={{ minHeight: activeView === "robot" ? 0 : "100vh", height: activeView === "robot" ? "100dvh" : undefined,
-      overflow: activeView === "robot" ? "hidden" : undefined, display: "flex", flexDirection: "column", bgcolor: "background.default" }}>
+    <Box sx={{ minHeight: fillsWindow ? 0 : "100vh", height: fillsWindow ? "100dvh" : undefined,
+      overflow: fillsWindow ? "hidden" : undefined, display: "flex", flexDirection: "column", bgcolor: "background.default" }}>
       <AppBar
         position="sticky"
         color="inherit"
@@ -635,6 +640,13 @@ function AppContent() {
               />
             )}
             <Tab
+              icon={<TimelineIcon />}
+              iconPosition="start"
+              label="Logs"
+              value="logs"
+              sx={{ minHeight: 44 }}
+            />
+            <Tab
               icon={<DashboardIcon />}
               iconPosition="start"
               label="NetworkTables"
@@ -702,10 +714,17 @@ function AppContent() {
         </Alert>
       </Snackbar>
 
-      <Container maxWidth={false} disableGutters={activeView === "robot"} sx={activeView === "drive" ? { p: "0 !important" } : activeView === "robot"
-        ? { py: 0, pl: { xs: 2, sm: 3 }, flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" } : { py: 2 }}>
+      <Container maxWidth={false} disableGutters={activeView === "robot" || activeView === "limelights"} sx={activeView === "drive" ? { p: "0 !important" } : activeView === "robot"
+        ? { py: 0, pl: { xs: 2, sm: 3 }, flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }
+        : fillsWindow
+          ? {
+              pt: activeView === "logs" ? 1.5 : 0.5,
+              pb: activeView === "logs" ? 0 : 0.5,
+              flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column"
+            }
+          : { py: 2 }}>
         {telemetryError && <Alert severity="warning" sx={{ m: 1 }}>{telemetryError}</Alert>}
-        <Stack spacing={2} sx={activeView === "robot" ? { flex: 1, minHeight: 0 } : undefined}>
+        <Stack spacing={2} useFlexGap={activeView === "limelights"} sx={fillsWindow ? { flex: 1, minHeight: 0 } : undefined}>
           {activeView === "drive" && <DashboardPanel subsystems={subsystemDocument.subsystems} />}
           {activeView === "robot" && (
             <RobotPanelWithTelemetry
@@ -713,6 +732,11 @@ function AppContent() {
               tuningRequested={tuningModeEnabled}
             />
           )}
+
+          {/* Stays mounted so an open log survives switching tabs. */}
+          <Box sx={{ display: activeView === "logs" ? "flex" : "none", flexDirection: "column", flex: 1, minHeight: 0 }}>
+            <LogsPanel active={activeView === "logs"} subsystems={subsystemDocument.subsystems} />
+          </Box>
 
           {activeView === "networktables" && (
             <NetworkTablesPanel />

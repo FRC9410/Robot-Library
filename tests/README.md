@@ -13,6 +13,7 @@ try {
     node scripts/drive-model-check.mjs
     node scripts/subscription-check.mjs
     node scripts/tuning-check.mjs
+    node scripts/log-check.mjs
     npm run build
 } finally { Pop-Location }
 ```
