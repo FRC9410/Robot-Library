@@ -145,7 +145,7 @@ try {
     . (Join-Path $dashboardSource 'scripts/project-layout.ps1')
     Initialize-PowerToolLayout -RobotRoot $installRoot
     Stop-PowerToolProcesses $dashboardOutput
-    Reset-PowerToolAppFiles -ToolRoot $dashboardOutput
+    Reset-PowerToolAppFiles -ToolRoot $dashboardOutput -KeepDependencies:$SkipNpmInstall
     Remove-DirectoryIfExists $legacyDashboardOutput
     Remove-Item -LiteralPath $legacyWindowsLauncherPath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $legacyPowershellLauncherPath -Force -ErrorAction SilentlyContinue
@@ -159,6 +159,7 @@ try {
     . (Join-Path $dashboardScriptsPath 'project-layout.ps1')
     Copy-PowerToolBuildScript -SourceRoot $sourceRoot -RobotRoot $installRoot
     Copy-PowerToolGeneratorTemplate -SourceRoot $sourceRoot -ScriptsRoot $dashboardScriptsPath
+    Copy-Item -LiteralPath (Join-Path $dashboardSource 'scripts/source-config.cjs') -Destination (Join-Path $dashboardScriptsPath 'source-config.cjs') -Force
 
     Push-Location $dashboardOutput
     try {

@@ -4,6 +4,7 @@ import type { ConnectionState } from "../../types/app";
 import { TopicSnapshotBuffer } from "../../networktables/TopicSnapshotBuffer";
 import { telemetryUpdateIntervalMs, tuningUpdateIntervalMs } from "../../networktables/telemetryTiming";
 import { TopicViews, type TopicView } from "../../networktables/TopicViews";
+import { useTuningPersistence, type TuningRecovery } from "../../networktables/useTuningPersistence";
 
 export type ConnectionSettings = {
   targetId: string;
@@ -21,6 +22,7 @@ type NetworkTablesContextValue = {
   setTopics: React.Dispatch<React.SetStateAction<NtTopicSnapshot[]>>;
   upsertTopic: (snapshot: NtTopicSnapshot) => void;
   pruneTopics: (predicate: (snapshot: NtTopicSnapshot) => boolean) => void;
+  tuningRecovery: TuningRecovery;
 };
 
 const NetworkTablesContext = createContext<NetworkTablesContextValue | null>(null);
@@ -57,6 +59,7 @@ export function NetworkTablesProvider({ children }: { children: ReactNode }) {
   const topicViews = useRef(new TopicViews());
   const [telemetryError, setTelemetryError] = useState<string | null>(null);
   const topicBuffer = useRef(new TopicSnapshotBuffer());
+  const tuningRecovery = useTuningPersistence(clientRef.current, connectionSettingsState);
 
   function setConnectionSettings(settings: ConnectionSettings) {
     setConnectionSettingsState(settings);
@@ -109,7 +112,8 @@ export function NetworkTablesProvider({ children }: { children: ReactNode }) {
         telemetryError,
         setTopics,
         upsertTopic,
-        pruneTopics
+        pruneTopics,
+        tuningRecovery
       }}
     >
       <TopicViewsContext.Provider value={topicViews.current}>{children}</TopicViewsContext.Provider>

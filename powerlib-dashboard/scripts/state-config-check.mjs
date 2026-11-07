@@ -1,46 +1,20 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { build } from "esbuild";
-const bundle = await build({ entryPoints: [fileURLToPath(new URL("../electron/stateFiles.ts", import.meta.url))], bundle: true, write: false, format: "esm", platform: "node" });
-const { readStateConfig, saveStateConfig } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString("base64")}`);
-const fixture = await fs.mkdtemp(path.join(os.tmpdir(), "power-tool-state-config-"));
-try {
-  assert.deepEqual((await readStateConfig(fixture)).config.states, ["IDLE"]);
-  const directory = path.join(fixture, "src/main/java/frc/robot/subsystems");
-  await fs.mkdir(directory, { recursive: true });
-  const machine = path.join(directory, "StateMachine.java");
-  await fs.writeFile(machine, 'class StateMachine { enum RobotState { IDLE, /* old state: TEST */ READY, // comment\n SHOOTING; } }');
-  const initial = await readStateConfig(fixture);
-  assert.deepEqual(initial.config.states, ["IDLE", "READY", "SHOOTING"]);
-  const otherSections = { subsystems: [{ name: "Intake" }], vision: { fovDegrees: 60 }, swerve: { heading: { kP: 7 } } };
-  await fs.writeFile(initial.path, JSON.stringify(otherSections));
-  const config = { states: ["IDLE", "HOMING"] };
-  await saveStateConfig(fixture, config);
-  assert.deepEqual((await readStateConfig(fixture)).config, config);
-  assert.deepEqual(JSON.parse(await fs.readFile(initial.path, "utf8")), { ...otherSections, states: config.states });
-  await saveStateConfig(fixture, { states: ["IDLE"], deleteHandlers: ["HOMING"] });
-  assert.deepEqual(JSON.parse(await fs.readFile(initial.path, "utf8")).stateHandlerDeletions, ["HOMING"], "Confirmed handler removal persists for Update Code");
-  await saveStateConfig(fixture, { states: ["IDLE", "READY"] });
-  assert.deepEqual(JSON.parse(await fs.readFile(initial.path, "utf8")).stateHandlerDeletions, ["HOMING"], "Other edits retain pending confirmation");
-  await saveStateConfig(fixture, config);
-  assert.ok(!("stateHandlerDeletions" in JSON.parse(await fs.readFile(initial.path, "utf8"))), "Re-adding a state cancels its pending handler deletion");
-  for (const deleteHandlers of [["IDLE"], ["HOMING"], ["../READY"], [null], "READY"]) {
-    await assert.rejects(saveStateConfig(fixture, { ...config, deleteHandlers }));
-  }
-  for (const states of [[], ["READY"], ["IDLE", "FOO_BAR", "FOOBAR"], ["IDLE", "IDLE"], ["idle"], ["1_READY"], ["READY STATE"], ["READY-STATE"], [null]]) {
-    await assert.rejects(saveStateConfig(fixture, { states }));
-  }
-  assert.deepEqual((await readStateConfig(fixture)).config, config, "Invalid edits preserve the saved list");
-  await fs.writeFile(initial.path, "{broken");
-  await assert.rejects(saveStateConfig(fixture, config));
-  assert.equal(await fs.readFile(initial.path, "utf8"), "{broken", "Do not overwrite corrupt project configuration");
-  await fs.writeFile(initial.path, JSON.stringify(otherSections));
-  await fs.writeFile(machine, 'class StateMachine { enum RobotState { IDLE(1); RobotState(int value) {} } }');
-  await assert.rejects(readStateConfig(fixture), /RobotState/);
-  console.log("State config checks passed: Java enum import, default state, project persistence, unrelated settings preservation, names, duplicates and failed saves.");
-} finally {
-  if (path.dirname(fixture) === path.resolve(os.tmpdir()) && path.basename(fixture).startsWith("power-tool-state-config-")) await fs.rm(fixture, { recursive: true, force: true });
-}
+import { configFixture } from "./config-fixture.mjs";
+const {api, root, file} = await configFixture("state-config");
+let initial = await api.readStateConfig(root);
+assert.deepEqual(initial.config.states, ["IDLE"]);
+let saved = await api.saveStateConfig(root, {...initial.config, states:["READY","HOMING"]});
+assert.deepEqual(saved.config.states,["READY","HOMING","IDLE"]);
+const ready = file("subsystems/states/ReadyState.java");
+const code = (await fs.readFile(ready,"utf8")).replace("// TODO: implement READY actions and readiness conditions.", 'System.out.println("edited");');
+await fs.writeFile(ready,code);
+await assert.rejects(api.saveStateConfig(root,{...saved.config,states:["HOMING"]}), /Confirm deletion/);
+assert.equal(await fs.readFile(ready,"utf8"),code);
+saved = await api.saveStateConfig(root,{...saved.config,states:["HOMING"],deleteHandlers:["READY"]});
+await assert.rejects(fs.access(ready));
+await fs.appendFile(file("subsystems/StateMachine.java"),"\n// edited in IDE\n");
+await assert.rejects(api.saveStateConfig(root,{...saved.config,states:["HOMING","NEW"]}), /changed since/);
+for(const states of [["idle"],["1_READY"],["READY-STATE"],["FOO_BAR","FOOBAR"],[null]]) await assert.rejects(api.saveStateConfig(root,{states}));
+assert.deepEqual((await api.readStateConfig(root)).config.states,["HOMING","IDLE"]);
+console.log("State source checks passed: implicit Idle, immediate save/delete, custom body preservation, invalid input and stale editor protection.");

@@ -79,7 +79,7 @@ export function VisionSettings() {
               <VisionCameraSettingsForm vision={vision} disabled={saving || editing !== null || !!error} onSave={settings => save({ ...vision, ...settings })} />
             </Stack>
           </Box>
-          {saved && <Alert severity="success">Vision configuration saved. Use File → Update Code, then build and deploy to apply camera names.</Alert>}
+          {saved && <Alert severity="success">Vision settings saved to Java. Build and deploy to apply them to the robot.</Alert>}
         </>}
     </Stack></Box>
   </Box>;

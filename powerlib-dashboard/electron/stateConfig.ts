@@ -1,4 +1,4 @@
-export type StateConfig = { states: string[]; deleteHandlers?: string[] };
+export type StateConfig = { states: string[]; deleteHandlers?: string[]; renameHandlers?: Record<string, string>; sourceRevision?: string };
 
 export function validateStateConfig(value: unknown): asserts value is StateConfig {
   if (!value || typeof value !== "object" || !Array.isArray((value as StateConfig).states)) throw Error("States must be a list of names.");

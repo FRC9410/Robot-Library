@@ -256,7 +256,7 @@ export function DashboardPanel({ subsystems = [], renderTopCards, renderSidebar,
     </div>
     <div className="dashboard-stream-pool" aria-hidden="true">{streaming.map(camera => <CameraStream key={camera.id}
       camera={camera} override={settings.urls[camera.id]} images={images} onFailed={updateCameraFailure} />)}</div>
-    {tuningSubsystem && <SubsystemTuningDialog key={`${connectionSettings.host}:${connectionSettings.port}:${tuningSubsystem.id}`} owner={tuningSubsystem.id} name={tuningSubsystem.name}
+    {tuningSubsystem && <SubsystemTuningDialog key={`${connectionSettings.targetId}:${connectionSettings.host}:${connectionSettings.port}:${tuningSubsystem.id}`} owner={tuningSubsystem.id} name={tuningSubsystem.name}
       kind={tuningSubsystem.kind} subsystems={subsystems} tuningRequested={tuningRequested} onClose={() => setTuningSubsystem(null)} />}
   </div></div>;
 }

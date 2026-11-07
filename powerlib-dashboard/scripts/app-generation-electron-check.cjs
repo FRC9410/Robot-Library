@@ -18,7 +18,7 @@ app.setPath('userData', path.join(ui, 'profile'));
 let window;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const jsonFile = path.join(fixture, 'power-tool/generated/powerlib-subsystems.json');
-const readJson = () => JSON.parse(fs.readFileSync(jsonFile, 'utf8'));
+async function readJava() { return renderRun(`const [subsystems,vision,localization,states]=await Promise.all([window.powerlib.readSubsystems(),window.powerlib.readVisionConfig(),window.powerlib.readLocalizationConfig(),window.powerlib.readStateConfig()]);return {...subsystems,vision:vision.vision,localization:localization.config,states:states.config.states};`); }
 const source = relative => fs.readFileSync(path.join(fixture, 'src/main/java/frc/robot', relative), 'utf8');
 
 buildSync({ stdin: { contents: `
@@ -99,7 +99,7 @@ async function saveTunedValues() {
     window.driveRows.forEach((row,i)=>topic('Swerve',row.key,i+0.321));
     topic('Vision','Position/TargetAreaThreshold',1.5);topic('Vision','Position/MaxTargetDistanceMeters',5.5);topic('Vision','Heading/MaxTagDistanceMeters',4.5);topic('Vision','Heading/SingleTagMaxDistanceMeters',2.5);
     topic('AuditGlobal','Custom/CUSTOM_GAIN',3.75);
-    window.showTuned(topics);await wait(()=>button('Save selected')&&!button('Save selected').disabled);await click('Save selected');await wait(()=>document.body.textContent.includes('tuned values. Run Update Code'));
+    window.showTuned(topics);await wait(()=>button('Save selected')&&!button('Save selected').disabled);await click('Save selected');await wait(()=>document.body.textContent.includes('tuned values to Java'));
     return {topicCount:topics.length,document:await window.powerlib.readSubsystems(),localization:(await window.powerlib.readLocalizationConfig()).config};
   `);
 }
@@ -115,16 +115,16 @@ function numberConstant(text, name, expected) {
 function checkGenerated(document) {
   const inventory=[];
   for (const subsystem of document.subsystems) {
-    const name=subsystem.name;const java=source(`constants/${name}Constants.java`);inventory.push(`${name}Constants.java`);
+    const name=subsystem.sourceClass ?? subsystem.name;const java=source(`constants/${name}Constants.java`);inventory.push(`${name}Constants.java`);
     for(const [key,value] of Object.entries(subsystem.pid))numberConstant(java,key.toUpperCase(),value);
     numberConstant(java,'SENSOR_TO_MECHANISM_RATIO',subsystem.ratios.sensorToMechanism);numberConstant(java,'ROTOR_TO_SENSOR_RATIO',subsystem.ratios.rotorToSensor);
     numberConstant(java,'MOTION_MAGIC_CRUISE_VELOCITY',subsystem.motionMagic.cruiseVelocity);numberConstant(java,'MOTION_MAGIC_ACCELERATION',subsystem.motionMagic.acceleration);
     assert.equal(declaration(java,'FOC_ENABLED'),String(subsystem.focEnabled));
     numberConstant(java,'LEADER_MOTOR_ID',subsystem.motors[0].id);assert.equal(declaration(java,'LEADER_REVERSED'),String(subsystem.motors[0].reversed));
-    assert.equal(declaration(java,'LEADER_NEUTRAL_MODE'),'NeutralModeValue.'+subsystem.motors[0].neutralMode);
-    assert.equal(declaration(java,'LEADER_MOTOR_TYPE'),'MotorConfig.MotorType.'+subsystem.motors[0].motorType);
+    assert.equal(declaration(java,'LEADER_NEUTRAL_MODE').split('.').at(-1),subsystem.motors[0].neutralMode);
+    assert.equal(declaration(java,'LEADER_MOTOR_TYPE').split('.').at(-1),subsystem.motors[0].motorType);
     numberConstant(java,'FOLLOWER_1_MOTOR_ID',subsystem.motors[1].id);
-    assert.equal(declaration(java,'FOLLOWER_1_MOTOR_TYPE'),'MotorConfig.MotorType.'+subsystem.motors[1].motorType);
+    assert.equal(declaration(java,'FOLLOWER_1_MOTOR_TYPE').split('.').at(-1),subsystem.motors[1].motorType);
     assert.equal(declaration(java,'FOLLOWER_1_REVERSED'),String(subsystem.motors[1].reversed));
     assert.ok(java.includes('LEADER_REVERSED, LEADER_MOTOR_TYPE)'),`${name} config uses leader type`);
     assert.ok(java.includes('FOLLOWER_1_REVERSED, FOLLOWER_1_MOTOR_TYPE)'),`${name} config uses follower type`);
@@ -142,7 +142,7 @@ function checkGenerated(document) {
   const swerve=source('constants/SwerveConstants.java');
   const groups={driver:['DRIVER',''],requests:['REQUEST',''],driveToPoint:['DRIVE_TO_POINT',''],heading:['HEADING','']};
   const upper=value=>value.replace(/([a-z])([A-Z])/g,'$1_$2').toUpperCase();
-  for(const [group,fields]of Object.entries(document.swerve))for(const [key,value]of Object.entries(fields))numberConstant(swerve,groups[group][0]+'_'+(group==='heading'?key.toUpperCase():upper(key)),value);
+  for(const [group,fields]of Object.entries(document.swerve).filter(([group])=>group!=='sourceRevision'))for(const [key,value]of Object.entries(fields))numberConstant(swerve,groups[group][0]+'_'+(group==='heading'?key.toUpperCase():upper(key)),value);
   const vision=source('constants/VisionConstants.java');
   assert.ok(vision.includes('"limelight-front", "limelight-rear"')||/"limelight-front"[\s\S]*"limelight-rear"/.test(vision));assert.ok(!vision.includes('limelight-spare'));
   numberConstant(vision,'LIMELIGHT_FOV_DEGREES',63.4);numberConstant(vision,'LIMELIGHT_IMAGE_WIDTH',1280);numberConstant(vision,'LIMELIGHT_IMAGE_HEIGHT',720);
@@ -156,7 +156,7 @@ function checkGenerated(document) {
   for(const name of ['AuditVelocity','AuditTorque']){
     assert.ok(fs.existsSync(path.join(fixture,'src/main/java/frc/robot/characterization',name+'Characterization.java')),`Missing ${name} characterization class`);
     const dashboard=source('subsystems/PowerDashboard.java');
-    assert.ok(dashboard.includes('new '+name+'Characterization(stateMachine.'),`Missing ${name} characterization instance`);
+    assert.ok(dashboard.includes('new frc.robot.characterization.'+name+'Characterization(stateMachine.'),`Missing ${name} characterization instance`);
     for(const command of ['Quasistatic Forward','Quasistatic Reverse','Dynamic Forward','Dynamic Reverse'])assert.ok(dashboard.includes('registerCharacterizationCommand("'+name+'", "'+command+'"'),`Missing ${name} ${command} registration`);
   }
   return inventory;
@@ -165,33 +165,35 @@ function checkGenerated(document) {
 async function run() {
   const configured=await wizardAndConfig();
   assert.equal(configured.document.subsystems.length,4);assert.equal(configured.document.subsystems[2].id,'auditabsolute','Rename must preserve stable ID');
-  let document=readJson();assert.deepEqual(document.states,['IDLE','READY','HOMING']);assert.equal(document.vision.limelights.length,2);
-  assert.ok(document.stateHandlerDeletions.includes('RETIRING'),'Customized handler deletion confirmed through Config');
+  let document=await readJava();assert.deepEqual(document.states,['READY','HOMING','IDLE']);assert.equal(document.vision.limelights.length,2);
+  assert.ok(!fs.existsSync(path.join(fixture,'src/main/java/frc/robot/subsystems/states/RetiringState.java')),'Confirmed handler deletion happens during Save');
   assert.ok(!('field'in document),'Field dimensions must stay laptop-local');
   fs.writeFileSync(path.join(fixture,'configured-from-app.json'),JSON.stringify(document,null,2));
   const tuned=await saveTunedValues();assert.equal(tuned.topicCount,60);
-  document=readJson();assert.deepEqual(document.states,['IDLE','READY','HOMING']);assert.equal(document.subsystems[0].pid.kP,100.25);
+  document=await readJava();assert.deepEqual(document.states,['READY','HOMING','IDLE']);assert.equal(document.subsystems[0].pid.kP,100.25);
   fs.writeFileSync(path.join(fixture,'tuned-from-app.json'),JSON.stringify(document,null,2));
   console.log('Actual app views saved four mechanism types, motors/sensor, states, cameras, field display and 60 tuned values through production IPC.');
   const first=await renderRun(`return window.powerlib.updateSubsystemCode();`);
   fs.writeFileSync(path.join(fixture,'update-code-first.log'),first.stdout+'\n'+first.stderr);assert.ok(first.stdout.includes('BUILD SUCCESSFUL'));
-  document=readJson();const inventory=checkGenerated(document);
+  document=await readJava();const inventory=checkGenerated(document);
   assert.ok(!fs.existsSync(path.join(fixture,'src/main/java/frc/robot/subsystems/states/RetiringState.java')),'Confirmed customized execute handler deleted');
-  assert.ok(!('stateHandlerDeletions' in document),'Successful generation consumes pending confirmations');
+  assert.ok(!fs.existsSync(jsonFile),'Normal saves must not create subsystem JSON');
+  assert.ok(!fs.existsSync(path.join(fixture,'power-tool/generated/powerlib-constants.json')),'Normal saves must not create constants JSON');
   const javaRoot=path.join(fixture,'src/main/java');
   const javaFiles=fs.readdirSync(javaRoot,{recursive:true}).filter(name=>name.endsWith('.java')).sort();
   const before=new Map(javaFiles.map(name=>[name,fs.readFileSync(path.join(javaRoot,name),'utf8')]));
   const second=await renderRun(`return window.powerlib.updateSubsystemCode();`);
   fs.writeFileSync(path.join(fixture,'update-code-second.log'),second.stdout+'\n'+second.stderr);assert.ok(second.stdout.includes('BUILD SUCCESSFUL'));
-  checkGenerated(readJson());assert.deepEqual(readJson(),document,'Repeat generation changed configuration');
-  assert.deepEqual(fs.readdirSync(javaRoot,{recursive:true}).filter(name=>name.endsWith('.java')).sort(),javaFiles,'Repeat generation changed the file inventory');
-  for(const [name,value]of before)assert.equal(fs.readFileSync(path.join(javaRoot,name),'utf8'),value,`Repeat generation changed ${name}`);
+  checkGenerated(await readJava());assert.deepEqual(await readJava(),document,'Repeat build changed configuration');
+  assert.deepEqual(fs.readdirSync(javaRoot,{recursive:true}).filter(name=>name.endsWith('.java')).sort(),javaFiles,'Repeat build changed the file inventory');
+  for(const [name,value]of before)assert.equal(fs.readFileSync(path.join(javaRoot,name),'utf8'),value,`Repeat build changed ${name}`);
   fs.writeFileSync(path.join(fixture,'result.json'),JSON.stringify({passed:true,mechanisms:inventory,tunedValues:60,states:document.states,vision:document.vision,localization:document.localization,fieldDisplay:configured.field,builds:2},null,2));
-  console.log('Every saved value matched generated Java; two real Update Code invocations built successfully and retained identical constants.');
+  console.log('Every saved value matched generated Java; two real Build Robot invocations built successfully and retained identical constants.');
 }
 
 app.on('browser-window-created',(_event,created)=>{
   window=created;window.hide();
+  window.webContents.setBackgroundThrottling(false);
   window.webContents.session.webRequest.onBeforeRequest({urls:['ws://*/*','wss://*/*']},(_details,done)=>done({cancel:true}));
   window.webContents.once('did-finish-load',async()=>{
     try { await window.loadFile(path.join(ui,'index.html'));await run(); }

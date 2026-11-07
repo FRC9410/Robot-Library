@@ -10,11 +10,13 @@ import { drivetrainTuningChanges, drivetrainTuningValues } from "./drivetrainTun
 import type { GeneratedSubsystem } from "../subsystems/types";
 import { SaveTunedValuesDialog } from "../networktables/SaveTunedValuesDialog";
 import type { NtTopicSnapshot } from "../../networktables/nt4Client";
+import { tuningRecoveryDrafts } from "../../networktables/tuningRecoveryModel";
+import { TuningRecoveryNotice } from "./TuningRecoveryNotice";
 
 export function SubsystemTuningDialog({ owner, name, kind = "mechanism", subsystems = [], tuningRequested, onClose }: {
   owner: string; name: string; kind?: "mechanism" | "drivetrain"; subsystems?: GeneratedSubsystem[]; tuningRequested: boolean; onClose: () => void;
 }) {
-  const { status, clientRef, upsertTopic } = useNetworkTables();
+  const { status, clientRef, upsertTopic, tuningRecovery } = useNetworkTables();
   const topics = useTopics("tuning");
   const [appliedTopics, setAppliedTopics] = useState<Record<string, NtTopicSnapshot>>({});
   const currentTopics = topics.map(topic => {
@@ -33,6 +35,7 @@ export function SubsystemTuningDialog({ owner, name, kind = "mechanism", subsyst
   const applyingRef = useRef(false);
   const pending = rows.filter(row => drafts[row.key] !== undefined && drafts[row.key] !== row.baseline);
   const available = rows.filter(row => row.writable).length;
+  const recovered = tuningRecoveryDrafts(tuningRecovery.values, rows, drafts);
 
   function edit(key: string, value: string) {
     setDrafts(current => ({ ...current, [key]: value }));
@@ -91,6 +94,7 @@ export function SubsystemTuningDialog({ owner, name, kind = "mechanism", subsyst
         {!writable && <Alert severity="info">{status !== "connected" ? "Connect to the robot to edit tunables."
           : !tuningRequested ? "Enable Tuning in the app header to edit these settings." : "Waiting for the robot to acknowledge tuning."}</Alert>}
         {message && <Alert severity={message.severity}>{message.text}</Alert>}
+        <TuningRecoveryNotice count={Object.keys(recovered).length} disabled={!writable || applying} error={tuningRecovery.error} path={tuningRecovery.path} onRestore={() => { setDrafts(current => ({ ...recovered, ...current })); setErrors({}); setMessage(null); }} />
         <Box>
           {[...new Set(rows.map(row => row.group))].map(group => <Accordion key={group} disableGutters square
             expanded={expandedGroups[group] ?? false} onChange={(_, expanded) => setExpandedGroups(current => ({ ...current, [group]: expanded }))}

@@ -44,7 +44,7 @@ export function LogsPanel({ active, subsystems }: LogsPanelProps) {
   const [showingLogs, setShowingLogs] = useState(false);
   const [mechanismIds, setMechanismIds] = useState<string[]>([]);
   const [assigningMotors, setAssigningMotors] = useState(false);
-  /** Motor key → subsystem or group, chosen in the Assign motors dialog; overrides powerlib-subsystems.json. */
+  /** Motor key → subsystem or group, chosen in the Assign motors dialog; overrides robot Java configuration. */
   const [assignments, setAssignments] = useState<Record<string, string>>(() => readSaved(assignmentsKey, {}, isStringMap));
   /** Subsystem id → what its graph shows (value, current, power, voltage, stator or temp). */
   const [views, setViews] = useState<Record<string, GraphView>>(() => readSaved(viewsKey, {}, isStringMap) as Record<string, GraphView>);

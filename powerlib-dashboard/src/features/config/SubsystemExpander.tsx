@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import { Box, Button, Collapse, Typography } from "@mui/material";
+import { Alert, Box, Button, Collapse, Typography } from "@mui/material";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import type { GeneratedSubsystem } from "../subsystems/types";
@@ -18,8 +18,9 @@ export function SubsystemExpander({ subsystem, onEdit }: { subsystem: GeneratedS
         <Box sx={{ minWidth: 0, textAlign: "left" }}><Typography component="span" sx={{ display: "block", fontWeight: 650, overflowWrap: "anywhere" }}>{name}</Typography>
           <Typography component="span" variant="caption" color="text.secondary">{subsystem.type ?? "Unspecified type"} · {getMotorIdsSummary(subsystem)}</Typography></Box>
       </Box>
-      <Button startIcon={<EditOutlinedIcon />} size="small" aria-label={`Edit ${name}`} onClick={onEdit}>Edit</Button>
+      <Button startIcon={<EditOutlinedIcon />} size="small" aria-label={`Edit ${name}`} disabled={!!subsystem.sourceError} onClick={onEdit}>Edit</Button>
     </Box>
+    {subsystem.sourceError && <Alert severity="info">{subsystem.sourceError}</Alert>}
     <Collapse in={expanded} unmountOnExit><Box id={id} role="region" aria-labelledby={`${id}-heading`} className="config-expander-details"><SubsystemDetails subsystem={subsystem} /></Box></Collapse>
   </Box>;
 }

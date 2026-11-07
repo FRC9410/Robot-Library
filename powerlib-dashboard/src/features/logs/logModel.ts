@@ -11,7 +11,7 @@ export type { Series };
 export type MechanismKind = "velocity" | "position" | "motors";
 export type MotorSignal = "SupplyCurrent" | "SupplyVoltage" | "MotorVoltage" | "StatorCurrent" | "DeviceTemp" | "Position";
 /**
- * How a motor's group was decided, strongest first: the Assign motors dialog, powerlib-subsystems.json,
+ * How a motor's group was decided, strongest first: the Assign motors dialog, robot Java configuration,
  * TunerConstants.java's swerve IDs, matching its motion to a mechanism, or the template's usual swerve IDs.
  */
 export type MotorSource = "override" | "config" | "tuner" | "motion" | "guess" | "";

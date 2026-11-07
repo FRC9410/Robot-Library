@@ -7,7 +7,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { readConstantsFiles, saveConstantsFile } from "./constantsFiles.js";
-import { generatedJsonPath } from "./projectPaths.js";
+
 import { convertHoot, sessionSiblings } from "./owlet.js";
 import { deleteRobotLogs, downloadRobotLogs, findRobot, isRobotLogPath, listRobotLogs } from "./robotLogs.js";
 import type { RobotDownload } from "./robotLogs.js";
@@ -15,6 +15,10 @@ import { readVisionConfig, saveVisionConfig } from "./visionFiles.js";
 import { readStateConfig, saveStateConfig } from "./stateFiles.js";
 import { readLocalizationConfig, saveLocalizationConfig } from "./localizationFiles.js";
 import { readSubsystemDocument, saveSubsystemDocument } from "./subsystemFiles.js";
+import { saveTunedSourceValues } from "./java-config/service.js";
+import { readLegacyMigration, applyLegacyMigration } from "./java-config/legacyMigration.js";
+import { readTuningSession, saveTuningSession } from "./tuningSessionFiles.js";
+import type { GeneratedSubsystem } from "./java-config/configTypes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,7 +46,7 @@ function createAppMenu(window: BrowserWindow) {
         },
         { type: "separator" },
         {
-          label: "Update Code",
+          label: "Build Robot",
           click: () => window.webContents.send("powerlib:menu-update-subsystem-code")
         },
         { type: "separator" },
@@ -110,9 +114,7 @@ ipcMain.handle("powerlib:show-app-menu", (event, menuId: unknown, position: { x?
   });
 });
 
-async function getSubsystemJsonCandidates() {
-  return [await generatedJsonPath(getDetectedRobotRoot(), "powerlib-subsystems.json")];
-}
+
 
 function pathExistsSync(candidate: string) {
   try {
@@ -173,6 +175,10 @@ function getPowerToolRootCandidates() {
 }
 
 ipcMain.handle("powerlib:read-vision", async () => readVisionConfig(getDetectedRobotRoot()));
+ipcMain.handle("powerlib:read-tuning-session", async (_event, connection) => readTuningSession(app.getPath("userData"), getDetectedRobotRoot(), connection));
+ipcMain.handle("powerlib:save-tuning-session", async (_event, connection, values) => saveTuningSession(app.getPath("userData"), getDetectedRobotRoot(), connection, values));
+ipcMain.handle("powerlib:read-legacy-migration", async () => readLegacyMigration(getDetectedRobotRoot()));
+ipcMain.handle("powerlib:apply-legacy-migration", async (_event, revision, selected, confirmed) => applyLegacyMigration(getDetectedRobotRoot(), revision, selected, confirmed));
 ipcMain.handle("powerlib:read-states", async () => readStateConfig(getDetectedRobotRoot()));
 ipcMain.handle("powerlib:save-states", async (_event, config) => saveStateConfig(getDetectedRobotRoot(), config));
 ipcMain.handle("powerlib:save-vision", async (_event, vision) => saveVisionConfig(getDetectedRobotRoot(), vision));
@@ -182,13 +188,14 @@ ipcMain.handle("powerlib:save-localization", async (_event, config) => saveLocal
 ipcMain.handle("powerlib:read-subsystems", async () => {
   try { return await readSubsystemDocument(getDetectedRobotRoot()); }
   catch (error) {
-    return { exists: false, path: (await getSubsystemJsonCandidates())[0], subsystems: [], swerve: {},
-      error: error instanceof Error ? error.message : "Could not read powerlib-subsystems.json." };
+    return { exists: false, path: path.join(getDetectedRobotRoot(), "src/main/java/frc/robot"), subsystems: [], swerve: {},
+      error: error instanceof Error ? error.message : "Could not read Java robot configuration." };
   }
 });
 
-ipcMain.handle("powerlib:save-subsystems", async (_event, subsystems: unknown[], swerve?: unknown) =>
-  saveSubsystemDocument(getDetectedRobotRoot(), subsystems, swerve));
+ipcMain.handle("powerlib:save-subsystems", async (_event, subsystems: GeneratedSubsystem[], swerve, revision, deleted) =>
+  saveSubsystemDocument(getDetectedRobotRoot(), subsystems, swerve, revision, deleted));
+ipcMain.handle("powerlib:save-tuned-source", async (_event, changes) => saveTunedSourceValues(getDetectedRobotRoot(), changes));
 
 async function getConstantsRobotRoot() {
   return getDetectedRobotRoot();
@@ -198,66 +205,12 @@ ipcMain.handle("powerlib:read-constants", async () => readConstantsFiles(await g
 ipcMain.handle("powerlib:save-constants", async (_event, id, source, constants) =>
   saveConstantsFile(await getConstantsRobotRoot(), id, source, constants));
 
+// Compatibility IPC name; this builds existing Java and never regenerates source from JSON.
 ipcMain.handle("powerlib:update-subsystem-code", async () => {
-  const robotRoot = getDetectedRobotRoot();
-  const subsystemsPath = await generatedJsonPath(robotRoot, "powerlib-subsystems.json");
-  let targetPath = subsystemsPath;
-
-  for (const candidate of await getSubsystemJsonCandidates()) {
-    try {
-      await fs.access(candidate);
-      targetPath = candidate;
-      break;
-    } catch {
-      // Keep looking.
-    }
-  }
-
-  const scriptCandidates = [
-    path.join(robotRoot, "power-tool", "scripts", "generate-subsystem.ps1"),
-    path.join(robotRoot, "powerlib-dashboard", "scripts", "generate-subsystem.ps1"),
-    path.join(robotRoot, ".robot-library-generate-subsystem.ps1")
-  ];
-  let scriptPath = scriptCandidates[0];
-
-  for (const candidate of scriptCandidates) {
-    try {
-      await fs.access(candidate);
-      scriptPath = candidate;
-      break;
-    } catch {
-      // Keep looking for legacy installs.
-    }
-  }
-
-  try {
-    await fs.access(scriptPath);
-  } catch {
-    throw new Error(`Missing ${scriptCandidates[0]}. Reinstall or update Power Tool to add PowerLib scripts.`);
-  }
-
-  const { stdout, stderr } = await execFileAsync(
-    "powershell",
-    [
-      "-ExecutionPolicy",
-      "Bypass",
-      "-File",
-      scriptPath,
-      "-UpdateSubsystems",
-      "-SubsystemsJson",
-      targetPath
-    ],
-    {
-      cwd: robotRoot,
-      windowsHide: true,
-      maxBuffer: 1024 * 1024 * 4
-    }
-  );
-
-  return {
-    stdout,
-    stderr
-  };
+  const robotRoot=getDetectedRobotRoot();
+  const command=process.platform==='win32'?'powershell.exe':'./gradlew';
+  const arguments_=process.platform==='win32'?['-NoProfile','-Command',"& './gradlew.bat' --no-daemon --console=plain build"]:['--no-daemon','--console=plain','build'];
+  return execFileAsync(command,arguments_,{cwd:robotRoot,windowsHide:true,maxBuffer:1024*1024*4});
 });
 
 ipcMain.handle("powerlib:update-install-section", async (_event, section: string) => {

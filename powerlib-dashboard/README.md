@@ -66,7 +66,7 @@ configuration. The **Edit** action stays in each expander header.
 steps. The back arrow returns to settings; Previous returns to an earlier step.
 The final step shows the complete configuration and requires verification before
 saving. Edit uses the same wizard with the existing values prefilled. Saving
-updates the project configuration; use File > Update Code, rebuild and deploy
+updates Java configuration; build and deploy
 to apply it to the robot. Run `npm run check:config` for validation checks.
 
 Select **Field** to change the full field length and width in meters. Save
@@ -111,17 +111,11 @@ still requires its stricter ambiguity, freshness and stationary stability checks
 Defaults preserve the prior policy: no minimum area and the configured maximum
 position distance (6.25 m), with heading limits of 4 m and 2 m for single tags.
 Older robots show unavailable fields until the library is updated.
-Apply changes live values. Save tuned values reviews the current card's live
-values and saves selected differences to project JSON. Localization defaults
-live under `localization.position` and `localization.heading` in
-`power-tool/generated/powerlib-subsystems.json`. File → Update Code writes the
-four scalar defaults to VisionConstants and applies them through CONFIG and
-HEADING_CONFIG, preserving other vision policy. Build and deploy to make those
-saved defaults take effect at startup. Localization defaults are excluded from
-the separate custom-constants JSON to avoid conflicting sources of truth.
-Configuration saves serialize updates and replace valid JSON atomically;
-malformed JSON is rejected rather than discarded. Vision and LED cards retain
-their existing behavior.
+Apply changes live values. Save tuned values reviews the current card's live values and saves selected differences directly to Java. Localization edits update the four defaults in VisionConstants and the recognized CONFIG/HEADING_CONFIG bindings while preserving other vision policy. Build and deploy to use the defaults at startup.
+
+Saves serialize project operations, check source revisions and use recoverable multi-file transactions. Unsupported Java expressions remain read-only. Source changes made in the IDE are discovered on refresh; a stale form cannot silently overwrite them. Vision and LED cards retain their existing behavior.
+
+Successfully applied tunables also have an app-local JSON recovery cache, isolated by robot project and connection profile/host/port. Restore edits loads matching values into pending drafts after an app restart. It never automatically reapplies them or changes code defaults. Apply and Save tuned values remain separate actions.
 
 The app has Dashboard, Limelights and Logs tabs; NetworkTables opens in a drawer from the View menu. Subsystem
 configuration is accessed through Config on the Dashboard; mechanism tuning is
@@ -133,31 +127,13 @@ hyphen-separated words; duplicates are rejected. Camera entries contain only
 names. Horizontal FOV in degrees and positive integer image width/height are
 shared Vision settings that apply to every Limelight. These describe the
 cameras; actual camera pipeline settings remain in their Limelight web UIs.
-Configuration is saved in `power-tool/generated/powerlib-subsystems.json` under
-`vision`, with names under `vision.limelights`. Existing Java camera names are
-imported on first use. Older per-camera settings migrate to globals using the
-first camera's values when no global value exists.
-File → Update Code updates `VisionConstants.LIMELIGHT_NAMES` and shared scalar
-FOV/width/height constants while preserving other vision policy and custom code.
-Build and deploy to apply changed camera names to the robot.
+Save updates `VisionConstants.LIMELIGHT_NAMES` and the shared scalar FOV/width/height declarations directly. Other vision policy and custom code remain intact. Build and deploy to apply changed camera names to the robot.
 
-Config → States manages robot state names with the same inline Add, Edit and
-Delete list. Names use uppercase letters, numbers and underscores. Existing
-`StateMachine.RobotState` values are imported until the list is first saved to
-the `states` array in `power-tool/generated/powerlib-subsystems.json`.
-File → Update Code updates the enum, creates missing Java files in
-`frc/robot/subsystems/states`, and registers the handlers for state-machine checks.
-IDLE is implicit and hidden from Config; its enum value and handler stay last in
-generated code and it is retained in saved configuration. Existing handler
-code, constructor arguments and registration priority are preserved; missing
-handlers are inserted before Idle. New handlers match their requested state and
-report it as actual; add mechanism actions and readiness conditions in Java.
-Deleting a state asks for confirmation to remove its Java file, including custom
-code. This choice is saved until Update Code removes the handler and registration.
-Cancel leaves the configuration unchanged. Generation still rejects removal of
-values referenced elsewhere in robot code, including commands or the default state.
-Removing a customized state directly in JSON requires confirmation through Config;
-untouched generated starter files can be removed without it.
+Config > States manages names using the inline Add, Edit and Delete list. Names use uppercase letters, numbers and underscores. The list comes from `StateMachine.RobotState`; Java additions appear on refresh. Save updates the enum, creates missing handler files and updates the registry immediately. IDLE is implicit and hidden, and its enum value and handler stay last. Existing handler bodies, constructor expressions and priority are preserved. A handwritten opaque guard requires Java review rather than an unconditional generated fallback.
+
+Deleting a state asks for confirmation to remove its Java file, including custom code. Cancel preserves it. A confirmed save still rejects references elsewhere in robot source, including a configured default state. New handlers need mechanism actions and readiness checks added in Java.
+
+Legacy configuration JSON is consumed only by a migration review. It compares real Java against saved fields, lets you choose values, backs up source and originals under `build/power-tool-migration/`, then archives legacy files after a successful source save. Normal operation creates no configuration JSON. The old JSON generator refuses to run. File > Build Robot compiles the source without regeneration.
 
 ## Scripts
 

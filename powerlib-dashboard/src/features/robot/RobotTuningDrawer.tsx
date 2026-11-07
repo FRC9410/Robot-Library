@@ -71,7 +71,7 @@ export const RobotTuningDrawer = memo(function RobotTuningDrawer({ groupKey, nam
         if (saved.error) throw new Error(saved.error);
         onSaved(saved);
         savedChanges.forEach(change => applied.set(change.value.id, change.draft));
-        setMessage(`Saved ${name} defaults. Run Update Code, rebuild, and deploy to use them.`);
+        setMessage(`Saved ${name} defaults to Java. Build and deploy to use them.`);
       }
       const liveChanges = changes.filter(change => change.value.topic);
       const results = await Promise.allSettled(liveChanges.map(async change => {

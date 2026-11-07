@@ -13,6 +13,7 @@ import { telemetryUpdateIntervalMs, tuningUpdateIntervalMs } from "./telemetryTi
 export type NtPrimitive = string | number | boolean;
 export type NtValue = NetworkTablesTypes | null;
 export type NtTopicType = "boolean" | "double" | "int" | "string";
+export type NtPublication = { name: string; type: NtTopicType; value: NtPrimitive; host: string; port: number };
 
 export type NtTopicSnapshot = {
   name: string;
@@ -83,9 +84,13 @@ export class PowerLibNt4Client {
   private publicationRevisions = new WeakMap<NetworkTablesTopic<NtPrimitive>, number>();
   private ownedPublications = new Set<NetworkTablesTopic<NtPrimitive>>();
   private stoppedSocketGuard: (() => void) | null = null;
+  private endpoint: { host: string; port: number } | null = null;
+  private publicationListeners = new Set<(publication: NtPublication) => void | Promise<void>>();
+  onPublished(listener: (publication: NtPublication) => void | Promise<void>) { this.publicationListeners.add(listener); return () => { this.publicationListeners.delete(listener); }; }
 
   connect(uri: string, port: number, onConnectionChange: (connected: boolean) => void) {
     this.disconnect();
+    this.endpoint = { host: uri, port };
     this.stoppedSocketGuard?.();
     this.stoppedSocketGuard = null;
     ensureNt4ProtocolCompatibility();
@@ -135,6 +140,7 @@ export class PowerLibNt4Client {
   }
 
   disconnect() {
+    this.endpoint = null;
     this.unsubscribers.forEach((unsubscribe) => unsubscribe());
     this.unsubscribers = [];
     this.topics.forEach((topic) => {
@@ -195,6 +201,8 @@ export class PowerLibNt4Client {
     }
     const nt = this.nt;
     const connectionRevision = this.connectionRevision;
+    const endpoint = this.endpoint;
+    const listeners = [...this.publicationListeners];
 
     const topic =
       this.topics.get(name) ?? this.nt.createTopic<NtPrimitive>(name, typeInfoByType[type], value);
@@ -229,11 +237,12 @@ export class PowerLibNt4Client {
       }
     }
 
-    if (this.nt !== nt || this.connectionRevision !== connectionRevision) {
+    if (this.nt !== nt || this.connectionRevision !== connectionRevision || this.endpoint !== endpoint) {
       throw new Error("NetworkTables connection changed before the value could be published.");
     }
     topic.setValue(value);
     this.publicationRevisions.set(topic, this.connectionRevision);
+    if (endpoint) await Promise.allSettled(listeners.map(listener => Promise.resolve().then(() => listener({ name, type, value, ...endpoint }))));
   }
 
   watchPrefix(prefix: string, onValue: (snapshot: NtTopicSnapshot) => void,

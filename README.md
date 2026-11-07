@@ -507,51 +507,19 @@ vendordeps/Phoenix5-replay-<latest>.json
 ## Power Tool
 
 Define controller button commands directly in `RobotContainer.configureBindings()`.
-Power Tool's Update Code action generates subsystem and Swerve code from
-`power-tool/generated/powerlib-subsystems.json`.
+Power Tool saves configuration directly into robot Java source. Config saves patch the affected declarations and registrations immediately; File > Build Robot compiles the current source. Deploy remains separate. There is no JSON-to-code generation step.
 
-Velocity and velocity-torque subsystem entries accept an optional `statorCurrentLimitAmps`
-number. Update Code generates `STATOR_CURRENT_LIMIT_AMPS` and passes it to
-`VelocitySubsystemConfig`; existing entries without the setting retain Phoenix defaults.
-The value must be positive and finite. Direct Java configurations can supply an
-`Optional<Double>` as the sixth constructor argument; existing constructors remain supported.
-This is startup motor configuration and requires rebuilding and deploying after changes.
+Dashboard mechanism cards open their tunables when Tuning is enabled and acknowledged. Apply changes the running robot through NetworkTables. Save Tuned Values reviews live differences and writes selected mechanism, sensor, drivetrain, localization and custom defaults together in one Java transaction. Rebuild and deploy to use saved defaults at startup.
 
-The Robot tab shows clickable subsystem cards with live data. Clicking a card
-opens its complete tunable list. Constants groups without subsystem data appear
-at the end of the cards; command tuning groups also have their own cards. The
-header tuning switch remains, and live edits require the robot to acknowledge it.
-There are no separate Tuning or Constants tabs and no saved variable selection.
+Velocity and velocity-torque mechanisms support an optional positive, finite stator current limit. A blank value preserves Phoenix defaults. Signed feedback ratios and optional feedforward/default-position values remain supported. Source edits preserve existing annotations, modifiers, comments, custom methods and handler bodies. Unsupported expressions are read-only and require editing in Java. If source changes while a form is open, refresh before saving; the draft is retained.
 
-Existing constants appear directly in the same card panel as live tunables.
-Published constants have one live row; saved-only values show their saved default.
-Edit values and use Apply to publish live changes or save file-only changes to
-`power-tool/generated/powerlib-constants.json`. The Reset icon beside each field
-discards that field's pending edit. Names and types stay intact, and constants cannot be added or deleted.
-Update Code applies saved JSON to Java; Apply does not change Java directly.
-Existing Java constants are imported when the
-configuration is first created. Constants groups are discovered from the robot's
-constants directory, including team-specific groups such as Shooting and Auto.
-Generated subsystem entries show only custom constants, keyed by subsystem ID so
-renames preserve them. Swerve defaults remain in
-`power-tool/generated/powerlib-subsystems.json`; its custom constants use
-`power-tool/generated/powerlib-constants.json`. GeneratedTunableConstants and
-TunerConstants are excluded. Save, run Update Code, rebuild, and deploy to use changes.
+Config manages subsystem structure, state names and camera configuration. Stable subsystem IDs live in Java comments; changing the display name preserves the source class. Idle is implicit, hidden from the state list and always last in the enum and handler registry. Existing state bodies and handler priority are preserved. Confirmed deletion removes the state immediately, including edited Java, unless other source still references it. Manual Java additions appear when configuration refreshes.
 
-Update PowerLib Library Files once to install the numeric tuning support in an existing
-robot project. Numeric constants support live tuning; other types are edited as
-saved values. Saving makes numeric fields tunable. Update Code
-registers them under `/PowerLib/Subsystems/<Name>/Variables/Custom/<ConstantName>`.
-Save, regenerate, rebuild, and deploy; the Robot cards then discover these values
-under their subsystem. Turning tuning off keeps the last applied values and skips
-constant updates, subsystem tuning checks, and NetworkTables variable synchronization.
-Variables are published once at startup and when new tunables are registered so they
-remain discoverable. The tuning-toggle check and normal telemetry continue running.
-This applies to custom constants, motor and position subsystem settings, Swerve,
-and drive-to-point settings. Restarting the robot loads the configured defaults;
-use Save Tuned Values, Update Code, and rebuild/deploy to retain changes across restarts.
-Save Tuned Values writes custom numeric defaults back to `power-tool/generated/powerlib-constants.json`.
-Existing Swerve defaults are already tunable.
+Constants groups are discovered from the robot constants directory, including team-specific classes. Custom numeric constants are registered under `/PowerLib/Subsystems/<Name>/Variables/Custom/<ConstantName>`. Existing fields retain their tuning annotations; newly added numeric custom constants become tunable. GeneratedTunableConstants and TunerConstants are excluded from the constants editor.
+
+Temporary live tuning recovery is separate from code defaults. Successfully applied tunables are cached as JSON under Power Tool's app-local user-data directory, isolated by project, connection profile, host and port. After restarting the app, Restore edits places matching values into pending drafts. It never publishes automatically; review and Apply to send them. Restarting the robot loads the saved Java defaults. Turning tuning off keeps the last live values but stops further tuning synchronization.
+
+Old `powerlib-subsystems.json` and `powerlib-constants.json` files are read only by migration review. Choose saved differences to import, or keep Java values. Migration backs up source and legacy files under `build/power-tool-migration/` before archiving the old active files. Malformed JSON or a stale review is rejected. Old JSON generation commands refuse to run, so stale saved data cannot overwrite Java.
 
 Tunable fields are mutable rather than Java compile-time constants, so robot code
 must read them during execution to use live edits. Values copied only during
@@ -578,14 +546,10 @@ power-tool/scripts/project-layout.ps1
 power-tool/scripts/generate-subsystem.ps1
 power-tool/scripts/powerlib-generate-subsystem.cmd
 power-tool/scripts/powerlib-update-subsystems.cmd
-power-tool/generated/powerlib-subsystems.json
-power-tool/generated/powerlib-constants.json
+power-tool/scripts/source-config.cjs
 ```
 
-Existing JSON files in the robot project root move into `power-tool/generated/`
-automatically. If both locations contain a file, the generated copy stays active
-and the old root copy is archived under `power-tool/generated/legacy/`.
-Power Tool updates preserve generated configuration and refresh the scripts.
+Power Tool updates preserve project-owned Java and dashboard files and refresh the app and scripts. Legacy JSON stays in place until explicit migration review. The shared CLI supports `node power-tool/scripts/source-config.cjs validate`, `migration-preview`, and reviewed `migration-apply`; it uses the same editing engine as the app.
 
 The Dashboard tab renders `power-tool/dashboard/index.tsx`. This project-owned
 folder starts with the generic Drive dashboard and is preserved in full during

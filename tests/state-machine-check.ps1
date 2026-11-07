@@ -23,14 +23,8 @@ $generationRoot = Join-Path $fixture 'generated'
 $generationMachine = Join-Path $generationRoot 'src/main/java/frc/robot/subsystems/StateMachine.java'
 New-Item -ItemType Directory -Path (Split-Path $generationMachine) -Force | Out-Null
 [IO.File]::WriteAllText($generationMachine, $machine)
-$tokens = $null; $errors = $null
-$ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'generate-subsystem.ps1'), [ref]$tokens, [ref]$errors)
-foreach ($name in @('Get-RobotStateClassName', 'New-RobotStateContent', 'Write-RobotStatesConfiguration')) {
-    $function = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
-    Invoke-Expression $function.Extent.Text
-}
-Push-Location $generationRoot
-try { Write-RobotStatesConfiguration @('IDLE', 'CHECK') | Out-Null } finally { Pop-Location }
+& node (Join-Path $root 'powerlib-dashboard/scripts/java-state-fixture.mjs') $generationRoot
+if ($LASTEXITCODE -ne 0) { throw 'Java state source fixture generation failed.' }
 Write-FixtureSource 'frc/robot/subsystems/StateMachine.java' ([IO.File]::ReadAllText($generationMachine))
 Write-FixtureSource 'frc/robot/subsystems/states/CheckState.java' ([IO.File]::ReadAllText((Join-Path $generationRoot 'src/main/java/frc/robot/subsystems/states/CheckState.java')))
 foreach ($path in @('frc/robot/subsystems/states/IdleState.java', 'frc/robot/commands/RequestState.java', 'frc/robot/commands/SwerveDriveCommand.java')) {

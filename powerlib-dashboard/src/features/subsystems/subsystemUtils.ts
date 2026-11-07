@@ -97,6 +97,7 @@ export function subsystemToForm(subsystem: GeneratedSubsystem, index: number): S
     mode: "edit",
     index,
     id: subsystem.id ?? toCamelCase(subsystem.name ?? ""),
+    sourceRevision: subsystem.sourceRevision,
     name: subsystem.name ?? "",
     type:
       normalizedType === "position" || normalizedType === "absoluteposition"
@@ -116,9 +117,9 @@ export function subsystemToForm(subsystem: GeneratedSubsystem, index: number): S
     kI: toNumberText(subsystem.pid?.kI, "0.0"),
     kD: toNumberText(subsystem.pid?.kD, "0.0"),
     kG: toNumberText(subsystem.pid?.kG, "0.0"),
-    kS: toNumberText(subsystem.pid?.kS, "0.0"),
-    kV: toNumberText(subsystem.pid?.kV, "0.0"),
-    kA: toNumberText(subsystem.pid?.kA, "0.0"),
+    kS: toNumberText(subsystem.pid?.kS, ""),
+    kV: toNumberText(subsystem.pid?.kV, ""),
+    kA: toNumberText(subsystem.pid?.kA, ""),
     cruiseVelocity: toNumberText(subsystem.motionMagic?.cruiseVelocity, "0.0"),
     acceleration: toNumberText(subsystem.motionMagic?.acceleration, "0.0"),
     slowCruiseVelocity: toNumberText(subsystem.slowMotionMagic?.cruiseVelocity, "0.0"),
@@ -156,6 +157,7 @@ export function formToSubsystem(form: SubsystemFormState, existing?: GeneratedSu
   });
   const subsystem: GeneratedSubsystem = {
     ...existing,
+    sourceRevision: form.sourceRevision,
     id,
     name: form.name.trim(),
     type: form.type,
@@ -167,9 +169,9 @@ export function formToSubsystem(form: SubsystemFormState, existing?: GeneratedSu
       kI: textToNumber(form.kI, 0),
       kD: textToNumber(form.kD, 0),
       kG: textToNumber(form.kG, 0),
-      kS: textToNumber(form.kS, 0),
-      kV: textToNumber(form.kV, 0),
-      kA: textToNumber(form.kA, 0)
+      kS: form.kS.trim() ? textToNumber(form.kS, 0) : null,
+      kV: form.kV.trim() ? textToNumber(form.kV, 0) : null,
+      kA: form.kA.trim() ? textToNumber(form.kA, 0) : null
     },
     ratios: {
       sensorToMechanism: textToNumber(form.sensorToMechanism, 1),

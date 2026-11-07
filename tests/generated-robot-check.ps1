@@ -58,77 +58,14 @@ try {
     if (Test-Path -LiteralPath "$robotAutos.template") { throw 'Reinstall created an unnecessary RobotAutos template copy.' }
     Write-Host 'Reinstall preserved custom robot autos without creating a template copy.'
 
-    $subsystems = @(); $id = 40
-    foreach ($type in @('velocity', 'velocityTorque', 'absolutePosition', 'relativePosition')) {
-        $name = 'Check' + $type.Substring(0, 1).ToUpperInvariant() + $type.Substring(1)
-        $subsystems += @{ id=$name; name=$name; type=$type; focEnabled=$false;
-            statorCurrentLimitAmps=$(if ($type -in @('velocity', 'velocityTorque')) { 35.0 } else { '' });
-            motors=@(@{role='leader'; id=$id++; neutralMode='Brake'; reversed=$true});
-            ratios=@{sensorToMechanism=1; rotorToSensor=1}; motionMagic=@{cruiseVelocity=2; acceleration=10};
-            cancoder=@{id=$id++; magnetOffset=0; discontinuityPoint=0.5};
-            relativePosition=@{homePosition=0; forwardSoftLimit=1; reverseSoftLimit=-1; tolerance=0.01} }
-    }
-    $json = Join-Path $fixture 'power-tool/generated/powerlib-subsystems.json'
-    New-Item -ItemType Directory -Path (Split-Path $json) -Force | Out-Null
-    $vision = @{ fovDegrees = 63.3; imageWidth = 640; imageHeight = 480; limelights = @(
-        @{ name = 'limelight-front' },
-        @{ name = 'limelight-back' }
-    ) }
-    $localization = @{ position=@{targetAreaThreshold=1; maxTargetDistanceMeters=5}; heading=@{maxTagDistanceMeters=5; singleTagMaxDistanceMeters=3} }
-    [IO.File]::WriteAllText($json, (@{subsystems=$subsystems; vision=$vision; localization=$localization; states=@('IDLE', 'READY', 'SHOOTING')} | ConvertTo-Json -Depth 12))
-    $dashboard = Join-Path $fixture 'src/main/java/frc/robot/subsystems/PowerDashboard.java'
-    $source = Get-Content $dashboard -Raw -Encoding UTF8
-    $source = $source.Replace('.withPose(() -> stateMachine.drivetrain.getState().Pose)', ".withPose(() -> stateMachine.drivetrain.getState().Pose)`n        .withSpeeds(() -> stateMachine.drivetrain.getState().Speeds)")
-    $source = $source.Replace('  public void periodic() {', "  public void periodic() {`n    customAction();")
-    $source = [regex]::Replace($source, '\}\s*$', "  // mécanisme`n  private void customAction() {}`n}`n")
-    [IO.File]::WriteAllText($dashboard, $source)
-    $constantsBarrel = Join-Path $fixture 'src/main/java/frc/robot/Constants.java'
-    $customConstants = Join-Path $fixture 'src/main/java/frc/robot/constants/ShootingConstants.java'
-    [IO.File]::WriteAllText($customConstants, "package frc.robot.constants;`npublic class ShootingConstants { public static final double CHECK_DISTANCE = 2.5; }`n")
-    $source = [IO.File]::ReadAllText($constantsBarrel)
-    $source = $source.Replace('  private Constants() {}', "  private Constants() {}`n  public static final class Shooting extends frc.robot.constants.ShootingConstants {}`n  public static final class CheckVelocity extends frc.robot.constants.CheckVelocityConstants {}")
-    [IO.File]::WriteAllText($constantsBarrel, $source)
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'generate-subsystem.ps1') -UpdateSubsystems -SkipBuild *> (Join-Path $fixture 'generate.log')
-    if ($LASTEXITCODE -ne 0) { throw (Get-Content (Join-Path $fixture 'generate.log') -Tail 40 | Out-String) }
-    foreach ($name in @('CheckVelocity', 'CheckVelocityTorque')) {
-        $velocityConstants = [IO.File]::ReadAllText((Join-Path $fixture "src/main/java/frc/robot/constants/${name}Constants.java"))
-        if ($velocityConstants -notmatch 'STATOR_CURRENT_LIMIT_AMPS\s*=\s*Optional.of\(35(?:\.0)?\)') {
-            throw "Generation lost the optional stator current limit for $name."
-        }
-    }
-    $configurationPath = Join-Path $fixture 'power-tool/generated/powerlib-constants.json'
-    $configuration = Get-Content -LiteralPath $configurationPath -Raw | ConvertFrom-Json
-    $visionEntry = $configuration.files.PSObject.Properties['robot:Vision']
-    if ($null -ne $visionEntry -and @($visionEntry.Value.constants | Where-Object { $_.name -in @('POSITION_TARGET_AREA_THRESHOLD', 'POSITION_MAX_TARGET_DISTANCE_METERS', 'HEADING_MAX_TAG_DISTANCE_METERS', 'HEADING_SINGLE_TAG_MAX_DISTANCE_METERS') }).Count -ne 0) { throw 'Localization constants have conflicting defaults in powerlib-constants.json.' }
-    $shooting = $configuration.files.PSObject.Properties['robot:Shooting']
-    if ($null -eq $shooting) { throw 'Generation omitted a discovered non-subsystem constants group.' }
-    ($shooting.Value.constants | Where-Object { $_.name -eq 'CHECK_DISTANCE' }).value = '3.25'
-    [IO.File]::WriteAllText($configurationPath, ($configuration | ConvertTo-Json -Depth 16))
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'generate-subsystem.ps1') -UpdateSubsystems -SkipBuild *> (Join-Path $fixture 'generate-constants.log')
-    if ($LASTEXITCODE -ne 0) { throw (Get-Content (Join-Path $fixture 'generate-constants.log') -Tail 40 | Out-String) }
-    if (-not ([IO.File]::ReadAllText($customConstants).Contains('CHECK_DISTANCE = 3.25;'))) { throw 'Update Code did not apply discovered group values.' }
-    $registry = Join-Path $fixture 'src/main/java/frc/robot/constants/GeneratedTunableConstants.java'
-    if (-not ([IO.File]::ReadAllText($registry).Contains('TunableConstants.register(ShootingConstants.class);'))) { throw 'Discovered constants were not registered for live tuning.' }
-    $first = Get-Content $dashboard -Raw -Encoding UTF8
-    $barrel = [IO.File]::ReadAllText($constantsBarrel)
-    if (-not $barrel.Contains('class Shooting extends frc.robot.constants.ShootingConstants')) { throw 'Generation removed custom constants alias.' }
-    if ([regex]::Matches($barrel, 'class CheckVelocity extends').Count -ne 1) { throw 'Generation retained a duplicate generated constants alias.' }
-    $generatedSources = @{}
-    Get-ChildItem src/main/java -Recurse -Filter '*.java' | ForEach-Object {
-        $generatedSources[$_.FullName] = [IO.File]::ReadAllText($_.FullName)
-        $copy = Join-Path (Join-Path $fixture 'first-sources') $_.FullName.Substring((Join-Path $fixture 'src/main/java').Length + 1)
-        New-Item -ItemType Directory -Path (Split-Path $copy) -Force | Out-Null
-        Copy-Item -LiteralPath $_.FullName -Destination $copy
-    }
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'generate-subsystem.ps1') -UpdateSubsystems -SkipBuild *> (Join-Path $fixture 'generate-again.log')
-    if ($LASTEXITCODE -ne 0) { throw (Get-Content (Join-Path $fixture 'generate-again.log') -Tail 40 | Out-String) }
-    if ($first -cne (Get-Content $dashboard -Raw -Encoding UTF8)) { throw 'Repeated generation changed the dashboard.' }
-    if ([IO.File]::ReadAllText($robotAutos) -cne $customAutoSource) { throw 'Subsystem generation changed custom RobotAutos.' }
-    foreach ($path in $generatedSources.Keys) {
-        if ($generatedSources[$path] -cne [IO.File]::ReadAllText($path)) { throw "Repeated generation changed $path" }
-    }
-    if (-not $first.Contains('mécanisme') -or -not $first.Contains('customAction();')) { throw 'Generation lost custom code or Unicode.' }
-    & $GradleExecutable --offline --no-daemon --console=plain -g (Join-Path $root 'build/validation-gradle-cache') clean compileJava *> (Join-Path $fixture 'compile-generated.log')
-    if ($LASTEXITCODE -ne 0) { throw (Get-Content (Join-Path $fixture 'compile-generated.log') -Tail 45 | Out-String) }
-    Write-Host 'All four generated mechanism types compiled; migration, custom code, Unicode and repeated updates passed.'
+    $priorFixture = $env:POWERLIB_JAVA_FIXTURE
+    try {
+        $env:POWERLIB_JAVA_FIXTURE = $fixture
+        & node (Join-Path $root 'powerlib-dashboard/scripts/java-config-check.mjs') *> (Join-Path $fixture 'java-config.log')
+        if ($LASTEXITCODE -ne 0) { throw (Get-Content (Join-Path $fixture 'java-config.log') -Tail 35 | Out-String) }
+        Get-Content (Join-Path $fixture 'java-config.log') -Tail 2
+    } finally { $env:POWERLIB_JAVA_FIXTURE = $priorFixture }
+    & $GradleExecutable --offline --no-daemon --console=plain -g (Join-Path $root 'build/validation-gradle-cache') clean compileJava *> (Join-Path $fixture 'compile-source-config.log')
+    if ($LASTEXITCODE -ne 0) { throw (Get-Content (Join-Path $fixture 'compile-source-config.log') -Tail 45 | Out-String) }
+    Write-Host 'Source-edited robot compiled: four mechanism types, motor structure, states, custom code and direct Java defaults.'
 } finally { Pop-Location; $env:JAVA_HOME = $originalJavaHome }

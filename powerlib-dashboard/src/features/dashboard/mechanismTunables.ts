@@ -33,7 +33,12 @@ export function mechanismTuningValues(owner: string, topics: NtTopicSnapshot[], 
   const position: SubsystemSetting[] = byName.has(`${variablesPrefix}Position/Default`)
     ? [{ key: "Position/Default", group: "Position", label: "Default position (rotations)" }] : [];
   const sensor = sensorSettings.some(setting => byName.has(`${variablesPrefix}${setting.key}`)) ? sensorSettings : [];
-  return subsystemTuningValues(owner, topics, [...sharedMechanismSettings, ...torque, ...position, ...sensor]);
+  const rows = subsystemTuningValues(owner, topics, [...sharedMechanismSettings, ...torque, ...position, ...sensor]);
+  if (subsystem?.sourceClass && subsystem.sourceClass !== owner) {
+    const custom = subsystemTuningValues(subsystem.sourceClass, topics, []).filter(row => row.group === "Custom" && !rows.some(existing => existing.key === row.key));
+    rows.push(...custom);
+  }
+  return rows;
 }
 
 /** Validate the entire staged edit before publishing any part of it. */

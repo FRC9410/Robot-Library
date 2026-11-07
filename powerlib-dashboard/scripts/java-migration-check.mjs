@@ -1,0 +1,101 @@
+import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { readSubsystemDocument, saveSubsystemDocument, saveStateConfig, readStateConfig } from "../dist-electron/java-config/service.js";
+import { readLegacyMigration, applyLegacyMigration } from "../dist-electron/java-config/legacyMigration.js";
+
+const repository = fileURLToPath(new URL("../../", import.meta.url));
+const root = await fs.mkdtemp(path.join(repository, "build/java-migration-check-"));
+const source = "src/main/java/frc/robot";
+await fs.cp(path.join(repository, "templates/replacements", source), path.join(root, source), { recursive: true });
+let model = await saveSubsystemDocument(root, [{ id: "intake", name: "Intake", type: "velocity", motors: [{ role: "leader", id: 40, neutralMode: "Coast", motorType: "X60", reversed: false }],
+  focEnabled: true, pid: { kP: 1, kI: 0, kD: 0, kG: 0, kS: 0, kV: 0, kA: 0 }, ratios: { sensorToMechanism: 1, rotorToSensor: 1 }, motionMagic: { cruiseVelocity: 2, acceleration: 3 } }]);
+await saveStateConfig(root, { states: ["MANUAL", "IDLE"] });
+const manualPath = path.join(root, source, "subsystems/states/ManualState.java");
+const editedManual = (await fs.readFile(manualPath, "utf8")).replace("// TODO: implement MANUAL actions and readiness conditions.", 'System.out.println("User execute code");');
+await fs.writeFile(manualPath, editedManual);
+const native = path.join(root, source, "constants/AuditConstants.java");
+await fs.writeFile(native, "package frc.robot.constants; public class AuditConstants { @frc.powerlib.tuning.TunableConstant public static volatile double GAIN = 1.0; }");
+const directory = path.join(root, "power-tool/generated");
+await fs.mkdir(directory, { recursive: true });
+const subsystemJson = path.join(directory, "powerlib-subsystems.json");
+const constantsJson = path.join(directory, "powerlib-constants.json");
+const desired = structuredClone(model.subsystems[0]);
+desired.pid.kP = 2.25;
+await fs.writeFile(subsystemJson, JSON.stringify({ subsystems: [desired], states: ["IDLE", "READY"], stateHandlerDeletions: ["MANUAL"] }));
+await fs.writeFile(constantsJson, JSON.stringify({ version: 1, files: { "robot:Audit": { constants: [{ name: "GAIN", type: "double", value: "4.5", custom: false, tunable: true }] } } }));
+model = await readSubsystemDocument(root);
+assert.equal(model.subsystems[0].pid.kP, 1, "Normal source reads never overlay legacy JSON");
+let review = await readLegacyMigration(root);
+assert.ok(review.changes.some(change => change.owner === "intake" && change.field === "pid.kP"));
+assert.ok(review.changes.some(change => change.target === "state-remove" && change.destructive));
+const selected = review.changes.filter(change => !change.destructive && !change.unsupported).map(change => change.id);
+const result = await applyLegacyMigration(root, review.revision, selected);
+assert.equal((await readSubsystemDocument(root)).subsystems[0].pid.kP, 2.25);
+assert.ok((await fs.readFile(native, "utf8")).includes("GAIN = 4.5"));
+assert.equal(await fs.readFile(manualPath, "utf8"), editedManual, "Unselected destructive change preserves edited code");
+assert.deepEqual((await readStateConfig(root)).config.states, ["MANUAL", "READY", "IDLE"]);
+await assert.rejects(fs.access(subsystemJson));
+await assert.rejects(fs.access(constantsJson));
+assert.ok((await fs.readFile(path.join(result.backup, "legacy/power-tool/generated/powerlib-subsystems.json"), "utf8")).includes("2.25"));
+assert.ok((await fs.readFile(path.join(result.backup, "source", source, "constants/IntakeConstants.java"), "utf8")).includes("KP = 1.0"));
+assert.equal((await readLegacyMigration(root)).files.length, 0);
+
+await fs.writeFile(subsystemJson, JSON.stringify({ stateHandlerDeletions: ["MANUAL"] }));
+review = await readLegacyMigration(root);
+const remove = review.changes.find(change => change.target === "state-remove").id;
+await assert.rejects(applyLegacyMigration(root, review.revision, [remove]), /Confirm deletion/);
+assert.equal(await fs.readFile(manualPath, "utf8"), editedManual);
+await applyLegacyMigration(root, review.revision, [remove], true);
+await assert.rejects(fs.access(manualPath));
+
+await fs.writeFile(subsystemJson, "{broken");
+await assert.rejects(readLegacyMigration(root), /malformed/);
+assert.equal(await fs.readFile(subsystemJson, "utf8"), "{broken");
+assert.equal((await readSubsystemDocument(root)).subsystems[0].pid.kP, 2.25, "Malformed legacy data cannot become source authority");
+await fs.writeFile(subsystemJson, JSON.stringify({ subsystems: [] }));
+review = await readLegacyMigration(root);
+await fs.appendFile(native, "\n// External IDE edit\n");
+await assert.rejects(applyLegacyMigration(root, review.revision, []), /changed during review/);
+// One custom expression must not hide readable mechanisms or block unrelated imports.
+const machine=path.join(root,source,"subsystems/StateMachine.java");
+await fs.writeFile(machine,(await fs.readFile(machine,"utf8")).replace("public class StateMachine extends SubsystemBase {","public class StateMachine extends SubsystemBase {\n  private final VelocitySubsystem handmade = customFactory();"));
+assert.ok((await readSubsystemDocument(root)).subsystems.some(item=>item.id==="handmade"&&item.sourceError));
+const visionPath=path.join(root,source,"constants/VisionConstants.java");
+await fs.writeFile(visionPath,(await fs.readFile(visionPath,"utf8")).replace(/(LIMELIGHT_FOV_DEGREES\s*=)[^;]+;/,"$1 Math.max(60, 65);"));
+const swervePath=path.join(root,source,"constants/SwerveConstants.java");
+await fs.writeFile(swervePath,(await fs.readFile(swervePath,"utf8")).replace(/(DRIVER_MAX_SPEED_COEFFICIENT\s*=)[^;]+;/,"$1 Math.min(1, 0.75);"));
+model=await readSubsystemDocument(root);
+assert.ok(model.swerveError.includes("DRIVER_MAX_SPEED_COEFFICIENT"));
+assert.equal(model.swerve.driver.maxSpeedCoefficient,undefined,"Never invent a saved default for custom Java");
+const importModel=structuredClone(model.subsystems.find(item=>item.id==="intake"));importModel.pid.kP=3;
+await fs.writeFile(subsystemJson,JSON.stringify({subsystems:[importModel],vision:{fovDegrees:64,imageWidth:640,imageHeight:480,limelights:[]},swerve:{driver:{maxSpeedCoefficient:0.9}}}));
+review=await readLegacyMigration(root);
+assert.ok(review.changes.filter(change=>change.target==="vision"||change.target==="swerve").every(change=>change.unsupported));
+await applyLegacyMigration(root,review.revision,review.changes.filter(change=>!change.unsupported).map(change=>change.id));
+assert.equal((await readSubsystemDocument(root)).subsystems.find(item=>item.id==="intake").pid.kP,3);
+assert.ok((await fs.readFile(visionPath,"utf8")).includes("Math.max(60, 65)"));
+// Older Java may lack newly introduced camera/localization declarations. Only
+// reviewed saved values may create them; camera and localization share one file.
+const oldRoot=await fs.mkdtemp(path.join(repository,"build/java-migration-old-"));
+await fs.cp(path.join(repository,"templates/replacements",source),path.join(oldRoot,source),{recursive:true});
+const oldVisionPath=path.join(oldRoot,source,"constants/VisionConstants.java");
+let oldVision=await fs.readFile(oldVisionPath,"utf8");
+oldVision=oldVision.replace(/^  public static final (?:double|int) LIMELIGHT_(?:FOV_DEGREES|IMAGE_WIDTH|IMAGE_HEIGHT) =[^;]+;\r?\n/gm,"")
+  .replace(/  \/\/ POWERLIB LOCALIZATION CONSTANTS START[\s\S]*?  \/\/ POWERLIB LOCALIZATION CONSTANTS END - DO NOT DELETE\r?\n/,"")
+  .replace(/\.withPositionLimits\([^)]*\)/,"").replace(/\.withDistanceLimits\([^)]*\)/,"");
+await fs.writeFile(oldVisionPath,oldVision);
+const oldDirectory=path.join(oldRoot,"power-tool/generated");await fs.mkdir(oldDirectory,{recursive:true});
+const importedVision={fovDegrees:63.4,imageWidth:1280,imageHeight:720,limelights:[{name:"limelight-front"}]};
+const importedLocalization={position:{targetAreaThreshold:1,maxTargetDistanceMeters:5},heading:{maxTagDistanceMeters:4.5,singleTagMaxDistanceMeters:2.5}};
+await fs.writeFile(path.join(oldDirectory,"powerlib-subsystems.json"),JSON.stringify({vision:importedVision,localization:importedLocalization}));
+const oldReview=await readLegacyMigration(oldRoot);
+assert.ok(oldReview.changes.some(change=>change.target==="vision"&&change.field==="fovDegrees"&&change.javaValue===undefined&&!change.unsupported));
+assert.ok(oldReview.changes.some(change=>change.target==="localization"&&!change.unsupported));
+await applyLegacyMigration(oldRoot,oldReview.revision,oldReview.changes.filter(change=>!change.unsupported).map(change=>change.id));
+const {readVisionConfig,readLocalizationConfig}=await import("../dist-electron/java-config/service.js");
+assert.equal((await readVisionConfig(oldRoot)).vision.imageWidth,1280);
+assert.equal((await readLocalizationConfig(oldRoot)).config.heading.maxTagDistanceMeters,4.5);
+assert.ok((await fs.readFile(oldVisionPath,"utf8")).includes("VisionHeadingInitializationConfig.DEFAULT"));
+console.log(`Migration checks passed: real Java/JSON comparison, unapplied values, explicit destructive approval, source/legacy backups, archive, malformed files and stale reviews. Fixture: ${root}`);

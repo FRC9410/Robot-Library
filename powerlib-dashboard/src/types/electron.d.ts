@@ -3,6 +3,9 @@ import type { LogFileEntry } from "../features/logs/logLibraryModel";
 import type { VisionConfig } from "../../electron/visionConfig";
 import type { StateConfig } from "../../electron/stateConfig";
 import type { LocalizationConfig } from "../../electron/localizationConfig";
+import type { TunedSourceSave } from "../../electron/java-config/service";
+import type { MigrationChange } from "../../electron/java-config/legacyMigration";
+import type { TuningConnection, TuningSessionValue, TuningSessionFile } from "../../electron/tuningSession";
 export {};
 
 export type OpenedLog = {
@@ -21,9 +24,14 @@ declare global {
       platform: NodeJS.Platform;
       showAppMenu: (menuId: string, position: { x: number; y: number }) => Promise<void>;
       readConstants: () => Promise<ConstantsFile[]>;
+      readTuningSession: (connection: TuningConnection) => Promise<TuningSessionFile>;
+      saveTuningSession: (connection: TuningConnection, values: TuningSessionValue[]) => Promise<TuningSessionFile>;
+      readLegacyMigration: () => Promise<{ revision: string; files: string[]; changes: MigrationChange[] }>;
+      applyLegacyMigration: (revision: string, selected: string[], confirmDeletes: boolean) => Promise<{ backup: string; changed: string[]; applied: number; archived: string[] }>;
+      saveTunedSourceValues: (changes: TunedSourceSave) => Promise<{ subsystems: unknown[]; swerve: unknown; localization: LocalizationConfig | null; constants: ConstantsFile[] }>;
       readVisionConfig: () => Promise<{ path: string; vision: VisionConfig }>;
-      readStateConfig: () => Promise<{ path: string; config: StateConfig }>;
-      saveStateConfig: (config: StateConfig) => Promise<{ path: string; config: StateConfig }>;
+      readStateConfig: () => Promise<{ path: string; config: StateConfig; diagnostics?: string[]; repairable?: boolean }>;
+      saveStateConfig: (config: StateConfig) => Promise<{ path: string; config: StateConfig; diagnostics?: string[]; repairable?: boolean }>;
       readLocalizationConfig: () => Promise<{ path: string; config: LocalizationConfig }>;
       saveLocalizationConfig: (config: LocalizationConfig) => Promise<{ path: string; config: LocalizationConfig }>;
       saveVisionConfig: (vision: VisionConfig) => Promise<{ path: string; vision: VisionConfig }>;
@@ -34,12 +42,15 @@ declare global {
         subsystems: unknown[];
         swerve?: unknown;
         error?: string;
+        swerveError?: string;
+        revision?: string;
       }>;
-      saveSubsystems: (subsystems: unknown[], swerve?: unknown) => Promise<{
+      saveSubsystems: (subsystems: unknown[], swerve?: unknown, revision?: string, deleted?: string[]) => Promise<{
         exists: boolean;
         path: string;
         subsystems: unknown[];
         swerve?: unknown;
+        revision?: string;
       }>;
       updateSubsystemCode: () => Promise<{
         stdout: string;

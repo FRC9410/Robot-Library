@@ -6,7 +6,10 @@ import frc.powerlib.configs.VisionHeadingInitializationConfig;
 import frc.powerlib.configs.VisionPoseFilterConfig;
 
 public class VisionConstants {
-  public static final String LIMELIGHT_NAME = "limelight";
+  public static final double LIMELIGHT_FOV_DEGREES = 60.0;
+  public static final int LIMELIGHT_IMAGE_WIDTH = 320;
+  public static final int LIMELIGHT_IMAGE_HEIGHT = 240;
+  public static final String LIMELIGHT_NAME = "limelight-main";
   // Measurements are ranked by quality; camera order breaks ties. Empty means no Limelights.
   // Example: {"limelight-b", "limelight-l", "limelight-r"}
   public static final String[] LIMELIGHT_NAMES = {LIMELIGHT_NAME};

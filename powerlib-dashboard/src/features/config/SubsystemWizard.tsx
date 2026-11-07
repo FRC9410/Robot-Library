@@ -38,7 +38,7 @@ export function SubsystemWizard({ initialForm, subsystems, onSave, onCancel, onS
   const savingRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   if (!form) return null;
-  const existing = form.index === null ? undefined : subsystems[form.index];
+  const existing = form.index === null ? undefined : subsystems.find(item => item.id === form.id);
   const preview = buildSubsystem(form, existing);
   function changeForm(updater: (current: SubsystemFormState | null) => SubsystemFormState | null) {
     setForm(updater);
@@ -73,7 +73,11 @@ export function SubsystemWizard({ initialForm, subsystems, onSave, onCancel, onS
     try {
       const nextSubsystems = [...subsystems];
       if (form.index === null) nextSubsystems.push(preview);
-      else nextSubsystems[form.index] = preview;
+      else {
+        const index = nextSubsystems.findIndex(item => item.id === form.id);
+        if (index < 0) throw Error("This subsystem was removed in Java. Your draft is kept; refresh before saving.");
+        nextSubsystems[index] = preview;
+      }
       await onSave(nextSubsystems);
       onCancel();
     } catch (error) {
@@ -111,7 +115,7 @@ export function SubsystemWizard({ initialForm, subsystems, onSave, onCancel, onS
           </Stack>}
           {step === 2 && <ControlConstantsGrid form={form} updateField={updateField} />}
           {step === 3 && <Stack spacing={2}>
-            <Alert severity="info">Saving updates your project configuration. Use File → Update Code, then rebuild and deploy to apply it to the robot.</Alert>
+            <Alert severity="info">Saving updates Java source. Build and deploy to apply it to the robot.</Alert>
             <SubsystemDetails subsystem={preview} />
           </Stack>}
         </Box>

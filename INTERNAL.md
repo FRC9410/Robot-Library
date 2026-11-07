@@ -245,69 +245,25 @@ powershell -ExecutionPolicy Bypass -File E:\code\projects\Robot-Library\install.
 
 
 
-## Generate Subsystems
+## Edit robot configuration
 
-After running the installer, you can generate subsystem configs and initialize predefined PowerLib subsystem types in `StateMachine`. The installer downloads the generator into `power-tool/scripts` and creates short Windows command wrappers there.
+Power Tool's Config wizard creates and edits velocity, velocity-torque, absolute-position and relative-position mechanisms directly in Java. It maintains constants classes, Constants aliases, StateMachine instances, tunable registration and characterization integration as needed. Ordinary value changes patch individual initializers. Runtime renames preserve the stable Java class identity and subsystem ID comment.
 
-Windows:
+Config also saves camera descriptions and state names immediately. Idle is implicit and always last. Existing state bodies and guarded handler priority remain team-owned. Deleting a state requires confirmation and rejects remaining source references. Build and deploy are separate from saving.
 
-```powershell
-.\power-tool\scripts\powerlib-generate-subsystem.cmd
-```
-
-If `power-tool/generated/powerlib-subsystems.json` already exists, the command first asks whether to update the generated code from that JSON. Answer no to add subsystems interactively instead.
-
-To skip the build check after generation:
+The shared engine is in `powerlib-dashboard/electron/java-config/`. Renderer forms, Electron IPC, legacy migration and the installed CLI use this engine. Writes check revisions, retain source spans, serialize saves and keep a recovery journal under `build/power-tool-edits/`. An interrupted save rolls back recognized writes while refusing to overwrite later external edits. This is a bounded source editor; arbitrary Java factories and expressions stay read-only.
 
 ```powershell
-.\power-tool\scripts\powerlib-generate-subsystem.cmd -SkipBuild
+node power-tool/scripts/source-config.cjs validate
+node power-tool/scripts/source-config.cjs migration-preview
 ```
 
-Local test from a robot project:
+Review the preview's individual saved differences before using `migration-apply <revision> <selected-change-ids>`. Destructive state imports additionally require `--confirm-state-deletions`. Originals and source are backed up under `build/power-tool-migration/`; legacy JSON is archived only after successful source edits. Normal saves never read or create configuration JSON. The old generator switches refuse JSON replay. The no-argument compatibility wrapper performs source validation only.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File E:\code\projects\Robot-Library\generate-subsystem.ps1
-```
+Custom constants markers remain supported, and existing custom methods and comments survive structural edits. Existing numeric fields retain their tuning annotation; newly added numeric custom fields become tunable. Save Tuned Values saves selected defaults together in one source transaction. Live Apply uses the same NetworkTables keys as before and stays separate from code saving.
 
-The generator script stays in the robot project so you can run it again later. The generator currently supports `velocity` and `position` subsystem types. It creates a constants file, adds the constants barrel entry in `Constants.java`, and inserts the initialized subsystem between the `POWERLIB GENERATED SUBSYSTEMS` markers in `StateMachine.java`.
+Temporary tuning recovery JSON lives in app user-data, isolated by robot project and target/profile/host/port. Only successfully published variable values are cached. Restore fills pending drafts and requires explicit Apply; it never replaces Java defaults or replays automatically.
 
-By default, generation runs the robot project's `build` task after the prompts finish. Add `-SkipBuild` to skip the build check.
-
-The generator maintains `power-tool/generated/powerlib-subsystems.json`. Interactive generation adds or updates subsystem entries in that JSON document, then rewrites the generated Java files from the document. After each subsystem, the script asks whether to add another. Saved constants and tuning selections also live in `power-tool/generated/`. Root-level files migrate automatically; conflicting root copies are archived in `generated/legacy/`. Installing or updating Power Tool preserves this directory.
-
-Enum prompts show the accepted values in the prompt. For example:
-
-```text
-Subsystem type (accepted: velocity, position) [velocity]
-Leader neutral mode (accepted: Brake, Coast) [Brake]
-```
-
-By default, interactive generation skips PID/feedforward tuning and writes zero PID values with empty feedforward optionals. Answer yes to `Configure PID/feedforward values?` when you want to enter `kP`, `kI`, `kD`, `kG`, `kS`, `kV`, and `kA`.
-
-You can edit `power-tool/generated/powerlib-subsystems.json` directly, then run the generator and answer yes when it asks to update from JSON:
-
-```powershell
-.\power-tool\scripts\powerlib-generate-subsystem.cmd
-```
-
-To reconcile without running the build check:
-
-```powershell
-.\power-tool\scripts\powerlib-generate-subsystem.cmd -SkipBuild
-```
-
-The update flow changes generated constants, adds new subsystems, removes generated subsystem constants that are no longer in the JSON, and rewrites the generated block in `StateMachine.java`.
-
-Generated subsystem constants files include a protected custom block:
-
-```java
-  // POWERLIB CUSTOM CONSTANTS START - DO NOT DELETE
-  // POWERLIB CUSTOM CONSTANTS END - DO NOT DELETE
-```
-
-Add hand-written constants between those markers. Updates preserve that block while regenerating the subsystem config from `power-tool/generated/powerlib-subsystems.json`.
-
-Each JSON subsystem has a stable `id`. To rename a subsystem, change its `name` but keep its `id` the same. The update flow uses that id to carry custom constants from the old generated constants file to the renamed one.
 ## Build Check
 
 By default, the installer runs the robot project's `build` task in a fresh Gradle process after installing files and vendordeps. This fresh process is important because Gradle configures WPILib vendordeps before installer tasks run. To skip that build check, add this flag:

@@ -1,4 +1,5 @@
 export type LocalizationConfig = {
+  sourceRevision?: string;
   position: { targetAreaThreshold: number; maxTargetDistanceMeters: number };
   heading: { maxTagDistanceMeters: number; singleTagMaxDistanceMeters: number };
 };

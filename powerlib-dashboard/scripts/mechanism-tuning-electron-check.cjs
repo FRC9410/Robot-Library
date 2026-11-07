@@ -23,7 +23,8 @@ app.whenReady().then(async () => {
       saveSubsystems:async(subsystems,swerve)=>{Object.assign(window.projectDocument,{subsystems,swerve});return {exists:true,path:'fixture',subsystems,swerve};},
       readConstants:async()=>[],saveConstants:async()=>{throw Error('Unexpected constants save');},
       readLocalizationConfig:async()=>({path:'fixture',config:structuredClone(window.projectDocument.localization)}),
-      saveLocalizationConfig:async config=>{window.projectDocument.localization=structuredClone(config);window.savedLocalization=structuredClone(config);return {path:'fixture',config};}
+      saveLocalizationConfig:async config=>{window.projectDocument.localization=structuredClone(config);window.savedLocalization=structuredClone(config);return {path:'fixture',config};},
+      saveTunedSourceValues:async changes=>{Object.assign(window.projectDocument,structuredClone(changes));window.savedLocalization=structuredClone(window.projectDocument.localization);return {...window.projectDocument,path:'fixture',exists:true,constants:[]};}
     };
     function Fixture() {
       const { setTopics, setStatus, clientRef, upsertTopic, pruneTopics, setConnectionSettings } = useNetworkTables();
@@ -202,8 +203,8 @@ app.whenReady().then(async () => {
     const saveDialog=()=>[...document.querySelectorAll('[role="dialog"]')].find(el=>el.textContent.includes('Save Tuned Values'));
     await wait(()=>saveDialog()?.textContent.includes('Single-tag heading max distance (m)'));
     [...saveDialog().querySelectorAll('button')].find(el=>el.textContent==='Save selected').click();
-    await wait(()=>saveDialog()?.textContent.includes('tuned values. Run Update Code'));
-    assert(window.savedLocalization.heading.maxTagDistanceMeters===5&&window.savedLocalization.heading.singleTagMaxDistanceMeters===3,'Heading limits save as JSON defaults immediately after Apply');
+    await wait(()=>saveDialog()?.textContent.includes('tuned values to Java'));
+    assert(window.savedLocalization.heading.maxTagDistanceMeters===5&&window.savedLocalization.heading.singleTagMaxDistanceMeters===3,'Heading limits save as Java defaults immediately after Apply');
     assert(window.savedLocalization.position.targetAreaThreshold===1&&window.savedLocalization.position.maxTargetDistanceMeters===5,'Existing position tunables use the same save path');
     assert(window.projectDocument.states[0]==='IDLE'&&window.projectDocument.vision.limelights[0].name==='limelight-front','Tuning saves preserve unrelated configuration');
     [...saveDialog().querySelectorAll('button')].find(el=>el.textContent==='Close').click();await wait(()=>!saveDialog());

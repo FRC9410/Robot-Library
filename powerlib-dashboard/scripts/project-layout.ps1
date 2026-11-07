@@ -1,5 +1,4 @@
-# Continue relocating legacy selection files during upgrades; Power Tool no longer reads them.
-$PowerLibGeneratedFiles = @('powerlib-subsystems.json', 'powerlib-constants.json', 'powerlib-tuning-selection.json')
+# Legacy configuration stays in place until explicit Java migration review.
 
 function Get-PowerLibRobotRoot {
     foreach ($start in @((Get-Location).Path, $PSScriptRoot)) {
@@ -18,32 +17,17 @@ function Get-PowerLibRobotRoot {
 
 function Initialize-PowerToolLayout {
     param([Parameter(Mandatory = $true)][string]$RobotRoot)
-    $generatedRoot = Join-Path $RobotRoot 'power-tool/generated'
-    New-Item -ItemType Directory -Force -Path $generatedRoot | Out-Null
-    foreach ($fileName in $PowerLibGeneratedFiles) {
-        foreach ($directory in @($RobotRoot, (Join-Path $RobotRoot 'power-tool'), (Join-Path $RobotRoot 'powerlib-dashboard'))) {
-            $legacy = Join-Path $directory $fileName
-            $destination = Join-Path $generatedRoot $fileName
-            if (Test-Path -LiteralPath $legacy) {
-                if (Test-Path -LiteralPath $destination) {
-                    $archive = Join-Path $generatedRoot 'legacy'
-                    New-Item -ItemType Directory -Force -Path $archive | Out-Null
-                    $archiveName = [System.IO.Path]::GetFileNameWithoutExtension($fileName) + '-' + [guid]::NewGuid().ToString() + '.json'
-                    Move-Item -LiteralPath $legacy -Destination (Join-Path $archive $archiveName)
-                } else {
-                    Move-Item -LiteralPath $legacy -Destination $destination
-                }
-            }
-        }
-    }
+    # Do not create or move authoritative configuration JSON. The migration UI reads legacy locations.
+    New-Item -ItemType Directory -Force -Path (Join-Path $RobotRoot 'power-tool/scripts') | Out-Null
 }
 
 function Reset-PowerToolAppFiles {
-    param([Parameter(Mandatory = $true)][string]$ToolRoot)
+    param([Parameter(Mandatory = $true)][string]$ToolRoot, [switch]$KeepDependencies)
     $resolvedToolRoot = [System.IO.Path]::GetFullPath($ToolRoot).TrimEnd('\', '/')
     if (Test-Path -LiteralPath $resolvedToolRoot) {
         foreach ($item in Get-ChildItem -LiteralPath $resolvedToolRoot -Force) {
             if ($item.Name -in @('generated', 'scripts', 'dashboard')) { continue }
+            if ($KeepDependencies -and $item.Name -eq 'node_modules') { continue }
             $target = [System.IO.Path]::GetFullPath($item.FullName)
             if (-not $target.StartsWith($resolvedToolRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
                 throw "Refusing to remove a path outside Power Tool: $target"

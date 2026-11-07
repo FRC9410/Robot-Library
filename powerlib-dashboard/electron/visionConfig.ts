@@ -1,7 +1,7 @@
 /** Shared validation for the renderer and project file bridge. */
 export type LimelightConfig = { name: string };
 export type VisionCameraSettings = { fovDegrees: number; imageWidth: number; imageHeight: number };
-export type VisionConfig = VisionCameraSettings & { limelights: LimelightConfig[] };
+export type VisionConfig = VisionCameraSettings & { limelights: LimelightConfig[]; sourceRevision?: string };
 export const defaultLimelightSettings = { fovDegrees: 60, imageWidth: 320, imageHeight: 240 };
 
 export function validateVisionConfig(value: unknown): asserts value is VisionConfig {

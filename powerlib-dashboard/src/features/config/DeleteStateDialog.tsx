@@ -8,8 +8,8 @@ export function DeleteStateDialog({ name, saving, error, onCancel, onConfirm }: 
     <DialogTitle id="delete-state-title">Delete {name}?</DialogTitle>
     <DialogContent>
       <DialogContentText id="delete-state-description">
-        Update Code will delete this state's Java file, including your changes to execute().
-        References in other robot code must be removed before generation can finish.
+        This deletes the state's Java file, including your changes to execute().
+        References in other robot code must be removed before deletion can finish.
       </DialogContentText>
       {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
     </DialogContent>

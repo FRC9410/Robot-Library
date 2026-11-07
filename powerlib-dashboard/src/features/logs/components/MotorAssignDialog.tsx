@@ -15,7 +15,7 @@ type MotorAssignDialogProps = {
 
 const automatic = "__automatic__";
 const sourceText: Record<LogMotor["source"], string> = {
-  override: "", config: "from powerlib-subsystems.json", tuner: "from TunerConstants.java", motion: "matched by motion",
+  override: "", config: "from robot Java configuration", tuner: "from TunerConstants.java", motion: "matched by motion",
   guess: "guessed from the usual swerve IDs", "": ""
 };
 
@@ -28,7 +28,7 @@ function automaticLabel(motor: LogMotor, nameOf: (id: string) => string) {
 
 /**
  * Lists every motor in the log so it can be put under a subsystem or a group like Drive. Choices are
- * saved and override the CAN IDs from powerlib-subsystems.json; "Automatic" goes back to the config.
+ * saved and override the CAN IDs from robot Java configuration; "Automatic" goes back to the config.
  */
 export function MotorAssignDialog({ open, onClose, motors, mechanisms, overrides, onAssign, onReset }: MotorAssignDialogProps) {
   const named = mechanisms.filter(mechanism => !mechanism.id.startsWith("motor:"));
@@ -39,7 +39,7 @@ export function MotorAssignDialog({ open, onClose, motors, mechanisms, overrides
       <DialogTitle>Assign motors</DialogTitle>
       <DialogContent>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          Motors are grouped automatically: from powerlib-subsystems.json and TunerConstants.java when Power Tool can read them, otherwise by matching each
+          Motors are grouped automatically: from robot Java configuration and TunerConstants.java when Power Tool can read them, otherwise by matching each
           motor's motion to a subsystem. Change any that are wrong here; your choices are saved on this computer.
         </Typography>
         <Table size="small">

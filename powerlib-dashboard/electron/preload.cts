@@ -4,6 +4,11 @@ contextBridge.exposeInMainWorld("powerlib", {
   platform: process.platform,
   showAppMenu: (menuId: string, position: { x: number; y: number }) => ipcRenderer.invoke("powerlib:show-app-menu", menuId, position),
   readConstants: () => ipcRenderer.invoke("powerlib:read-constants"),
+  readTuningSession: (connection: unknown) => ipcRenderer.invoke("powerlib:read-tuning-session", connection),
+  saveTuningSession: (connection: unknown, values: unknown[]) => ipcRenderer.invoke("powerlib:save-tuning-session", connection, values),
+  readLegacyMigration: () => ipcRenderer.invoke("powerlib:read-legacy-migration"),
+  applyLegacyMigration: (revision: string, selected: string[], confirmed: boolean) => ipcRenderer.invoke("powerlib:apply-legacy-migration", revision, selected, confirmed),
+  saveTunedSourceValues: (changes: unknown) => ipcRenderer.invoke("powerlib:save-tuned-source", changes),
   saveConstants: (id: string, source: string, constants: unknown[]) =>
     ipcRenderer.invoke("powerlib:save-constants", id, source, constants),
   readSubsystems: () => ipcRenderer.invoke("powerlib:read-subsystems"),
@@ -13,8 +18,8 @@ contextBridge.exposeInMainWorld("powerlib", {
   readLocalizationConfig: () => ipcRenderer.invoke("powerlib:read-localization"),
   saveLocalizationConfig: (config: unknown) => ipcRenderer.invoke("powerlib:save-localization", config),
   saveVisionConfig: (vision: unknown) => ipcRenderer.invoke("powerlib:save-vision", vision),
-  saveSubsystems: (subsystems: unknown[], swerve?: unknown) =>
-    ipcRenderer.invoke("powerlib:save-subsystems", subsystems, swerve),
+  saveSubsystems: (subsystems: unknown[], swerve?: unknown, revision?: string, deleted?: string[]) =>
+    ipcRenderer.invoke("powerlib:save-subsystems", subsystems, swerve, revision, deleted),
   updateSubsystemCode: () => ipcRenderer.invoke("powerlib:update-subsystem-code"),
   updateInstallSection: (section: string) => ipcRenderer.invoke("powerlib:update-install-section", section),
   updatePowerTool: () => ipcRenderer.invoke("powerlib:update-power-tool"),

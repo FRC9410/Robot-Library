@@ -20,6 +20,8 @@ import TimelineIcon from "@mui/icons-material/Timeline";
 import { WindowTitleBar } from "./components/WindowTitleBar";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import { ConfigDialog } from "./features/config/ConfigDialog";
+import { LegacyMigrationGate } from "./features/config/LegacyMigrationGate";
+import { useSourceInventoryRefresh } from "./features/config/useSourceInventoryRefresh";
 import type {
   GeneratedSubsystem,
   SubsystemDocumentState
@@ -145,6 +147,7 @@ function AppContent() {
         exists: result.exists,
         path: result.path,
         subsystems: result.subsystems as GeneratedSubsystem[],
+        revision: result.revision,
         error: result.error ?? null
       });
     } catch (caught) {
@@ -161,15 +164,18 @@ function AppContent() {
       throw new Error("PowerLib file bridge is not available.");
     }
 
-    const result = await window.powerlib.saveSubsystems(subsystems);
+    const result = await window.powerlib.saveSubsystems(subsystems, undefined, subsystemDocument.revision);
     setSubsystemDocument({
       loading: false,
       exists: result.exists,
       path: result.path,
       subsystems: result.subsystems as GeneratedSubsystem[],
+      revision: result.revision,
       error: null
     });
   }
+
+  useSourceInventoryRefresh(loadSubsystems);
 
   async function updateSubsystemCode() {
     if (subsystemUpdatingCode) {
@@ -186,10 +192,10 @@ function AppContent() {
 
       const result = await window.powerlib.updateSubsystemCode();
       const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
-      showToast(output ? summarizeUpdateOutput(output) : "Updated generated subsystem code.", "success");
+      showToast(output ? summarizeUpdateOutput(output) : "Robot build completed.", "success");
       await loadSubsystems();
     } catch (caught) {
-      showToast(caught instanceof Error ? caught.message : "Could not update generated subsystem code.", "error");
+      showToast(caught instanceof Error ? caught.message : "Could not build robot code.", "error");
     } finally {
       setSubsystemUpdatingCode(false);
     }
@@ -450,11 +456,11 @@ function AppContent() {
 
       <UpdateCodeDialog
         open={subsystemUpdatingCode || Boolean(installSectionUpdating)}
-        title={installSectionUpdating ? "Updating PowerLib" : "Updating Code"}
+        title={installSectionUpdating ? "Updating PowerLib" : "Building Robot"}
         message={
           installSectionUpdating
             ? `Please wait, updating ${installSectionUpdating}.`
-            : "Please wait, code is updating."
+            : "Please wait, robot code is building."
         }
       />
 
@@ -471,7 +477,7 @@ function AppContent() {
       {configOpen && <ConfigDialog document={subsystemDocument} onRefresh={() => void loadSubsystems()}
         onClose={() => setConfigOpen(false)} onSave={async subsystems => {
           await saveSubsystems(subsystems);
-          showToast("Subsystem configuration saved. Use File > Update Code when you are ready to regenerate Java files.", "success");
+          showToast("Subsystem saved to Java. Build and deploy to apply it to the robot.", "success");
         }} />}
 
       <Snackbar
@@ -511,6 +517,7 @@ function AppContent() {
           )}
         </Stack>
       </Container>
+      <LegacyMigrationGate onComplete={() => void loadSubsystems()} />
       <NetworkTablesDrawer open={networkTablesOpen} onClose={() => setNetworkTablesOpen(false)} />
     </Box>
   );

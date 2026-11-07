@@ -53,7 +53,8 @@ export function validateSubsystemStep(form: SubsystemFormState, subsystems: Gene
     }
   }
   if (step === 2) {
-    for (const key of ["kP", "kI", "kD", "kG", "kS", "kV", "kA", "cruiseVelocity", "acceleration"] as const) numeric(key, key);
+    for (const key of ["kP", "kI", "kD", "kG", "cruiseVelocity", "acceleration"] as const) numeric(key, key);
+    for (const key of ["kS", "kV", "kA"] as const) if (form[key].trim()) numeric(key, key);
     if (form.type === "velocityTorque") numeric("torqueFF", "Torque feedforward");
   }
   return errors;

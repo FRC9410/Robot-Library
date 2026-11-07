@@ -57,5 +57,5 @@ public class RetiringState implements frc.powerlib.statemachine.State<frc.robot.
     if (-not $process.WaitForExit(240000)) { Stop-Process -Id $process.Id; throw "App generation check timed out. Logs: $fixture" }
     Get-Content -LiteralPath (Join-Path $fixture 'app.stdout.log') -Tail 10
     if ($process.ExitCode -ne 0) { throw (Get-Content (Join-Path $fixture 'app.stderr.log') -Tail 45 | Out-String) }
-    Write-Host "App -> JSON -> Update Code -> Java build passed. Evidence: $fixture"
+    Write-Host "App -> direct Java save -> Build Robot passed. Evidence: $fixture"
 } finally { Pop-Location; $env:JAVA_HOME = $originalJavaHome }

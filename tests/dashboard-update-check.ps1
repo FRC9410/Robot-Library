@@ -9,15 +9,16 @@ New-Item -ItemType Directory -Force -Path $sourceFixture, $robotFixture, $mockBi
 foreach ($relative in @('build-dashboard.ps1', 'build-dashboard-install.ps1', 'update-power-tool.ps1', 'install.ps1',
     'generate-subsystem.ps1', 'powerlib-dashboard/package.json', 'powerlib-dashboard/src/App.tsx',
     'powerlib-dashboard/electron/main.ts', 'powerlib-dashboard/electron/preload.cts',
-    'powerlib-dashboard/electron/subsystemFiles.ts', 'powerlib-dashboard/electron/robotDocument.ts',
+    'powerlib-dashboard/electron/subsystemFiles.ts', 'powerlib-dashboard/electron/constantsFiles.ts',
     'powerlib-dashboard/electron/localizationFiles.ts', 'powerlib-dashboard/electron/localizationConfig.ts',
-    'powerlib-dashboard/scripts/project-layout.ps1',
+    'powerlib-dashboard/scripts/project-layout.ps1', 'powerlib-dashboard/scripts/source-config.cjs',
     'templates/replacements/src/main/java/frc/robot/subsystems/PowerDashboard.java')) {
     $destination = Join-Path $sourceFixture $relative
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
     Copy-Item -LiteralPath (Join-Path $root $relative) -Destination $destination
 }
 Copy-Item -LiteralPath (Join-Path $root 'powerlib-dashboard/dashboard') -Destination (Join-Path $sourceFixture 'powerlib-dashboard/dashboard') -Recurse
+Copy-Item -LiteralPath (Join-Path $root 'powerlib-dashboard/electron/java-config') -Destination (Join-Path $sourceFixture 'powerlib-dashboard/electron/java-config') -Recurse
 [IO.File]::WriteAllText((Join-Path $mockBin 'npm.cmd'), "@echo off`r`nexit /b 0`r`n")
 [IO.File]::WriteAllText((Join-Path $robotFixture 'build.gradle'), '// dashboard preservation fixture')
 $generated = Join-Path $robotFixture 'power-tool/generated/powerlib-subsystems.json'
@@ -39,7 +40,7 @@ function Assert-CustomDashboard {
     if ((Get-FileHash -LiteralPath $installedGenerator).Hash -cne (Get-FileHash -LiteralPath (Join-Path $sourceFixture 'generate-subsystem.ps1')).Hash) {
         throw 'Install/update did not ship the current generator.'
     }
-    foreach ($name in @('main.ts', 'preload.cts', 'subsystemFiles.ts', 'robotDocument.ts', 'localizationFiles.ts', 'localizationConfig.ts')) {
+    foreach ($name in @('main.ts', 'preload.cts', 'subsystemFiles.ts', 'constantsFiles.ts', 'localizationFiles.ts', 'localizationConfig.ts', 'java-config/service.ts', 'java-config/legacyMigration.ts')) {
         $installed = Join-Path $robotFixture "power-tool/electron/$name"
         $sourceFile = Join-Path $sourceFixture "powerlib-dashboard/electron/$name"
         if ((Get-FileHash -LiteralPath $installed).Hash -cne (Get-FileHash -LiteralPath $sourceFile).Hash) { throw "Install/update retained a stale save handler: $name" }
@@ -69,7 +70,11 @@ try {
     [IO.File]::WriteAllText((Join-Path $sourceFixture 'powerlib-dashboard/dashboard/upstream.txt'), 'Do not merge this into a custom dashboard.')
     $app = Join-Path $robotFixture 'power-tool/src/App.tsx'
     [IO.File]::WriteAllText($app, '// old managed app')
+    $dependency = Join-Path $robotFixture 'power-tool/node_modules/retained-fixture.txt'
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dependency) | Out-Null
+    [IO.File]::WriteAllText($dependency, 'Keep dependencies when skipping npm install.')
     & (Join-Path $sourceFixture 'build-dashboard-install.ps1') -SourceRoot $sourceFixture -SkipNpmInstall
+    if (-not (Test-Path -LiteralPath $dependency)) { throw 'SkipNpmInstall removed existing dependencies.' }
     Assert-CustomDashboard
     if ([IO.File]::ReadAllText($app) -cne [IO.File]::ReadAllText((Join-Path $sourceFixture 'powerlib-dashboard/src/App.tsx'))) {
         throw 'Reinstall did not refresh managed app code.'

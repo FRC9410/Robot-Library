@@ -214,6 +214,7 @@ try {
     . (Join-Path $scriptsRoot 'project-layout.ps1')
     Copy-PowerToolBuildScript -SourceRoot $sourceRoot -RobotRoot $robotRoot
     Copy-PowerToolGeneratorTemplate -SourceRoot $sourceRoot -ScriptsRoot $scriptsRoot
+    Copy-Item -LiteralPath (Join-Path $source 'scripts/source-config.cjs') -Destination (Join-Path $scriptsRoot 'source-config.cjs') -Force
 
     $latestUpdater = Join-Path $sourceRoot "update-power-tool.ps1"
     if (Test-Path $latestUpdater) {
