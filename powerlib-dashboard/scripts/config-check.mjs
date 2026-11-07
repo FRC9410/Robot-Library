@@ -17,6 +17,11 @@ assert.ok(validateSubsystemStep(form, [subsystem], 0).some(issue => issue.includ
 assert.ok(validateSubsystemStep({ ...form, name: "Vision" }, [], 0).some(issue => issue.includes("reserved")));
 assert.ok(validateSubsystemStep({ ...form, name: "Intake Roller" }, [], 0).length);
 assert.ok(validateSubsystemStep({ ...form, sensorToMechanism: "" }, [], 0).length);
+assert.deepEqual(validateSubsystemStep({ ...form, sensorToMechanism: "-1", rotorToSensor: "-44.444" }, [], 0), [], "Signed feedback ratios match the robot configuration API");
+for (const value of ["0", "1001", "-1001", "NaN", "Infinity", ""]) {
+  assert.ok(validateSubsystemStep({ ...form, sensorToMechanism: value }, [], 0).length);
+  assert.ok(validateSubsystemStep({ ...form, rotorToSensor: value }, [], 0).length);
+}
 assert.ok(validateSubsystemStep({ ...form, motors: [{ ...form.motors[0], id: "1.5" }] }, [], 1).length);
 assert.ok(validateSubsystemStep({ ...form, motors: [{ ...form.motors[0], id: "" }] }, [], 1).length);
 assert.ok(validateSubsystemStep({ ...form, motors: [form.motors[0], { ...form.motors[0], role: "follower" }] }, [], 1).some(issue => issue.includes("more than one motor")));

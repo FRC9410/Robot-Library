@@ -154,14 +154,13 @@ export function NetworkTablesPanel() {
   }
 
   return (
-    <Box>
-      <Card variant="outlined">
-        <CardContent sx={{ p: 0 }}>
-          <Stack spacing={0}>
+    <Box sx={{ height: "100%", minHeight: 0 }}>
+      <Card variant="outlined" sx={{ height: "100%" }}>
+        <CardContent sx={{ p: 0, height: "100%", "&:last-child": { pb: 0 } }}>
+          <Stack spacing={0} sx={{ height: "100%", minHeight: 0 }}>
             <Box sx={{ p: 2 }}>
               <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ alignItems: { md: "center" } }}>
                 <Box sx={{ flexGrow: 1 }}>
-                  <Typography variant="h6">NetworkTables Tree</Typography>
                   <Typography variant="body2" color="text.secondary">
                     {connectionSettings.host}:{connectionSettings.port} · watched prefixes have {visibleTopicCount} visible topic
                     {visibleTopicCount === 1 ? "" : "s"}.
@@ -173,7 +172,7 @@ export function NetworkTablesPanel() {
 
             <Divider />
 
-            <Box sx={{ maxHeight: "calc(100vh - 250px)", overflow: "auto" }}>
+            <Box sx={{ flex: 1, minHeight: 0, overflow: "auto", scrollbarWidth: "thin" }}>
               <Box
                 sx={{
                   alignItems: "center",

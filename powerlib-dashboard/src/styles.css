@@ -13,3 +13,11 @@ select,
 textarea {
   letter-spacing: 0;
 }
+
+.window-titlebar { position: sticky; top: 0; z-index: 1600; height: 40px; flex-shrink: 0; background: #18181b; -webkit-app-region: drag; user-select: none; }
+.window-titlebar-menus { position: absolute; inset: 0 auto 0 8px; display: flex; align-items: center; -webkit-app-region: no-drag; }
+.window-titlebar-menus .MuiButton-root { min-width: 0; padding: 4px 7px; color: #f8fafc; font-size: 12px; text-transform: none; }
+.window-titlebar-brand { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 9px; white-space: nowrap; pointer-events: none; }
+.window-titlebar-brand .MuiSvgIcon-root { font-size: 26px; }
+.window-titlebar-brand .window-titlebar-name { font-size: 19px; font-weight: 800; }
+.window-titlebar-brand .window-titlebar-team { font-size: 10px; font-weight: 700; color: #b8b8aa; }

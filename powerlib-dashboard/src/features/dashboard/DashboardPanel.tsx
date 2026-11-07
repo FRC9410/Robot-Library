@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import TuneIcon from "@mui/icons-material/Tune";
+import { FormControl, InputLabel, MenuItem, Select } from "@mui/material";
 import { SubsystemTuningDialog } from "./SubsystemTuningDialog";
 import { drivetrainTuningOwner } from "./drivetrainTunables";
 import { canTuneMechanism } from "./mechanismTunables";
@@ -153,9 +154,11 @@ export function DashboardPanel({ subsystems = [], renderTopCards, renderSidebar,
   }, [pending, chooser, now, status]);
   useLayoutEffect(() => {
     const header = document.querySelector("header");
-    const measure = () => panel.current?.style.setProperty("--dashboard-header-height", `${header?.getBoundingClientRect().height ?? 112}px`);
+    const titlebar = document.querySelector(".window-titlebar");
+    const measure = () => panel.current?.style.setProperty("--dashboard-header-height", `${(header?.getBoundingClientRect().height ?? 112) + (titlebar?.getBoundingClientRect().height ?? 0)}px`);
     const observer = new ResizeObserver(measure);
     if (header) observer.observe(header);
+    if (titlebar) observer.observe(titlebar);
     measure();
     return () => observer.disconnect();
   }, []);
@@ -189,7 +192,6 @@ export function DashboardPanel({ subsystems = [], renderTopCards, renderSidebar,
     </div>
     <div className="dashboard-main">
       <div className={`dashboard-rail ${cameras.length ? "" : "without-cameras"}`}>
-        <small className="dashboard-select-label">Select view</small>
         <button className={`dashboard-thumb dashboard-field-thumb ${selectedView === "field" ? "selected" : ""}`} onClick={() => setSelectedView("field")} aria-label="Show field view">
           <div className="dashboard-thumb-preview dashboard-field-preview" style={{ aspectRatio: `${settings.length} / ${settings.width}` }}><Field pose={model.pose} settings={settings} /></div><b>FIELD</b>
         </button>
@@ -205,12 +207,14 @@ export function DashboardPanel({ subsystems = [], renderTopCards, renderSidebar,
       <div className="dashboard-stage">{selectedCamera ? <CameraCanvas camera={selectedCamera} images={images} failed={!!failed[selectedCamera.id] || selectedCamera.connected === false} />
         : <Field pose={model.pose} settings={settings} />}</div>
       <aside className="dashboard-sidebar">
-        {chooser && <section className="dashboard-auto"><div className="dashboard-auto-choice"><label htmlFor="dashboard-auto">AUTONOMOUS</label>
-          <select id="dashboard-auto" value={pending?.path === chooser.path && chooser.options.includes(pending.name) ? pending.name :
+        {chooser && <section className="dashboard-auto"><FormControl fullWidth size="small">
+          <InputLabel id="dashboard-auto-label" shrink>Autonomous</InputLabel>
+          <Select id="dashboard-auto" labelId="dashboard-auto-label" label="Autonomous" notched
+            value={pending?.path === chooser.path && chooser.options.includes(pending.name) ? pending.name :
             [chooser.active, chooser.selected, chooser.default].find(name => name !== undefined && chooser.options.includes(name)) ?? ""}
             disabled={!model.canSelectAuto || !chooser.controllable || !!pending} onChange={event => void selectAuto(event.target.value)}>
-            <option value="" disabled>Select routine</option>{chooser.options.map(option => <option key={option}>{option}</option>)}
-          </select></div>
+            {chooser.options.map(option => <MenuItem key={option} value={option}>{option}</MenuItem>)}
+          </Select></FormControl>
           {(autoError || pending) && <small className={autoError ? "dashboard-warning" : ""}>{autoError || "Waiting for robot…"}</small>}
           {!model.canSelectAuto && <small>{model.live ? "Locked while enabled" : "Waiting for live disabled state"}</small>}
         </section>}

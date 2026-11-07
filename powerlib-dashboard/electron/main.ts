@@ -29,6 +29,7 @@ function createAppMenu(window: BrowserWindow) {
         ]
       : []),
     {
+      id: "powerlib-menu-file",
       label: "File",
       submenu: [
         {
@@ -58,6 +59,7 @@ function createAppMenu(window: BrowserWindow) {
       ]
     },
     {
+      id: "powerlib-menu-edit",
       label: "Edit",
       submenu: [
         { role: "undo" },
@@ -70,14 +72,22 @@ function createAppMenu(window: BrowserWindow) {
       ]
     },
     {
+      id: "powerlib-menu-view",
       label: "View",
-      submenu: [{ role: "reload" }, { role: "forceReload" }, { role: "toggleDevTools" }, { type: "separator" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }]
+      submenu: [
+        { label: "Toggle Network Tables", click: () => window.webContents.send("powerlib:menu-toggle-network-tables") },
+        { type: "separator" },
+        { role: "reload" }, { role: "forceReload" }, { role: "toggleDevTools" }, { type: "separator" },
+        { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }
+      ]
     },
     {
+      id: "powerlib-menu-window",
       label: "Window",
       submenu: [{ role: "minimize" }, { role: "zoom" }]
     },
     {
+      id: "powerlib-menu-help",
       label: "Help",
       submenu: []
     }
@@ -85,6 +95,16 @@ function createAppMenu(window: BrowserWindow) {
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
+
+ipcMain.handle("powerlib:show-app-menu", (event, menuId: unknown, position: { x?: unknown; y?: unknown } | undefined) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window || typeof menuId !== "string" || !position
+      || typeof position.x !== "number" || !Number.isFinite(position.x)
+      || typeof position.y !== "number" || !Number.isFinite(position.y)) return;
+  Menu.getApplicationMenu()?.getMenuItemById(`powerlib-menu-${menuId}`)?.submenu?.popup({
+    window, x: Math.max(0, Math.round(position.x)), y: Math.max(0, Math.round(position.y))
+  });
+});
 
 async function getSubsystemJsonCandidates() {
   return [await generatedJsonPath(getDetectedRobotRoot(), "powerlib-subsystems.json")];
@@ -406,6 +426,11 @@ function createWindow() {
     minWidth: 960,
     minHeight: 640,
     title: "Power Tool",
+    titleBarStyle: "hidden",
+    ...(process.platform !== "darwin" ? {
+      titleBarOverlay: { color: "#18181b", symbolColor: "#f8fafc", height: 40 },
+      autoHideMenuBar: true
+    } : {}),
     backgroundColor: "#0d0d0d",
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -432,6 +457,7 @@ function createWindow() {
   });
 
   createAppMenu(window);
+  if (process.platform !== "darwin") window.setMenuBarVisibility(false);
 
   if (isDev && process.env.VITE_DEV_SERVER_URL) {
     window.loadURL(process.env.VITE_DEV_SERVER_URL);

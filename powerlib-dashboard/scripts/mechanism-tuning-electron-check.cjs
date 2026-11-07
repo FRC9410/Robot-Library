@@ -87,6 +87,8 @@ app.whenReady().then(async () => {
     const expand=async group=>{document.getElementById('mechanism-'+group.replaceAll(' ','-')+'-heading').click();await sleep(50);};
     await wait(()=>document.querySelector('section.dashboard-mechanism[aria-label="Intake"]'));
     const plainCard=()=>document.querySelector('section.dashboard-mechanism[aria-label="Intake"]');
+    const idleMechanismBorder=getComputedStyle(plainCard()).borderColor;
+    const idleDrivetrainBorder=getComputedStyle(document.querySelector('.dashboard-drivetrain')).borderColor;
     assert(!document.querySelector('.dashboard-mechanism-tunable'),'Disconnected cards have no tuning affordance');
     document.querySelector('.dashboard-drivetrain').click();await sleep(30);assert(!document.querySelector('[role="dialog"]'),'Disconnected drivetrain stays read only');
     assert(getComputedStyle(plainCard()).cursor!=='pointer' && getComputedStyle(plainCard()).boxShadow==='none','Read-only cards have no pointer or glow');
@@ -97,9 +99,9 @@ app.whenReady().then(async () => {
     assert(plainCard(),'Robot acknowledgement is required for clickable cards');
     window.acknowledge(true);await wait(()=>document.querySelector('button[aria-label="Open Intake tunables"]'));
     const activeCard=document.querySelector('button[aria-label="Open Intake tunables"]');
-    assert(getComputedStyle(activeCard).cursor==='pointer' && getComputedStyle(activeCard).boxShadow!=='none','Enabled mechanism cards have a pointer and lit border');
+    assert(getComputedStyle(activeCard).cursor==='pointer' && getComputedStyle(activeCard).boxShadow==='none' && getComputedStyle(activeCard).borderColor===idleMechanismBorder,'Enabled mechanism cards keep their normal border without a glow until hovered');
     assert(document.querySelector('.dashboard-drivetrain').tagName==='BUTTON','Drivetrain opens tunables when enabled');
-    assert(getComputedStyle(document.querySelector('.dashboard-drivetrain')).cursor==='pointer' && getComputedStyle(document.querySelector('.dashboard-drivetrain')).boxShadow!=='none','Enabled drivetrain has a pointer and lit border');
+    assert(getComputedStyle(document.querySelector('.dashboard-drivetrain')).cursor==='pointer' && getComputedStyle(document.querySelector('.dashboard-drivetrain')).boxShadow==='none' && getComputedStyle(document.querySelector('.dashboard-drivetrain')).borderColor===idleDrivetrainBorder,'Enabled drivetrain keeps its normal border without a glow until hovered');
     assert(document.querySelector('.dashboard-mechanism[aria-label="Vision"]').tagName==='SECTION','Vision stays read only');
     assert(document.querySelector('.dashboard-mechanism[aria-label="LED"]').tagName==='SECTION','LED stays read only');
     document.querySelector('button[aria-label="Open Intake tunables"]').click();

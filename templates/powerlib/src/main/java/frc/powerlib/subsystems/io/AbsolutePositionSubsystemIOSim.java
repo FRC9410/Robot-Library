@@ -8,7 +8,7 @@ public class AbsolutePositionSubsystemIOSim implements AbsolutePositionSubsystem
   public AbsolutePositionSubsystemIOSim() { model = new MechanismSimulation(1, 2, 10); }
   public AbsolutePositionSubsystemIOSim(AbsolutePositionSubsystemConfig config) {
     model = new MechanismSimulation(config.leadConfig().sensorToMechanismRatio() * config.leadConfig().rotorToSensorRatio(),
-        config.motionMagicConfig().cruiseVelocity(), config.motionMagicConfig().acceleration());
+        config.motionMagicConfig().cruiseVelocity(), config.motionMagicConfig().acceleration(), config.motorConfigs());
     setpoint = config.defaultPosition().orElse(0.0);
     model.reset(setpoint); model.position(setpoint);
   }

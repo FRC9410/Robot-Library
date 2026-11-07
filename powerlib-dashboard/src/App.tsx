@@ -12,12 +12,11 @@ import {
   Switch,
   Tab,
   Tabs,
-  Toolbar,
-  Typography
+  Toolbar
 } from "@mui/material";
 import CableIcon from "@mui/icons-material/Cable";
 import DashboardIcon from "@mui/icons-material/Dashboard";
-import ElectricBoltIcon from "@mui/icons-material/ElectricBolt";
+import { WindowTitleBar } from "./components/WindowTitleBar";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import { ConfigDialog } from "./features/config/ConfigDialog";
 import type {
@@ -26,7 +25,7 @@ import type {
 } from "./features/subsystems/types";
 import { summarizeUpdateOutput } from "./features/subsystems/subsystemUtils";
 import { UpdateCodeDialog } from "./features/subsystems/components/UpdateCodeDialog";
-import { NetworkTablesPanel } from "./features/networktables/NetworkTablesPanel";
+import { NetworkTablesDrawer } from "./features/networktables/NetworkTablesDrawer";
 import { NetworkTablesProvider, useNetworkTables, useTopics } from "./features/networktables/NetworkTablesContext";
 import { ConnectionSettingsDialog } from "./features/networktables/ConnectionSettingsDialog";
 import { tuningModeRequestTopicName, tuningModeTopicName } from "./features/networktables/tuningUtils";
@@ -95,6 +94,7 @@ function AppContent() {
   const [powerToolUpdating, setPowerToolUpdating] = useState(false);
   const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
+  const [networkTablesOpen, setNetworkTablesOpen] = useState(false);
   const [desiredTuningMode, setDesiredTuningMode] = useState<boolean | null>(null);
   const tuningSyncRef = useRef<TuningModeSync | null>(null);
   if (tuningSyncRef.current === null) {
@@ -297,13 +297,13 @@ function AppContent() {
   }
 
   useEffect(() => {
-    if (status !== "connected" || activeView !== "networktables") return;
+    if (status !== "connected" || !networkTablesOpen) return;
     const stop = clientRef.current.watchPrefix("/", upsertTopic);
     return () => {
       stop();
       pruneTopics(snapshot => clientRef.current.isWatchedValue(snapshot.name));
     };
-  }, [status, activeView, clientRef, upsertTopic, pruneTopics]);
+  }, [status, networkTablesOpen, clientRef, upsertTopic, pruneTopics]);
 
   function disconnectNetworkTables() {
     setAutoConnectPaused(true);
@@ -353,12 +353,16 @@ function AppContent() {
     const removeUpdatePowerTool = window.powerlib?.onMenuUpdatePowerTool?.(() => {
       void updatePowerToolRef.current();
     });
+    const removeToggleNetworkTables = window.powerlib?.onMenuToggleNetworkTables?.(() => {
+      setNetworkTablesOpen(current => !current);
+    });
 
     return () => {
       removeConnectionSettings?.();
       removeUpdateSubsystemCode?.();
       removeUpdateInstallSection?.();
       removeUpdatePowerTool?.();
+      removeToggleNetworkTables?.();
     };
   }, []);
 
@@ -382,26 +386,23 @@ function AppContent() {
 
   return (
     <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column", bgcolor: "background.default" }}>
+      <WindowTitleBar />
       <AppBar
         position="sticky"
         color="inherit"
         elevation={0}
-        sx={{ flexShrink: 0, borderBottom: 1, borderColor: "divider", top: 0, zIndex: (theme) => theme.zIndex.drawer + 1 }}
+        sx={{ flexShrink: 0, borderBottom: 1, borderColor: "divider", top: 40, zIndex: (theme) => theme.zIndex.drawer + 1 }}
       >
         <Container maxWidth={false}>
-          <Toolbar disableGutters sx={{ gap: 2, flexWrap: "wrap" }}>
-            <ElectricBoltIcon color="primary" sx={{ fontSize: 34 }} />
-            <Box sx={{ flexGrow: 1 }}>
-              <Stack direction="row" spacing={1.25} sx={{ alignItems: "baseline" }}>
-                <Typography variant="h5" sx={{ fontWeight: 800 }}>
-                  Power Tool
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
-                  powered by Team 9410
-                </Typography>
-              </Stack>
-            </Box>
-            <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+          <Toolbar disableGutters sx={{ gap: 2, minHeight: { xs: 52, sm: 52 } }}>
+            <Tabs value={activeView} onChange={(_, value) => setActiveView(value)} variant="scrollable" scrollButtons="auto"
+              sx={{ minHeight: 52, flex: 1, minWidth: 0 }}>
+              <Tab icon={<DashboardIcon />} iconPosition="start" label="Dashboard" value="dashboard" sx={{ minHeight: 52 }} />
+              {limelights.length > 0 && (
+                <Tab icon={<VideocamIcon />} iconPosition="start" label="Limelights" value="limelights" sx={{ minHeight: 52 }} />
+              )}
+            </Tabs>
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexShrink: 0, whiteSpace: "nowrap" }}>
               <FormControlLabel
                 control={
                   <Switch
@@ -434,25 +435,6 @@ function AppContent() {
               />
             </Stack>
           </Toolbar>
-          <Tabs value={activeView} onChange={(_, value) => setActiveView(value)} sx={{ minHeight: 44 }}>
-            <Tab icon={<DashboardIcon />} iconPosition="start" label="Dashboard" value="dashboard" sx={{ minHeight: 44 }} />
-            {limelights.length > 0 && (
-              <Tab
-                icon={<VideocamIcon />}
-                iconPosition="start"
-                label="Limelights"
-                value="limelights"
-                sx={{ minHeight: 44 }}
-              />
-            )}
-            <Tab
-              icon={<DashboardIcon />}
-              iconPosition="start"
-              label="NetworkTables"
-              value="networktables"
-              sx={{ minHeight: 44 }}
-            />
-          </Tabs>
         </Container>
       </AppBar>
 
@@ -504,15 +486,13 @@ function AppContent() {
           {activeView === "dashboard" && <DashboardPanel subsystems={subsystemDocument.subsystems}
             tuningRequested={tuningModeEnabled}
             onOpenConfig={() => { setConfigOpen(true); void loadSubsystems(); }} />}
-          {activeView === "networktables" && (
-            <NetworkTablesPanel />
-          )}
 
           {activeView === "limelights" && (
             <LimelightsPanel limelights={limelights} />
           )}
         </Stack>
       </Container>
+      <NetworkTablesDrawer open={networkTablesOpen} onClose={() => setNetworkTablesOpen(false)} />
     </Box>
   );
 }

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Accordion, AccordionDetails, AccordionSummary, Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, IconButton, Stack, Switch, TextField, Tooltip, Typography } from "@mui/material";
+import { Accordion, AccordionDetails, AccordionSummary, Alert, Box, Button, Drawer, DialogActions, DialogContent, DialogTitle, FormControlLabel, IconButton, Stack, Switch, TextField, Tooltip, Typography } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -77,21 +77,24 @@ export function SubsystemTuningDialog({ owner, name, kind = "mechanism", subsyst
     } finally { applyingRef.current = false; setApplying(false); }
   }
 
-  return <><Dialog open fullWidth maxWidth="md" onClose={() => { if (!applying && !saveOpen) onClose(); }} aria-labelledby="mechanism-tuning-title">
-    <DialogTitle id="mechanism-tuning-title" sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+  return <><Drawer open anchor="right" onClose={() => { if (!applying && !saveOpen) onClose(); }}
+    sx={{ zIndex: theme => theme.zIndex.modal }}
+    slotProps={{ paper: { role: "dialog", "aria-modal": true, "aria-labelledby": "mechanism-tuning-title",
+      sx: { width: 336, maxWidth: "100vw", top: 40, height: "calc(100% - 40px)", boxSizing: "border-box", bgcolor: "#1b1d21", backgroundImage: "none", borderLeft: 1, borderColor: "divider", colorScheme: "dark" } } }}>
+    <DialogTitle id="mechanism-tuning-title" sx={{ display: "flex", alignItems: "center", gap: 2, px: 1.5 }}>
       <Box sx={{ flex: 1 }}><Typography component="span" variant="h6">{name} tunables</Typography>
         <Typography component="span" variant="body2" color="text.secondary" sx={{ display: "block" }}>{rows.length} settings · {available} available</Typography></Box>
       <IconButton aria-label="Close subsystem tunables" disabled={applying} onClick={onClose}><CloseIcon /></IconButton>
     </DialogTitle>
-    <DialogContent dividers>
+    <DialogContent dividers sx={{ px: 1, py: 1, minHeight: 0 }}>
       <Stack spacing={2}>
         {!writable && <Alert severity="info">{status !== "connected" ? "Connect to the robot to edit tunables."
           : !tuningRequested ? "Enable Tuning in the app header to edit these settings." : "Waiting for the robot to acknowledge tuning."}</Alert>}
         {message && <Alert severity={message.severity}>{message.text}</Alert>}
         <Box>
-          {[...new Set(rows.map(row => row.group))].map(group => <Accordion key={group} disableGutters
+          {[...new Set(rows.map(row => row.group))].map(group => <Accordion key={group} disableGutters square
             expanded={expandedGroups[group] ?? false} onChange={(_, expanded) => setExpandedGroups(current => ({ ...current, [group]: expanded }))}
-            slotProps={{ transition: { unmountOnExit: true } }} sx={{ border: 1, borderColor: "divider", "&:before": { display: "none" }, mb: 1.5 }}>
+            slotProps={{ transition: { unmountOnExit: true } }} sx={{ border: 1, borderColor: "divider", borderRadius: 1, overflow: "hidden", "&:before": { display: "none" }, mb: 1.5 }}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls={`mechanism-${group.replace(/\s/g, "-")}-content`} id={`mechanism-${group.replace(/\s/g, "-")}-heading`}>
               <Typography component="span" variant="subtitle1" sx={{ fontWeight: 700 }}>{group}</Typography>
               <Typography variant="caption" color="text.secondary" sx={{ ml: 2, alignSelf: "center" }}>{rows.filter(row => row.group === group).length} settings</Typography>
@@ -114,14 +117,13 @@ export function SubsystemTuningDialog({ owner, name, kind = "mechanism", subsyst
         </Box>
       </Stack>
     </DialogContent>
-    <DialogActions sx={{ px: 3, py: 2 }}>
-      <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>Apply changes the live robot values.</Typography>
+    <DialogActions sx={{ px: 1.5, py: 1.5, flexWrap: "wrap", gap: 1, "& > :not(style) ~ :not(style)": { ml: 0 } }}>
       <Button variant="outlined" disabled={applying || !!pending.length || !available || !window.powerlib?.readLocalizationConfig}
         onClick={() => setSaveOpen(true)}>Save tuned values</Button>
       <Button disabled={applying} onClick={onClose}>Close</Button>
       <Button variant="contained" disabled={!writable || !pending.length || applying} onClick={() => void apply()}>{applying ? "Applying…" : `Apply${pending.length ? ` (${pending.length})` : ""}`}</Button>
     </DialogActions>
-  </Dialog>
+  </Drawer>
     {saveOpen && <SaveTunedValuesDialog open topics={rows.flatMap(row => row.topic && row.writable ? [row.topic] : [])} onClose={() => setSaveOpen(false)} />}
   </>;
 }

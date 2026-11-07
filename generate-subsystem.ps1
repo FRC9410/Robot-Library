@@ -298,6 +298,13 @@ function Format-IndentedList {
     return ($Expressions | ForEach-Object { "$Indent$_" }) -join ",`n"
 }
 
+function Get-MotorTypeExpression {
+    param([Parameter(Mandatory = $true)]$Motor)
+    $type = (Get-ObjectPropertyValue $Motor 'motorType' 'X60').ToString().ToUpperInvariant()
+    if ($type -notin @('X60', 'X44')) { throw "Unsupported motor type '$type'. Use X60 or X44." }
+    return "MotorConfig.MotorType.$type"
+}
+
 function Convert-MotorsToExpressions {
     param([Parameter(Mandatory = $true)]$Subsystem)
 
@@ -313,7 +320,7 @@ function Convert-MotorsToExpressions {
 
     $leaderNeutralMode = Get-ObjectPropertyValue $leader "neutralMode" "Brake"
     $leaderReversed = Get-ObjectPropertyValue $leader "reversed" $false
-    $lines = @("MotorConfig.leader($($leader.id), $(Get-NeutralModeExpression $leaderNeutralMode), $($leaderReversed.ToString().ToLowerInvariant()))")
+    $lines = @("MotorConfig.leader($($leader.id), $(Get-NeutralModeExpression $leaderNeutralMode), $($leaderReversed.ToString().ToLowerInvariant()), $(Get-MotorTypeExpression $leader))")
     foreach ($follower in ($motors | Where-Object { $_.role -eq "follower" })) {
         $followerNeutralMode = Get-ObjectPropertyValue $follower "neutralMode" $null
         $neutralMode = if ($null -ne $followerNeutralMode -and -not [string]::IsNullOrWhiteSpace($followerNeutralMode.ToString())) {
@@ -322,7 +329,7 @@ function Convert-MotorsToExpressions {
             $leaderNeutralMode
         }
         $followerReversed = Get-ObjectPropertyValue $follower "reversed" $false
-        $lines += "MotorConfig.follower($($follower.id), $(Get-NeutralModeExpression $neutralMode), $($followerReversed.ToString().ToLowerInvariant()))"
+        $lines += "MotorConfig.follower($($follower.id), $(Get-NeutralModeExpression $neutralMode), $($followerReversed.ToString().ToLowerInvariant()), $(Get-MotorTypeExpression $follower))"
     }
 
     return $lines
@@ -352,6 +359,7 @@ function Convert-MotorsToConstantDeclarations {
     $leaderReversed = Get-ObjectPropertyValue $leader "reversed" $false
     $lines = @(
         "  public static final int LEADER_MOTOR_ID = $($leader.id);",
+        "  public static final MotorConfig.MotorType LEADER_MOTOR_TYPE = $(Get-MotorTypeExpression $leader);",
         "  public static final NeutralModeValue LEADER_NEUTRAL_MODE = $(Get-NeutralModeExpression $leaderNeutralMode);",
         "  public static final boolean LEADER_REVERSED = $($leaderReversed.ToString().ToLowerInvariant());"
     )
@@ -366,6 +374,7 @@ function Convert-MotorsToConstantDeclarations {
         }
         $followerReversed = Get-ObjectPropertyValue $follower "reversed" $false
         $lines += "  public static final int FOLLOWER_${index}_MOTOR_ID = $($follower.id);"
+        $lines += "  public static final MotorConfig.MotorType FOLLOWER_${index}_MOTOR_TYPE = $(Get-MotorTypeExpression $follower);"
         $lines += "  public static final NeutralModeValue FOLLOWER_${index}_NEUTRAL_MODE = $neutralModeExpression;"
         $lines += "  public static final boolean FOLLOWER_${index}_REVERSED = $($followerReversed.ToString().ToLowerInvariant());"
         $index++
@@ -378,11 +387,11 @@ function Convert-MotorsToConstantExpressions {
     param([Parameter(Mandatory = $true)]$Subsystem)
 
     $null = Get-LeaderMotor $Subsystem
-    $lines = @("MotorConfig.leader(LEADER_MOTOR_ID, LEADER_NEUTRAL_MODE, LEADER_REVERSED)")
+    $lines = @("MotorConfig.leader(LEADER_MOTOR_ID, LEADER_NEUTRAL_MODE, LEADER_REVERSED, LEADER_MOTOR_TYPE)")
 
     $index = 1
     foreach ($follower in (@($Subsystem.motors) | Where-Object { $_.role -eq "follower" })) {
-        $lines += "MotorConfig.follower(FOLLOWER_${index}_MOTOR_ID, FOLLOWER_${index}_NEUTRAL_MODE, FOLLOWER_${index}_REVERSED)"
+        $lines += "MotorConfig.follower(FOLLOWER_${index}_MOTOR_ID, FOLLOWER_${index}_NEUTRAL_MODE, FOLLOWER_${index}_REVERSED, FOLLOWER_${index}_MOTOR_TYPE)"
         $index++
     }
 
@@ -653,6 +662,7 @@ function Normalize-SubsystemConfig {
         $defaultRole = if ($index -eq 0) { "leader" } else { "follower" }
         Ensure-ObjectProperty $motor "role" $defaultRole
         Ensure-ObjectProperty $motor "reversed" $false
+        Ensure-ObjectProperty $motor "motorType" "X60"
     }
 
     $leader = $motors |

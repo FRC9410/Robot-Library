@@ -7,6 +7,7 @@ Run these checks from the Robot-Library root in PowerShell 7. They write fixture
 ./tests/state-machine-check.ps1
 ./tests/generator-checks.ps1
 ./tests/generated-robot-check.ps1
+./tests/app-generation-check.ps1
 Push-Location powerlib-dashboard
 try {
     node scripts/telemetry-buffer-check.mjs --java-fixture
@@ -24,7 +25,12 @@ For the isolated mechanism UI check, run
 from the repository root. It uses simulated telemetry and captures all
 publications in memory without connecting to a robot.
 
+`powerlib-dashboard/node_modules/electron/dist/electron.exe powerlib-dashboard/scripts/networktables-drawer-electron-check.cjs`
+checks the production View menu/preload with an in-memory NT client: right-side drawer layout, filtering, menu/close/Escape toggles, and full-topic subscription cleanup. Robot connections are blocked.
+
 The generated-robot check runs the actual installer in an isolated fixture, compiles the full robot template with real WPILib/vendor jars, runs the actual generator using Windows PowerShell 5.1, verifies unchanged Java sources on a second update, and compiles all four generated mechanism types. Supply `-GradleExecutable` if Gradle 8.11 is outside the normal WPILib cache. This validates Java compilation, not deployment to a roboRIO.
+
+The app-generation check uses the actual Config wizard and Save Tuned Values dialog with the production preload, IPC handlers, file saves, and Update Code command. In a disposable robot it creates all four mechanism types, edits a subsystem name, configures leader/follower motors and a CANcoder, adds/edits/deletes states and cameras, and saves field dimensions locally. It saves 60 deterministic tunable samples (mechanism, sensor, default position, torque feedforward, drivetrain, localization, and custom constants), checks the generated Java values and registrations, builds twice, and verifies that repeat generation preserves the files and configuration. Robot connections are blocked; no running robot or existing robot project is modified. Logs and `result.json` stay under `build/app-generation-check-*`.
 
 The state-machine check runs the template state logic and real WPILib instant command
 with hardware stubs and one test-only enum value. It checks first-match priority,

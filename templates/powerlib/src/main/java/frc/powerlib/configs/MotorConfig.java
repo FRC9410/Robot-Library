@@ -6,22 +6,32 @@ package frc.powerlib.configs;
 
 import com.ctre.phoenix6.signals.NeutralModeValue;
 
-/** Immutable config for a single motor: CAN ID, neutral mode, follower flag, and direction. */
+/** Immutable config for a single motor: CAN ID, type, neutral mode, follower flag, and direction. */
 public class MotorConfig {
+
+  public enum MotorType { X60, X44 }
 
   private final int canId;
   private final NeutralModeValue neutralMode;
   private final boolean isFollower;
   private final boolean isReversed;
+  private final MotorType motorType;
 
   public MotorConfig(int canId, NeutralModeValue neutralMode, boolean isFollower, boolean isReversed) {
+    this(canId, neutralMode, isFollower, isReversed, MotorType.X60);
+  }
+
+  public MotorConfig(int canId, NeutralModeValue neutralMode, boolean isFollower, boolean isReversed, MotorType motorType) {
     ConfigValidation.range(canId, 0, 62, "motor CAN ID");
     java.util.Objects.requireNonNull(neutralMode, "neutralMode");
     this.canId = canId;
     this.neutralMode = neutralMode;
     this.isFollower = isFollower;
     this.isReversed = isReversed;
+    this.motorType = java.util.Objects.requireNonNull(motorType, "motorType");
   }
+
+  public MotorType motorType() { return motorType; }
 
   public int canId() {
     return canId;
@@ -57,6 +67,10 @@ public class MotorConfig {
    */
   public static MotorConfig leader(int canId, NeutralModeValue neutralMode, boolean isReversed) {
     return new MotorConfig(canId, neutralMode, false, isReversed);
+  }
+
+  public static MotorConfig leader(int canId, NeutralModeValue neutralMode, boolean isReversed, MotorType motorType) {
+    return new MotorConfig(canId, neutralMode, false, isReversed, motorType);
   }
 
   /**
@@ -95,6 +109,10 @@ public class MotorConfig {
    */
   public static MotorConfig follower(int canId, NeutralModeValue neutralMode, boolean reversed) {
     return new MotorConfig(canId, neutralMode, true, reversed);
+  }
+
+  public static MotorConfig follower(int canId, NeutralModeValue neutralMode, boolean reversed, MotorType motorType) {
+    return new MotorConfig(canId, neutralMode, true, reversed, motorType);
   }
 }
 

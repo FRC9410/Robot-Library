@@ -19,8 +19,12 @@ export function validateSubsystemStep(form: SubsystemFormState, subsystems: Gene
     if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(form.id)) errors.push("Stable ID must start with a letter and contain only letters, numbers or underscores.");
     if (others.some(item => item.name?.toLowerCase() === form.name.toLowerCase())) errors.push("A subsystem with this name already exists.");
     if (others.some(item => item.id?.toLowerCase() === form.id.toLowerCase())) errors.push("A subsystem with this stable ID already exists.");
-    numeric("sensorToMechanism", "Sensor-to-mechanism ratio", true);
-    numeric("rotorToSensor", "Rotor-to-mechanism ratio", true);
+    for (const [key, label] of [["sensorToMechanism", "Sensor-to-mechanism ratio"], ["rotorToSensor", "Rotor-to-sensor ratio"]] as const) {
+      const value = Number(form[key]);
+      if (!form[key].trim() || !Number.isFinite(value) || value === 0 || Math.abs(value) > 1000) {
+        errors.push(`${label} must be a nonzero finite number from -1000 to 1000.`);
+      }
+    }
   }
   if (step === 1) {
     if (!form.motors.length) errors.push("Add at least one motor.");

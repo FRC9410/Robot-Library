@@ -8,6 +8,7 @@ declare global {
   interface Window {
     powerlib?: {
       platform: NodeJS.Platform;
+      showAppMenu: (menuId: string, position: { x: number; y: number }) => Promise<void>;
       readConstants: () => Promise<ConstantsFile[]>;
       readVisionConfig: () => Promise<{ path: string; vision: VisionConfig }>;
       readStateConfig: () => Promise<{ path: string; config: StateConfig }>;
@@ -41,6 +42,7 @@ declare global {
         started: boolean;
       }>;
       onMenuConnectionSettings: (callback: () => void) => () => void;
+      onMenuToggleNetworkTables: (callback: () => void) => () => void;
       onMenuUpdateSubsystemCode: (callback: () => void) => () => void;
       onMenuUpdateInstallSection: (callback: (_event: unknown, section: string) => void) => () => void;
       onMenuUpdatePowerTool: (callback: () => void) => () => void;

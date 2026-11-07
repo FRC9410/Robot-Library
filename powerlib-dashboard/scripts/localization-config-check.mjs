@@ -18,6 +18,13 @@ const fixture = await fs.mkdtemp(path.join(os.tmpdir(), "power-tool-localization
 try {
   const initial = await readLocalizationConfig(fixture);
   assert.deepEqual(initial.config.heading, { maxTagDistanceMeters: 4, singleTagMaxDistanceMeters: 2 });
+  const legacyVisionDirectory = path.join(fixture, "src/main/java/frc/robot/constants");
+  await fs.mkdir(legacyVisionDirectory, { recursive: true });
+  const legacyVisionPath = path.join(legacyVisionDirectory, "VisionConstants.java");
+  await fs.writeFile(legacyVisionPath, 'public class VisionConstants { public static final double TARGET_AREA_THRESHOLD = 1.0; public static final double MAX_TARGET_DISTANCE_METERS = 5.0; }');
+  assert.deepEqual((await readLocalizationConfig(fixture)).config.position, { targetAreaThreshold: 1, maxTargetDistanceMeters: 5 }, "Legacy robot localization values import instead of silently using new defaults");
+  await fs.appendFile(legacyVisionPath, '\n// Existing canonical names take priority.\npublic static final double POSITION_TARGET_AREA_THRESHOLD = 2.0;\npublic static final double POSITION_MAX_TARGET_DISTANCE_METERS = 6.0;\n');
+  assert.deepEqual((await readLocalizationConfig(fixture)).config.position, { targetAreaThreshold: 2, maxTargetDistanceMeters: 6 });
   const config = { position: { targetAreaThreshold: 1, maxTargetDistanceMeters: 5 }, heading: { maxTagDistanceMeters: 5, singleTagMaxDistanceMeters: 3 } };
   const vision = { fovDegrees: 60, imageWidth: 320, imageHeight: 240, limelights: [{ name: "limelight-front" }] };
   await fs.writeFile(initial.path, JSON.stringify({ sentinel: "preserved" }));

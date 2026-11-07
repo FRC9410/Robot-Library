@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("powerlib", {
   platform: process.platform,
+  showAppMenu: (menuId: string, position: { x: number; y: number }) => ipcRenderer.invoke("powerlib:show-app-menu", menuId, position),
   readConstants: () => ipcRenderer.invoke("powerlib:read-constants"),
   saveConstants: (id: string, source: string, constants: unknown[]) =>
     ipcRenderer.invoke("powerlib:save-constants", id, source, constants),
@@ -20,6 +21,10 @@ contextBridge.exposeInMainWorld("powerlib", {
   onMenuConnectionSettings: (callback: () => void) => {
     ipcRenderer.on("powerlib:menu-connection-settings", callback);
     return () => ipcRenderer.removeListener("powerlib:menu-connection-settings", callback);
+  },
+  onMenuToggleNetworkTables: (callback: () => void) => {
+    ipcRenderer.on("powerlib:menu-toggle-network-tables", callback);
+    return () => ipcRenderer.removeListener("powerlib:menu-toggle-network-tables", callback);
   },
   onMenuUpdateSubsystemCode: (callback: () => void) => {
     ipcRenderer.on("powerlib:menu-update-subsystem-code", callback);
