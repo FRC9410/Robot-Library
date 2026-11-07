@@ -147,7 +147,8 @@ Delete list. Names use uppercase letters, numbers and underscores. Existing
 the `states` array in `power-tool/generated/powerlib-subsystems.json`.
 File → Update Code updates the enum, creates missing Java files in
 `frc/robot/subsystems/states`, and registers the handlers for state-machine checks.
-IDLE stays last in the list and cannot be renamed or deleted. Existing handler
+IDLE is implicit and hidden from Config; its enum value and handler stay last in
+generated code and it is retained in saved configuration. Existing handler
 code, constructor arguments and registration priority are preserved; missing
 handlers are inserted before Idle. New handlers match their requested state and
 report it as actual; add mechanism actions and readiness conditions in Java.

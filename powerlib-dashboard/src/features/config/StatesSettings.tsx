@@ -13,8 +13,8 @@ export function StatesSettings() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [reload, setReload] = useState(0);
-  const orderedStates = states.map((name, index) => ({ name, index }))
-    .sort((left, right) => Number(left.name === "IDLE") - Number(right.name === "IDLE"));
+  const visibleStates = states.map((name, index) => ({ name, index }))
+    .filter(({ name }) => name !== "IDLE");
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -55,11 +55,11 @@ export function StatesSettings() {
           {error && <Alert severity="error" action={<Button color="inherit" disabled={saving} onClick={() => setReload(value => value + 1)}>Reload</Button>}>{error}</Alert>}
           <Box component="section" aria-label="State configuration" className="config-expander" sx={{ p: 2 }}><Stack spacing={2}>
             <Stack divider={<Divider />}>
-              {orderedStates.map(({ name, index }) => <Box key={name}>
+              {visibleStates.map(({ name, index }) => <Box key={name}>
                 <Stack direction="row" spacing={1} sx={{ py: 1, alignItems: "center" }}>
                   <Typography sx={{ flex: 1, minWidth: 0, fontWeight: 650, overflowWrap: "anywhere" }}>{name}</Typography>
-                  <IconButton aria-label={`Edit ${name}`} disabled={saving || editing !== null || name === "IDLE"} onClick={() => { setEditing(index); setSaved(false); }}><EditOutlinedIcon /></IconButton>
-                  <IconButton aria-label={`Delete ${name}`} disabled={saving || editing !== null || name === "IDLE" || states.length === 1} onClick={() => void remove(index)}><DeleteIcon /></IconButton>
+                  <IconButton aria-label={`Edit ${name}`} disabled={saving || editing !== null} onClick={() => { setEditing(index); setSaved(false); }}><EditOutlinedIcon /></IconButton>
+                  <IconButton aria-label={`Delete ${name}`} disabled={saving || editing !== null} onClick={() => void remove(index)}><DeleteIcon /></IconButton>
                 </Stack>
                 {editing === index && <Box sx={{ pb: 2 }}>{editor(index)}</Box>}
               </Box>)}

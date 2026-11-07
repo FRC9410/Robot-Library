@@ -74,7 +74,7 @@ app.whenReady().then(async () => {
     assert(input('Horizontal FOV (degrees)').value==='63.3'&&input('Image width (px)').value==='640','Global settings persist after all cameras are deleted and navigation');
     button('States').click();await wait(()=>button('Add State')&&!button('Add State').disabled);
     assert(document.querySelector('h3').textContent==='States','States view owns its header');
-    assert(document.querySelector('[aria-label="Edit IDLE"]').disabled&&document.querySelector('[aria-label="Delete IDLE"]').disabled,'Idle cannot be renamed or deleted');
+    assert(!document.querySelector('[aria-label="Edit IDLE"]')&&!document.querySelector('[aria-label="Delete IDLE"]'),'Implicit Idle is hidden from the state list');
     button('Add State').click();await wait(()=>input('State name'));assert(!button('Add State'),'Add State hides while editing');
     await fill('State name','ready');assert(input('State name').value==='READY','State names normalize to uppercase');button('Save State').click();
     await wait(()=>document.querySelector('form[aria-label="State name editor"] [role="alert"]')?.textContent.includes('already exists'));
@@ -84,16 +84,16 @@ app.whenReady().then(async () => {
     document.querySelector('[aria-label="Edit CLIMB"]').click();await wait(()=>input('State name'));await fill('State name','HOMING');button('Save State').click();
     await wait(()=>window.stateSaves.length===2&&!input('State name')&&button('Add State'));
     assert(window.states.join(',')==='IDLE,READY,HOMING','Editing renames the selected state');
-    assert([...document.querySelectorAll('[aria-label^="Edit "]')].at(-1).getAttribute('aria-label')==='Edit IDLE','Idle stays at the bottom of the state list');
+    assert(!document.querySelector('[aria-label="Edit IDLE"]')&&window.states.includes('IDLE'),'Editing custom states retains hidden Idle');
     document.querySelector('[aria-label="Edit HOMING"]').click();await wait(()=>input('State name'));await fill('State name','BROKEN');window.failStateSave=true;button('Save State').click();
     await wait(()=>document.querySelector('form[aria-label="State name editor"] [role="alert"]')?.textContent.includes('Simulated state write failure'));
     assert(window.states.includes('HOMING')&&input('State name').value==='BROKEN','Failed state save preserves the existing name and pending edit');
     window.failStateSave=false;button('Cancel').click();await wait(()=>!input('State name')&&button('Add State'));
     document.querySelector('[aria-label="Delete READY"]').click();await wait(()=>window.stateSaves.length===3&&!document.querySelector('[aria-label="Delete READY"]'));
     document.querySelector('[aria-label="Delete HOMING"]').click();await wait(()=>window.stateSaves.length===4&&!document.querySelector('[aria-label="Delete HOMING"]'));
-    assert(document.querySelector('[aria-label="Delete IDLE"]').disabled,'The final state stays available');
+    assert(!document.querySelector('[aria-label^="Edit "]')&&window.states.join(',')==='IDLE'&&button('Add State'),'All custom states can be deleted while implicit Idle remains');
     button('Vision').click();await wait(()=>button('Add Limelight'));button('States').click();await wait(()=>button('Add State'));
-    assert(document.querySelector('[aria-label="Edit IDLE"]')&&!document.querySelector('[aria-label="Edit HOMING"]'),'Saved states reload across navigation');
+    assert(!document.querySelector('[aria-label^="Edit "]')&&window.states.join(',')==='IDLE','Saved empty custom list reloads with implicit Idle retained');
     return 'Vision and States Config desktop checks passed: inline lists, global camera settings, name-only add/edit/delete, duplicate prevention, save failures and persistence across navigation.';
   })()`));
 }).catch(async error => {
