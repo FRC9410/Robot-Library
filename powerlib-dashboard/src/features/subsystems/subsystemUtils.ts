@@ -25,6 +25,14 @@ export function toNumberText(value: unknown, fallback: string) {
   return String(value);
 }
 
+export function createSubsystemId(name: string, subsystems: GeneratedSubsystem[]) {
+  const base = toCamelCase(name);
+  const used = new Set(subsystems.map(subsystem => (subsystem.id ?? toCamelCase(subsystem.name ?? "")).toLowerCase()));
+  let id = base;
+  for (let suffix = 2; used.has(id.toLowerCase()); suffix++) id = `${base}${suffix}`;
+  return id;
+}
+
 export function generatedMotorToForm(motor: GeneratedMotor | undefined, index: number): SubsystemFormMotor {
   return {
     role: index === 0 ? "leader" : motor?.role === "leader" ? "leader" : "follower",

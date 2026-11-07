@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { Ref } from "react";
-import { Alert, Box, Button, Checkbox, FormControlLabel, IconButton, Stack, Step, StepLabel, Stepper, Typography } from "@mui/material";
+import { Alert, Box, Button, IconButton, Stack, Step, StepLabel, Stepper, Typography } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CloseIcon from "@mui/icons-material/Close";
 import type { GeneratedSubsystem, SubsystemFormMotor, SubsystemFormState } from "../subsystems/types";
@@ -12,6 +12,13 @@ import { RelativePositionFields } from "../subsystems/components/RelativePositio
 import { ControlConstantsGrid } from "../subsystems/components/ControlConstantsGrid";
 import { SubsystemDetails } from "./SubsystemDetails";
 import { buildSubsystem, validateSubsystemStep, wizardSteps } from "./subsystemValidation";
+
+const stepIntroductions = [
+  { title: "Define your subsystem", description: "Choose a name, control type and gear ratios for this mechanism." },
+  null,
+  { title: "Configure control" },
+  { title: "Review & verify" }
+];
 
 export function SubsystemWizard({ initialForm, subsystems, onSave, onCancel, onSavingChange, onClose, titleId, titleRef }: {
   initialForm: SubsystemFormState;
@@ -25,8 +32,8 @@ export function SubsystemWizard({ initialForm, subsystems, onSave, onCancel, onS
 }) {
   const [form, setForm] = useState<SubsystemFormState | null>(initialForm);
   const [step, setStep] = useState(0);
+  const introduction = stepIntroductions[step];
   const [errors, setErrors] = useState<string[]>([]);
-  const [verified, setVerified] = useState(false);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -35,7 +42,6 @@ export function SubsystemWizard({ initialForm, subsystems, onSave, onCancel, onS
   const preview = buildSubsystem(form, existing);
   function changeForm(updater: (current: SubsystemFormState | null) => SubsystemFormState | null) {
     setForm(updater);
-    setVerified(false);
     setErrors([]);
   }
   function updateField<K extends keyof SubsystemFormState>(field: K, value: SubsystemFormState[K]) {
@@ -46,7 +52,6 @@ export function SubsystemWizard({ initialForm, subsystems, onSave, onCancel, onS
   }
   function goToStep(next: number) {
     setErrors([]);
-    setVerified(false);
     setStep(next);
     scrollRef.current?.scrollTo(0, 0);
   }
@@ -57,7 +62,7 @@ export function SubsystemWizard({ initialForm, subsystems, onSave, onCancel, onS
     else scrollRef.current?.scrollTo(0, 0);
   }
   async function save() {
-    if (!form || !verified || savingRef.current) return;
+    if (!form || savingRef.current) return;
     for (let index = 0; index < 3; index++) {
       const issues = validateSubsystemStep(form, subsystems, index);
       if (issues.length) { goToStep(index); setErrors(issues); return; }
@@ -87,21 +92,16 @@ export function SubsystemWizard({ initialForm, subsystems, onSave, onCancel, onS
       </Typography>
       <IconButton aria-label="Close Config" disabled={saving} onClick={onClose}><CloseIcon /></IconButton>
     </Box>
-    <Box className="config-stepper"><Stepper activeStep={step} alternativeLabel>
+    <Box className="config-stepper"><Stepper activeStep={step}>
       {wizardSteps.map(name => <Step key={name}><StepLabel>{name}</StepLabel></Step>)}
     </Stepper></Box>
     <Box className="config-wizard-body" ref={scrollRef}>
       <Stack spacing={3}>
-        <Box><Typography variant="h5" component="h3">{["Define your subsystem", "Connect the hardware", "Configure control", "Review & verify"][step]}</Typography>
-          <Typography color="text.secondary" sx={{ mt: 0.75 }}>{[
-            "Choose a name, control type and gear ratios for this mechanism.",
-            "Add the leader and follower motors, then configure position feedback if needed.",
-            "Set initial gains and motion parameters. You can tune these after deployment.",
-            "Check the complete configuration before saving it to your robot project."
-          ][step]}</Typography></Box>
+        {introduction && <Box><Typography variant="h5" component="h3">{introduction.title}</Typography>
+          {introduction.description && <Typography color="text.secondary" sx={{ mt: 0.75 }}>{introduction.description}</Typography>}</Box>}
         {!!errors.length && <Alert severity="error"><ul className="config-errors">{errors.map((error, index) => <li key={`${index}-${error}`}>{error}</li>)}</ul></Alert>}
         <Box component="fieldset" disabled={saving} sx={{ border: 0, p: 0, m: 0, minWidth: 0 }}>
-          {step === 0 && <Stack spacing={3}><SubsystemBasicFields form={form} setForm={changeForm} updateField={updateField} /></Stack>}
+          {step === 0 && <Stack spacing={3}><SubsystemBasicFields form={form} subsystems={subsystems} setForm={changeForm} updateField={updateField} /></Stack>}
           {step === 1 && <Stack spacing={3}>
             <MotorListEditor motors={form.motors} onUpdateMotor={updateMotor}
               onAddMotor={() => changeForm(current => current ? { ...current, motors: [...current.motors, createEmptyMotor()] } : current)}
@@ -111,20 +111,20 @@ export function SubsystemWizard({ initialForm, subsystems, onSave, onCancel, onS
           </Stack>}
           {step === 2 && <ControlConstantsGrid form={form} updateField={updateField} />}
           {step === 3 && <Stack spacing={2}>
-            <SubsystemDetails subsystem={preview} />
             <Alert severity="info">Saving updates your project configuration. Use File → Update Code, then rebuild and deploy to apply it to the robot.</Alert>
-            <FormControlLabel control={<Checkbox checked={verified} onChange={event => setVerified(event.target.checked)} />}
-              label="I have verified the subsystem settings and hardware IDs." />
+            <SubsystemDetails subsystem={preview} />
           </Stack>}
         </Box>
       </Stack>
     </Box>
-    <Box className="config-footer">
+    <Box className="config-footer config-wizard-footer">
       <Button onClick={onCancel} disabled={saving}>Cancel</Button>
-      <Typography variant="caption" color="text.secondary" sx={{ flex: 1, textAlign: "center" }}>Step {step + 1} of {wizardSteps.length}</Typography>
-      {step > 0 && <Button variant="outlined" disabled={saving} onClick={() => goToStep(step - 1)}>Previous</Button>}
-      {step < 3 ? <Button variant="contained" onClick={next}>Continue</Button>
-        : <Button variant="contained" disabled={saving || !verified} onClick={() => void save()}>{saving ? "Saving…" : form.mode === "create" ? "Add Subsystem" : "Save changes"}</Button>}
+      <Typography variant="caption" color="text.secondary" className="config-step-count">Step {step + 1} of {wizardSteps.length}</Typography>
+      <Box className="config-wizard-actions">
+        {step > 0 && <Button variant="outlined" disabled={saving} onClick={() => goToStep(step - 1)}>Previous</Button>}
+        {step < 3 ? <Button variant="contained" onClick={next}>Continue</Button>
+          : <Button variant="contained" disabled={saving} onClick={() => void save()}>{saving ? "Saving…" : form.mode === "create" ? "Add Subsystem" : "Save changes"}</Button>}
+      </Box>
     </Box>
   </>;
 }

@@ -29,7 +29,7 @@ export function ConfigDialog({ document, onRefresh, onSave, onClose }: {
     setForm(subsystem && index !== undefined ? subsystemToForm(subsystem, index) : createEmptySubsystemForm());
     transitionTo("wizard");
   }
-  return <Dialog open onClose={() => { if (!saving) onClose(); }} aria-labelledby={titleId} fullWidth maxWidth="lg"
+  return <Dialog open onClose={() => { if (!saving) onClose(); }} aria-labelledby={titleId} fullWidth maxWidth={false}
     slotProps={{ paper: { className: "config-dialog" } }}>
     <Fade in={visible} appear={false} timeout={reducedMotion ? 0 : 160}
       onExited={() => { setScreen(targetScreen.current); setVisible(true); }}

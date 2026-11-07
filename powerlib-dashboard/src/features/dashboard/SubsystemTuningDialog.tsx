@@ -6,19 +6,29 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { useNetworkTables, useTopics } from "../networktables/NetworkTablesContext";
 import { tuningModeTopicName } from "../networktables/tuningUtils";
 import { mechanismTuningChanges, mechanismTuningValues } from "./mechanismTunables";
+import { drivetrainTuningChanges, drivetrainTuningValues } from "./drivetrainTunables";
+import type { GeneratedSubsystem } from "../subsystems/types";
+import { SaveTunedValuesDialog } from "../networktables/SaveTunedValuesDialog";
+import type { NtTopicSnapshot } from "../../networktables/nt4Client";
 
-export function MechanismTuningDialog({ owner, name, tuningRequested, onClose }: {
-  owner: string; name: string; tuningRequested: boolean; onClose: () => void;
+export function SubsystemTuningDialog({ owner, name, kind = "mechanism", subsystems = [], tuningRequested, onClose }: {
+  owner: string; name: string; kind?: "mechanism" | "drivetrain"; subsystems?: GeneratedSubsystem[]; tuningRequested: boolean; onClose: () => void;
 }) {
   const { status, clientRef, upsertTopic } = useNetworkTables();
   const topics = useTopics("tuning");
-  const rows = mechanismTuningValues(owner, topics);
+  const [appliedTopics, setAppliedTopics] = useState<Record<string, NtTopicSnapshot>>({});
+  const currentTopics = topics.map(topic => {
+    const applied = appliedTopics[topic.name];
+    return applied && (applied.receivedAt ?? 0) > (topic.receivedAt ?? 0) ? applied : topic;
+  });
+  const rows = kind === "drivetrain" ? drivetrainTuningValues(currentTopics) : mechanismTuningValues(owner, currentTopics, subsystems);
   const acknowledged = topics.find(topic => topic.name === tuningModeTopicName)?.value === true;
   const writable = status === "connected" && tuningRequested && acknowledged;
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<{ severity: "success" | "error"; text: string } | null>(null);
   const [applying, setApplying] = useState(false);
+  const [saveOpen, setSaveOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const applyingRef = useRef(false);
   const pending = rows.filter(row => drafts[row.key] !== undefined && drafts[row.key] !== row.baseline);
@@ -36,7 +46,8 @@ export function MechanismTuningDialog({ owner, name, tuningRequested, onClose }:
   }
   async function apply() {
     if (!writable || applyingRef.current || !pending.length) return;
-    const { changes, errors: invalid } = mechanismTuningChanges(owner, topics, drafts);
+    const { changes, errors: invalid } = kind === "drivetrain"
+      ? drivetrainTuningChanges(currentTopics, drafts) : mechanismTuningChanges(owner, currentTopics, drafts, subsystems);
     setErrors(invalid);
     setMessage(null);
     if (Object.keys(invalid).length) {
@@ -48,10 +59,12 @@ export function MechanismTuningDialog({ owner, name, tuningRequested, onClose }:
     try {
       const results = await Promise.allSettled(changes.map(async change => {
         await clientRef.current.publish(change.topic.name, change.type, change.value);
-        upsertTopic({ ...change.topic, value: change.value });
-        return change;
+        const snapshot = { ...change.topic, value: change.value, receivedAt: performance.now() };
+        upsertTopic(snapshot);
+        return { ...change, snapshot };
       }));
       const successful = results.flatMap(result => result.status === "fulfilled" ? [result.value] : []);
+      setAppliedTopics(current => ({ ...current, ...Object.fromEntries(successful.map(change => [change.topic.name, change.snapshot])) }));
       setDrafts(current => {
         const next = { ...current };
         for (const change of successful) if (next[change.key] === change.draft) delete next[change.key];
@@ -64,11 +77,11 @@ export function MechanismTuningDialog({ owner, name, tuningRequested, onClose }:
     } finally { applyingRef.current = false; setApplying(false); }
   }
 
-  return <Dialog open fullWidth maxWidth="md" onClose={() => { if (!applying) onClose(); }} aria-labelledby="mechanism-tuning-title">
+  return <><Dialog open fullWidth maxWidth="md" onClose={() => { if (!applying && !saveOpen) onClose(); }} aria-labelledby="mechanism-tuning-title">
     <DialogTitle id="mechanism-tuning-title" sx={{ display: "flex", alignItems: "center", gap: 2 }}>
       <Box sx={{ flex: 1 }}><Typography component="span" variant="h6">{name} tunables</Typography>
         <Typography component="span" variant="body2" color="text.secondary" sx={{ display: "block" }}>{rows.length} settings · {available} available</Typography></Box>
-      <IconButton aria-label="Close mechanism tunables" disabled={applying} onClick={onClose}><CloseIcon /></IconButton>
+      <IconButton aria-label="Close subsystem tunables" disabled={applying} onClick={onClose}><CloseIcon /></IconButton>
     </DialogTitle>
     <DialogContent dividers>
       <Stack spacing={2}>
@@ -92,7 +105,7 @@ export function MechanismTuningDialog({ owner, name, tuningRequested, onClose }:
                 : <TextField label={row.label} type={row.string ? "text" : "number"} size="small" fullWidth
                   value={drafts[row.key] ?? (row.writable ? row.baseline : "")} disabled={!writable || !row.writable || applying}
                   placeholder="Not published" error={!!errors[row.key]} helperText={errors[row.key] || (row.writable ? `Live: ${row.baseline}` : "Not published")}
-                  slotProps={{ htmlInput: { step: "any" } }} onChange={event => edit(row.key, event.target.value)} />}
+                  slotProps={{ htmlInput: { step: "any", min: row.min, max: row.max } }} onChange={event => edit(row.key, event.target.value)} />}
               <Tooltip title="Reset pending edit"><span><IconButton size="small" aria-label={`Reset ${row.label}`}
                 disabled={applying || drafts[row.key] === undefined} onClick={() => reset(row.key)}><RefreshIcon fontSize="small" /></IconButton></span></Tooltip>
             </Stack>)}</Stack>
@@ -103,8 +116,12 @@ export function MechanismTuningDialog({ owner, name, tuningRequested, onClose }:
     </DialogContent>
     <DialogActions sx={{ px: 3, py: 2 }}>
       <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>Apply changes the live robot values.</Typography>
+      <Button variant="outlined" disabled={applying || !!pending.length || !available || !window.powerlib?.readLocalizationConfig}
+        onClick={() => setSaveOpen(true)}>Save tuned values</Button>
       <Button disabled={applying} onClick={onClose}>Close</Button>
       <Button variant="contained" disabled={!writable || !pending.length || applying} onClick={() => void apply()}>{applying ? "Applying…" : `Apply${pending.length ? ` (${pending.length})` : ""}`}</Button>
     </DialogActions>
-  </Dialog>;
+  </Dialog>
+    {saveOpen && <SaveTunedValuesDialog open topics={rows.flatMap(row => row.topic && row.writable ? [row.topic] : [])} onClose={() => setSaveOpen(false)} />}
+  </>;
 }

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import TuneIcon from "@mui/icons-material/Tune";
-import { MechanismTuningDialog } from "./MechanismTuningDialog";
+import { SubsystemTuningDialog } from "./SubsystemTuningDialog";
+import { drivetrainTuningOwner } from "./drivetrainTunables";
 import { canTuneMechanism } from "./mechanismTunables";
 import { useNetworkTables, useTopics } from "../networktables/NetworkTablesContext";
 import { tuningModeTopicName } from "../networktables/tuningUtils";
@@ -105,7 +106,8 @@ export function DashboardPanel({ subsystems = [], renderTopCards, renderSidebar,
   const [failed, setFailed] = useState<Record<string, boolean>>({});
   const [pending, setPending] = useState<{ path: string; name: string; at: number } | null>(null);
   const [autoError, setAutoError] = useState("");
-  const [tuningMechanism, setTuningMechanism] = useState<{ id: string; name: string } | null>(null);
+  const [tuningSubsystem, setTuningSubsystem] = useState<{ id: string; name: string; kind: "mechanism" | "drivetrain" } | null>(null);
+  const DrivetrainCard = tuningEnabled ? "button" : "section";
   const images = useRef(new Map<string, HTMLImageElement>());
   const updateCameraFailure = useCallback((id: string, failed: boolean) => {
     setFailed(current => current[id] === failed ? current : { ...current, [id]: failed });
@@ -216,8 +218,11 @@ export function DashboardPanel({ subsystems = [], renderTopCards, renderSidebar,
       </aside>
     </div>
     {(model.poseSupported || mechanisms.length > 0) && <div className="dashboard-subsystems" role="region" aria-label="Subsystems">
-    {model.poseSupported && <section className="dashboard-drivetrain" aria-label="Drivetrain pose">
-      <b className="dashboard-card-heading">Drivetrain</b>
+    {model.poseSupported && <DrivetrainCard className={`dashboard-drivetrain${tuningEnabled ? " dashboard-mechanism-tunable" : ""}`}
+      type={tuningEnabled ? "button" : undefined} aria-label={tuningEnabled ? "Open Drivetrain tunables" : "Drivetrain pose"}
+      aria-haspopup={tuningEnabled ? "dialog" : undefined}
+      onClick={tuningEnabled ? () => setTuningSubsystem({ id: drivetrainTuningOwner, name: "Drivetrain", kind: "drivetrain" }) : undefined}>
+      <b className="dashboard-card-heading"><span>Drivetrain</span>{tuningEnabled && <TuneIcon />}</b>
       {model.poseSupported && <div className="dashboard-pose">
         <span>X <b>{metric(model.pose?.x, 2)}<small> m</small></b></span>
         <span>Y <b>{metric(model.pose?.y, 2)}<small> m</small></b></span>
@@ -225,13 +230,13 @@ export function DashboardPanel({ subsystems = [], renderTopCards, renderSidebar,
           {model.headingSetpoint !== undefined && <small className="dashboard-setpoint">Setpoint: {metric(model.headingSetpoint, 0)}°</small>}
         </span>
       </div>}
-    </section>}
+    </DrivetrainCard>}
     {mechanisms.map(mechanism => {
       const tunable = tuningEnabled && canTuneMechanism(mechanism.id);
       const Card = tunable ? "button" : "section";
       return <Card key={mechanism.id} className={`dashboard-mechanism${tunable ? " dashboard-mechanism-tunable" : ""}`}
         type={tunable ? "button" : undefined} aria-label={tunable ? `Open ${mechanism.name} tunables` : mechanism.name}
-        aria-haspopup={tunable ? "dialog" : undefined} onClick={tunable ? () => setTuningMechanism({ id: mechanism.id, name: mechanism.name }) : undefined}>
+        aria-haspopup={tunable ? "dialog" : undefined} onClick={tunable ? () => setTuningSubsystem({ id: mechanism.id, name: mechanism.name, kind: "mechanism" }) : undefined}>
         <b className="dashboard-card-heading" title={mechanism.name}><span>{mechanism.name}</span>{tunable && <TuneIcon />}</b>
         <span className="dashboard-mechanism-value"><b>{metric(mechanism.value, mechanism.places)}</b><small> {mechanism.units}</small></span>
         {mechanism.setpoint !== undefined && <small className="dashboard-setpoint">Setpoint: {metric(mechanism.setpoint, mechanism.places)} {mechanism.units}</small>}
@@ -247,7 +252,7 @@ export function DashboardPanel({ subsystems = [], renderTopCards, renderSidebar,
     </div>
     <div className="dashboard-stream-pool" aria-hidden="true">{streaming.map(camera => <CameraStream key={camera.id}
       camera={camera} override={settings.urls[camera.id]} images={images} onFailed={updateCameraFailure} />)}</div>
-    {tuningMechanism && <MechanismTuningDialog key={`${connectionSettings.host}:${connectionSettings.port}:${tuningMechanism.id}`} owner={tuningMechanism.id} name={tuningMechanism.name}
-      tuningRequested={tuningRequested} onClose={() => setTuningMechanism(null)} />}
+    {tuningSubsystem && <SubsystemTuningDialog key={`${connectionSettings.host}:${connectionSettings.port}:${tuningSubsystem.id}`} owner={tuningSubsystem.id} name={tuningSubsystem.name}
+      kind={tuningSubsystem.kind} subsystems={subsystems} tuningRequested={tuningRequested} onClose={() => setTuningSubsystem(null)} />}
   </div></div>;
 }

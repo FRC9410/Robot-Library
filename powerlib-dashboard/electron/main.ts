@@ -7,6 +7,10 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { readConstantsFiles, saveConstantsFile } from "./constantsFiles.js";
 import { generatedJsonPath } from "./projectPaths.js";
+import { readVisionConfig, saveVisionConfig } from "./visionFiles.js";
+import { readStateConfig, saveStateConfig } from "./stateFiles.js";
+import { readLocalizationConfig, saveLocalizationConfig } from "./localizationFiles.js";
+import { readSubsystemDocument, saveSubsystemDocument } from "./subsystemFiles.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -144,76 +148,23 @@ function getPowerToolRootCandidates() {
   );
 }
 
+ipcMain.handle("powerlib:read-vision", async () => readVisionConfig(getDetectedRobotRoot()));
+ipcMain.handle("powerlib:read-states", async () => readStateConfig(getDetectedRobotRoot()));
+ipcMain.handle("powerlib:save-states", async (_event, config) => saveStateConfig(getDetectedRobotRoot(), config));
+ipcMain.handle("powerlib:save-vision", async (_event, vision) => saveVisionConfig(getDetectedRobotRoot(), vision));
+ipcMain.handle("powerlib:read-localization", async () => readLocalizationConfig(getDetectedRobotRoot()));
+ipcMain.handle("powerlib:save-localization", async (_event, config) => saveLocalizationConfig(getDetectedRobotRoot(), config));
+
 ipcMain.handle("powerlib:read-subsystems", async () => {
-  for (const candidate of await getSubsystemJsonCandidates()) {
-    try {
-      const raw = await fs.readFile(candidate, "utf-8");
-      const parsed = JSON.parse(raw);
-      return {
-        exists: true,
-        path: candidate,
-        subsystems: Array.isArray(parsed.subsystems) ? parsed.subsystems : [],
-        swerve: parsed && typeof parsed.swerve === "object" && !Array.isArray(parsed.swerve) ? parsed.swerve : {}
-      };
-    } catch (error) {
-      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
-      if (code !== "ENOENT") {
-        return {
-          exists: false,
-          path: candidate,
-          subsystems: [],
-          swerve: {},
-          error: error instanceof Error ? error.message : "Could not read powerlib-subsystems.json."
-        };
-      }
-    }
+  try { return await readSubsystemDocument(getDetectedRobotRoot()); }
+  catch (error) {
+    return { exists: false, path: (await getSubsystemJsonCandidates())[0], subsystems: [], swerve: {},
+      error: error instanceof Error ? error.message : "Could not read powerlib-subsystems.json." };
   }
-
-  return {
-    exists: false,
-    path: (await getSubsystemJsonCandidates())[0],
-    subsystems: [],
-    swerve: {}
-  };
 });
 
-ipcMain.handle("powerlib:save-subsystems", async (_event, subsystems: unknown[], swerve?: unknown) => {
-  let targetPath = (await getSubsystemJsonCandidates())[0];
-  let existingDocument: Record<string, unknown> = {};
-
-  for (const candidate of await getSubsystemJsonCandidates()) {
-    try {
-      await fs.access(candidate);
-      targetPath = candidate;
-      try {
-        const raw = await fs.readFile(candidate, "utf-8");
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-          existingDocument = parsed as Record<string, unknown>;
-        }
-      } catch {
-        existingDocument = {};
-      }
-      break;
-    } catch {
-      // Keep looking. If none exist, write to the installed robot root candidate.
-    }
-  }
-
-  const document = {
-    ...existingDocument,
-    swerve: swerve !== undefined ? swerve : (existingDocument.swerve ?? {}),
-    subsystems: Array.isArray(subsystems) ? subsystems : []
-  };
-
-  await fs.writeFile(targetPath, `${JSON.stringify(document, null, 2)}\n`, "utf-8");
-  return {
-    exists: true,
-    path: targetPath,
-    subsystems: document.subsystems,
-    swerve: document.swerve ?? {}
-  };
-});
+ipcMain.handle("powerlib:save-subsystems", async (_event, subsystems: unknown[], swerve?: unknown) =>
+  saveSubsystemDocument(getDetectedRobotRoot(), subsystems, swerve));
 
 async function getConstantsRobotRoot() {
   return getDetectedRobotRoot();

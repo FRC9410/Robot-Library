@@ -657,6 +657,19 @@ def markPowerLibInstallComplete = { Project project ->
     project.file(repoRefStateFileName).text = "${findRepoRef(project)}\n"
 }
 
+def ensureNodeModulesIgnored = { Project project ->
+    File gitignore = project.file('.gitignore')
+    String currentText = gitignore.exists() ? gitignore.getText('UTF-8') : ''
+    if (currentText.readLines().any { it.trim() == 'node_modules/' }) {
+        return
+    }
+
+    String newline = currentText.contains('\r\n') ? '\r\n' : '\n'
+    String separator = currentText.isEmpty() || currentText.endsWith('\n') ? '' : newline
+    gitignore.append("${separator}${newline}# Node dependencies${newline}node_modules/${newline}", 'UTF-8')
+    logger.lifecycle('Added node_modules/ to .gitignore')
+}
+
 def copyTemplateFile = { Project project, TemplateFile template, boolean writeTemplateCopyIfDestinationExists = false ->
     File destination = project.file(template.destination)
     if (template.createOnly && destination.exists()) {
@@ -863,6 +876,8 @@ gradle.projectsLoaded {
                 logger.lifecycle("  PowerLib: ${installLib || installTemplates || shouldInstallSkills}")
                 logger.lifecycle("  Vendor dependencies: ${installVendordeps}")
                 logger.lifecycle("  Power Tool and scripts: ${installDashboard}")
+
+                ensureNodeModulesIgnored(project)
 
                 if (installVendordeps) {
                     vendorDependencies.each { dependency ->

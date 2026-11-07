@@ -3,7 +3,7 @@ $root = Split-Path $PSScriptRoot -Parent
 $tokens = $null; $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'generate-subsystem.ps1'), [ref]$tokens, [ref]$errors)
 if ($errors.Count) { throw ($errors | Out-String) }
-foreach ($name in @('Get-PowerDashboardTemplate', 'Ensure-PowerDashboardRawNetworkTablesSupport', 'Ensure-SubsystemTelemetrySupport', 'Ensure-RobotStateTelemetrySupport', 'Ensure-SwerveCachedTuningSupport', 'Format-JavaDoubleLiteral')) {
+foreach ($name in @('Get-PowerDashboardTemplate', 'Ensure-PowerDashboardRawNetworkTablesSupport', 'Ensure-SubsystemTelemetrySupport', 'Ensure-RobotStateTelemetrySupport', 'Ensure-SwerveCachedTuningSupport', 'Format-JavaDoubleLiteral', 'Write-VisionCameraConfiguration', 'Write-RobotStatesConfiguration', 'Write-LocalizationConstants')) {
     $function = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
     Invoke-Expression $function.Extent.Text
 }
@@ -86,4 +86,74 @@ try {
     $jsonNumber = ('{"value":3.1415926535897931}' | ConvertFrom-Json).value
     if ((Format-JavaDoubleLiteral ([Math]::PI)) -cne (Format-JavaDoubleLiteral $jsonNumber)) { throw 'JSON/default numeric generation differs.' }
 } finally { [Threading.Thread]::CurrentThread.CurrentCulture = $originalCulture }
-Write-Host 'Installer inventory and three dashboard migration checks passed; custom code and Unicode preserved.'
+$visionConstantsDir = Join-Path $fixture 'src/main/java/frc/robot/constants'
+New-Item -ItemType Directory -Force -Path $visionConstantsDir | Out-Null
+$visionPath = Join-Path $visionConstantsDir 'VisionConstants.java'
+$visionSource = [IO.File]::ReadAllText((Join-Path $root 'templates/replacements/src/main/java/frc/robot/constants/VisionConstants.java'))
+[IO.File]::WriteAllText($visionPath, $visionSource)
+$cameraConfig = [pscustomobject]@{ fovDegrees = 63.3; imageWidth = 640; imageHeight = 480; limelights = @(
+    [pscustomobject]@{ name = 'limelight-front' },
+    [pscustomobject]@{ name = 'limelight-back' }
+) }
+Push-Location $fixture
+try {
+    Write-VisionCameraConfiguration $cameraConfig | Out-Null
+    $first = [IO.File]::ReadAllText($visionPath)
+    foreach ($expected in @('LIMELIGHT_NAMES = {"limelight-front", "limelight-back"}', 'double LIMELIGHT_FOV_DEGREES = 63.3;', 'int LIMELIGHT_IMAGE_WIDTH = 640;', 'int LIMELIGHT_IMAGE_HEIGHT = 480;', 'VisionHeadingInitializationConfig.DEFAULT')) {
+        if (-not $first.Contains($expected)) { throw "Vision generation lost $expected" }
+    }
+    Write-VisionCameraConfiguration $cameraConfig | Out-Null
+    if ($first -cne [IO.File]::ReadAllText($visionPath)) { throw 'Vision generation is not idempotent.' }
+    $cameraConfig.limelights[1].name = 'limelight-front'
+    $rejected = $false
+    try { Write-VisionCameraConfiguration $cameraConfig | Out-Null } catch { $rejected = $true }
+    if (-not $rejected -or $first -cne [IO.File]::ReadAllText($visionPath)) { throw 'Duplicate cameras were not rejected without changing Java.' }
+    Write-VisionCameraConfiguration ([pscustomobject]@{ limelights = @() }) | Out-Null
+    if (-not ([IO.File]::ReadAllText($visionPath).Contains('LIMELIGHT_NAMES = {}'))) { throw 'Removing all cameras did not generate an empty list.' }
+    $localization = [pscustomobject]@{ position = [pscustomobject]@{ targetAreaThreshold = 1; maxTargetDistanceMeters = 5 }; heading = [pscustomobject]@{ maxTagDistanceMeters = 5; singleTagMaxDistanceMeters = 3 } }
+    Write-LocalizationConstants $localization | Out-Null
+    $first = [IO.File]::ReadAllText($visionPath)
+    foreach ($expected in @('POSITION_TARGET_AREA_THRESHOLD = 1.0;', 'POSITION_MAX_TARGET_DISTANCE_METERS = 5.0;', 'HEADING_MAX_TAG_DISTANCE_METERS = 5.0;', 'HEADING_SINGLE_TAG_MAX_DISTANCE_METERS = 3.0;')) {
+        if (-not $first.Contains($expected)) { throw "Localization generation lost $expected" }
+    }
+    Write-LocalizationConstants $localization | Out-Null
+    if ($first -cne [IO.File]::ReadAllText($visionPath)) { throw 'Localization generation is not idempotent.' }
+    $legacyVision = [regex]::Replace($visionSource, '(?ms)^  // POWERLIB LOCALIZATION CONSTANTS START.*?^  // POWERLIB LOCALIZATION CONSTANTS END - DO NOT DELETE\r?\n', '')
+    $legacyVision = [regex]::Replace($legacyVision, '(?s)(LimelightVisionConfig CONFIG = ).*?;', '$1new LimelightVisionConfig(0.09, 5.75, 0.4);')
+    $legacyVision = [regex]::Replace($legacyVision, '(?s)(LimelightHeadingConfig HEADING_CONFIG = ).*?;', '$1new LimelightHeadingConfig(0.4, 4.5, 0.3, 60, 150, 40, 0.1);')
+    [IO.File]::WriteAllText($visionPath, $legacyVision)
+    Write-LocalizationConstants $localization | Out-Null
+    $first = [IO.File]::ReadAllText($visionPath)
+    if (-not $first.Contains('(new LimelightVisionConfig(0.09, 5.75, 0.4)).withPositionLimits(') -or -not $first.Contains('(new LimelightHeadingConfig(0.4, 4.5, 0.3, 60, 150, 40, 0.1)).withDistanceLimits(')) { throw 'Localization migration replaced custom vision policy.' }
+    Write-LocalizationConstants $localization | Out-Null
+    if ($first -cne [IO.File]::ReadAllText($visionPath)) { throw 'Legacy localization migration is not idempotent.' }
+    $localization.heading.singleTagMaxDistanceMeters = 0
+    $rejected = $false
+    try { Write-LocalizationConstants $localization | Out-Null } catch { $rejected = $true }
+    if (-not $rejected -or $first -cne [IO.File]::ReadAllText($visionPath)) { throw 'Invalid localization values changed Java.' }
+} finally { Pop-Location }
+$statesDirectory = Join-Path $fixture 'src/main/java/frc/robot/subsystems'
+New-Item -ItemType Directory -Force -Path $statesDirectory | Out-Null
+$statesPath = Join-Path $statesDirectory 'StateMachine.java'
+[IO.File]::WriteAllText($statesPath, $stateTemplate)
+Copy-Item -LiteralPath (Join-Path $root 'templates/replacements/src/main/java/frc/robot/constants/StateMachineConstants.java') -Destination (Join-Path $visionConstantsDir 'StateMachineConstants.java') -Force
+Push-Location $fixture
+try {
+    Write-RobotStatesConfiguration @('IDLE', 'READY', 'SHOOTING') | Out-Null
+    $first = [IO.File]::ReadAllText($statesPath)
+    foreach ($expected in @('READY,', 'SHOOTING', 'public void requestState', 'private void selectState')) {
+        if (-not $first.Contains($expected)) { throw "State generation lost $expected" }
+    }
+    Write-RobotStatesConfiguration @('IDLE', 'READY', 'SHOOTING') | Out-Null
+    if ($first -cne [IO.File]::ReadAllText($statesPath)) { throw 'State generation is not idempotent.' }
+    $requestFile = Join-Path $statesDirectory 'StateRequestCheck.java'
+    [IO.File]::WriteAllText($requestFile, 'class StateRequestCheck { Object state = StateMachine.RobotState.READY; }')
+    foreach ($list in @(@('IDLE', 'SHOOTING'), @('READY', 'SHOOTING'), @('IDLE', 'IDLE'))) {
+        $rejected = $false
+        try { Write-RobotStatesConfiguration $list | Out-Null } catch { $rejected = $true }
+        if (-not $rejected -or $first -cne [IO.File]::ReadAllText($statesPath)) { throw 'Invalid or referenced states were removed from Java.' }
+    }
+    Write-RobotStatesConfiguration @('IDLE', 'READY') | Out-Null
+    if ([IO.File]::ReadAllText($statesPath).Contains('SHOOTING')) { throw 'Unreferenced removed state remains in the enum.' }
+} finally { Pop-Location }
+Write-Host 'Installer inventory, dashboard migrations, Vision generation and state enum generation passed; custom code and Unicode preserved.'

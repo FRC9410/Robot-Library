@@ -88,16 +88,68 @@ and acceleration. Sections start collapsed. A Sensor section appears when the
 mechanism publishes CANcoder tunables, with magnet offset and discontinuity
 point in rotations. A Custom section appears when that
 mechanism publishes supported values under `Variables/Custom/`; it supports
-numeric, boolean and text tunables. Edit values, then Apply; the reset beside a
+numeric, boolean and text tunables. A Position section appears when the robot
+publishes `Position/Default`, with the default position in mechanism rotations.
+Configured `velocityTorque` mechanisms also expose Torque FF in Feedforward,
+using `Feedforward/Torque`; ordinary velocity mechanisms do not show that field.
+Edit values, then Apply; the reset beside a
 field clears its pending edit. Collapsing a section preserves pending edits.
 Editing requires a connected robot and acknowledged Tuning mode. Unpublished
 settings remain unavailable.
-These edits change live values; they do not save project defaults. Drivetrain,
-Vision and LED cards retain their existing behavior.
+The Drivetrain card uses the same tuning interaction, with 15 settings in
+collapsed Driver, Requests, Drive to Point and Heading PID sections. It reads
+and writes `Subsystems/Swerve/Variables/`, while pose telemetry stays under
+Drive. A Custom section appears for published Swerve custom tunables.
+A collapsed Localization section exposes Vision's target area threshold (average
+AprilTag area, percent of the image), maximum position target distance, maximum
+heading tag distance and single-tag heading maximum distance (meters).
+These write `Subsystems/Vision/Variables/Position/TargetAreaThreshold`,
+`Position/MaxTargetDistanceMeters`, `Heading/MaxTagDistanceMeters` and
+`Heading/SingleTagMaxDistanceMeters`. The updated Limelight reader applies valid
+edits at 5 Hz while Tuning is enabled and keeps the last applied values when
+disabled. Position filters and heading filters have independent distance limits.
+The overall heading distance also caps single-tag distance; single-tag recovery
+still requires its stricter ambiguity, freshness and stationary stability checks.
+Defaults preserve the prior policy: no minimum area and the configured maximum
+position distance (6.25 m), with heading limits of 4 m and 2 m for single tags.
+Older robots show unavailable fields until the library is updated.
+Apply changes live values. Save tuned values reviews the current card's live
+values and saves selected differences to project JSON. Localization defaults
+live under `localization.position` and `localization.heading` in
+`power-tool/generated/powerlib-subsystems.json`. File → Update Code writes the
+four scalar defaults to VisionConstants and applies them through CONFIG and
+HEADING_CONFIG, preserving other vision policy. Build and deploy to make those
+saved defaults take effect at startup. Localization defaults are excluded from
+the separate custom-constants JSON to avoid conflicting sources of truth.
+Configuration saves serialize updates and replace valid JSON atomically;
+malformed JSON is rejected rather than discarded. Vision and LED cards retain
+their existing behavior.
 
 The app routes only to Dashboard, Limelights and NetworkTables. Subsystem
 configuration is accessed through Config on the Dashboard; mechanism tuning is
 accessed through the enabled mechanism cards.
+
+Config → Vision manages an ordered list of Limelights, with Add, Edit and Delete.
+New names always use `limelight-` followed by lowercase letters, numbers and
+hyphen-separated words; duplicates are rejected. Camera entries contain only
+names. Horizontal FOV in degrees and positive integer image width/height are
+shared Vision settings that apply to every Limelight. These describe the
+cameras; actual camera pipeline settings remain in their Limelight web UIs.
+Configuration is saved in `power-tool/generated/powerlib-subsystems.json` under
+`vision`, with names under `vision.limelights`. Existing Java camera names are
+imported on first use. Older per-camera settings migrate to globals using the
+first camera's values when no global value exists.
+File → Update Code updates `VisionConstants.LIMELIGHT_NAMES` and shared scalar
+FOV/width/height constants while preserving other vision policy and custom code.
+Build and deploy to apply changed camera names to the robot.
+
+Config → States manages robot state names with the same inline Add, Edit and
+Delete list. Names use uppercase letters, numbers and underscores. Existing
+`StateMachine.RobotState` values are imported until the list is first saved to
+the `states` array in `power-tool/generated/powerlib-subsystems.json`.
+File → Update Code applies the names to the enum while preserving state logic.
+It rejects removal or renaming of values still referenced by commands, handlers
+or the default state. State behavior remains in the robot's Java state handlers.
 
 ## Scripts
 

@@ -2,7 +2,7 @@ import { Box, Typography } from "@mui/material";
 import type { GeneratedSubsystem } from "../subsystems/types";
 
 const labels: Record<string, string> = {
-  id: "Stable ID", name: "Name", type: "Control type", focEnabled: "FOC enabled", torqueFF: "Torque feedforward",
+  name: "Name", type: "Control type", focEnabled: "FOC enabled", torqueFF: "Torque feedforward",
   statorCurrentLimitAmps: "Stator current limit (A)", pid: "PID & feedforward", ratios: "Gear ratios",
   motionMagic: "Motion Magic", slowMotionMagic: "Slow Motion Magic", cancoder: "CANcoder",
   absolutePosition: "Absolute position", relativePosition: "Relative position", motorType: "Motor type",
@@ -17,7 +17,7 @@ function valueText(value: unknown): string {
 }
 
 export function SubsystemDetails({ subsystem }: { subsystem: GeneratedSubsystem }) {
-  const rows = Object.entries(subsystem).filter(([, value]) => value === null || typeof value !== "object");
+  const rows = Object.entries(subsystem).filter(([key, value]) => key !== "id" && (value === null || typeof value !== "object"));
   const groups = Object.entries(subsystem).filter(([, value]) => value && typeof value === "object");
   return <Box className="config-details">
     <DetailsGroup title="General" rows={rows} />

@@ -8,6 +8,9 @@ $mockBin = Join-Path $fixture 'mock-bin'
 New-Item -ItemType Directory -Force -Path $sourceFixture, $robotFixture, $mockBin | Out-Null
 foreach ($relative in @('build-dashboard.ps1', 'build-dashboard-install.ps1', 'update-power-tool.ps1', 'install.ps1',
     'generate-subsystem.ps1', 'powerlib-dashboard/package.json', 'powerlib-dashboard/src/App.tsx',
+    'powerlib-dashboard/electron/main.ts', 'powerlib-dashboard/electron/preload.cts',
+    'powerlib-dashboard/electron/subsystemFiles.ts', 'powerlib-dashboard/electron/robotDocument.ts',
+    'powerlib-dashboard/electron/localizationFiles.ts', 'powerlib-dashboard/electron/localizationConfig.ts',
     'powerlib-dashboard/scripts/project-layout.ps1',
     'templates/replacements/src/main/java/frc/robot/subsystems/PowerDashboard.java')) {
     $destination = Join-Path $sourceFixture $relative
@@ -19,7 +22,7 @@ Copy-Item -LiteralPath (Join-Path $root 'powerlib-dashboard/dashboard') -Destina
 [IO.File]::WriteAllText((Join-Path $robotFixture 'build.gradle'), '// dashboard preservation fixture')
 $generated = Join-Path $robotFixture 'power-tool/generated/powerlib-subsystems.json'
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $generated) | Out-Null
-[IO.File]::WriteAllText($generated, '{"subsystems":[{"name":"KeepMe"}]}')
+[IO.File]::WriteAllText($generated, '{"subsystems":[{"name":"KeepMe"}],"swerve":{"heading":{"kP":7}},"states":["IDLE","READY"],"vision":{"fovDegrees":60,"imageWidth":320,"imageHeight":240,"limelights":[{"name":"limelight-front"}]},"localization":{"position":{"targetAreaThreshold":1,"maxTargetDistanceMeters":5},"heading":{"maxTagDistanceMeters":5,"singleTagMaxDistanceMeters":3}}}')
 $expectedConfig = [IO.File]::ReadAllText($generated)
 $dashboard = Join-Path $robotFixture 'power-tool/dashboard'
 $expectedFiles = @{}
@@ -32,6 +35,15 @@ function Assert-CustomDashboard {
         }
     }
     if ([IO.File]::ReadAllText($generated) -cne $expectedConfig) { throw 'Generated configuration changed.' }
+    $installedGenerator = Join-Path $robotFixture 'power-tool/scripts/generate-subsystem.ps1'
+    if ((Get-FileHash -LiteralPath $installedGenerator).Hash -cne (Get-FileHash -LiteralPath (Join-Path $sourceFixture 'generate-subsystem.ps1')).Hash) {
+        throw 'Install/update did not ship the current generator.'
+    }
+    foreach ($name in @('main.ts', 'preload.cts', 'subsystemFiles.ts', 'robotDocument.ts', 'localizationFiles.ts', 'localizationConfig.ts')) {
+        $installed = Join-Path $robotFixture "power-tool/electron/$name"
+        $sourceFile = Join-Path $sourceFixture "powerlib-dashboard/electron/$name"
+        if ((Get-FileHash -LiteralPath $installed).Hash -cne (Get-FileHash -LiteralPath $sourceFile).Hash) { throw "Install/update retained a stale save handler: $name" }
+    }
 }
 function Start-Process {
     param([string]$FilePath, [string]$WorkingDirectory)
@@ -65,6 +77,8 @@ try {
     # Updating must load the downloaded layout before using an older installed reset helper.
     $installedLayout = Join-Path $robotFixture 'power-tool/scripts/project-layout.ps1'
     Add-Content -LiteralPath $installedLayout -Value "`nfunction Reset-PowerToolAppFiles { throw 'Older reset rules must not run.' }"
+    [IO.File]::WriteAllText((Join-Path $robotFixture 'power-tool/scripts/generate-subsystem.ps1'), '# stale generator')
+    [IO.File]::WriteAllText((Join-Path $robotFixture 'power-tool/electron/subsystemFiles.ts'), '// stale save handler')
     [IO.File]::WriteAllText($app, '// old managed app')
     & (Join-Path $robotFixture 'power-tool/scripts/update-power-tool.ps1') -SourceRoot $sourceFixture
     Assert-CustomDashboard
@@ -73,5 +87,5 @@ try {
     }
     & (Join-Path $robotFixture 'power-tool/scripts/update-power-tool.ps1') -SourceRoot $sourceFixture
     Assert-CustomDashboard
-    Write-Host 'PASS: fresh dashboard seeded; custom code, CSS, hidden config and binary assets preserved through reinstall and repeated updates; managed app refreshed.'
+    Write-Host 'PASS: reinstall and repeated updates ship the current generator and save handlers; all configuration sections, custom dashboard code and assets are preserved.'
 } finally { Pop-Location; $env:PATH = $originalPath }

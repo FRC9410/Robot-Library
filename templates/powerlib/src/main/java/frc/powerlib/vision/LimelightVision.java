@@ -16,6 +16,8 @@ import edu.wpi.first.util.WPIUtilJNI;
 import frc.powerlib.configs.LimelightVisionConfig;
 import frc.powerlib.configs.LimelightHeadingConfig;
 import frc.powerlib.health.HealthChecks;
+import frc.powerlib.PowerRobotContainer;
+import frc.powerlib.tuning.TuningCadence;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -37,7 +39,6 @@ import java.util.function.DoubleSupplier;
 public final class LimelightVision implements AutoCloseable {
   private static final double IGNORED_AXIS_STD_DEV = 99999999.0;
   private static final double MIN_POSITION_STD_DEV = 0.001;
-  private static final double SINGLE_TAG_MAX_DISTANCE_METERS = 2;
   private static final double SINGLE_TAG_MAX_AMBIGUITY = .05;
   private static final double SINGLE_TAG_MAX_AGE_SECONDS = .1;
   private static final Comparator<Measurement> POSITION_QUALITY =
@@ -75,7 +76,15 @@ public final class LimelightVision implements AutoCloseable {
   /** Independent camera heading. Timestamp uses the same FPGA clock domain as Measurement. */
   public record HeadingMeasurement(
       String cameraName, Pose2d pose, double timestampSeconds, double headingStdDevRadians, int tagCount,
-      double averageTagDistanceMeters, double maxTagAmbiguity, double tagSpan) {
+      double averageTagDistanceMeters, double maxTagAmbiguity, double tagSpan,
+      double singleTagMaxDistanceMeters) {
+    public HeadingMeasurement(String cameraName, Pose2d pose, double timestampSeconds,
+        double headingStdDevRadians, int tagCount, double averageTagDistanceMeters,
+        double maxTagAmbiguity, double tagSpan) {
+      this(cameraName, pose, timestampSeconds, headingStdDevRadians, tagCount,
+          averageTagDistanceMeters, maxTagAmbiguity, tagSpan,
+          LimelightHeadingConfig.DEFAULT_SINGLE_TAG_MAX_DISTANCE_METERS);
+    }
     public HeadingMeasurement(String cameraName, Pose2d pose, double timestampSeconds,
         double headingStdDevRadians, int tagCount) {
       this(cameraName, pose, timestampSeconds, headingStdDevRadians, tagCount,
@@ -92,7 +101,8 @@ public final class LimelightVision implements AutoCloseable {
     /** Single-tag recovery needs explicit, close, low-ambiguity evidence; unknown quality is insufficient. */
     public boolean reliableSingleTag(double now) {
       return tagCount == 1 && averageTagDistanceMeters > 0
-          && averageTagDistanceMeters <= SINGLE_TAG_MAX_DISTANCE_METERS
+          && Double.isFinite(singleTagMaxDistanceMeters) && singleTagMaxDistanceMeters > 0
+          && averageTagDistanceMeters <= singleTagMaxDistanceMeters
           && Double.isFinite(maxTagAmbiguity) && maxTagAmbiguity >= 0
           && maxTagAmbiguity <= SINGLE_TAG_MAX_AMBIGUITY
           && HealthChecks.isFresh(now - timestampSeconds, SINGLE_TAG_MAX_AGE_SECONDS + 1e-9);
@@ -174,6 +184,11 @@ public final class LimelightVision implements AutoCloseable {
   private final List<Camera> cameras = new ArrayList<>();
   private final double[] orientation = new double[6];
   private double measurementStdDevScale = 1.0;
+  private final TuningCadence tuningCadence = new TuningCadence();
+  private double targetAreaThreshold;
+  private double maxTargetDistanceMeters;
+  private double maxHeadingTagDistanceMeters;
+  private double singleTagHeadingMaxDistanceMeters;
   private Boolean throttled;
   private boolean closed;
   private final List<HeadingMeasurement> headingMeasurements = new ArrayList<>();
@@ -214,6 +229,10 @@ public final class LimelightVision implements AutoCloseable {
     this.config = Objects.requireNonNull(config, "config");
     this.headingConfig = Objects.requireNonNull(headingConfig, "headingConfig");
     this.clockSeconds = Objects.requireNonNull(clockSeconds, "clockSeconds");
+    maxTargetDistanceMeters = config.maxTagDistanceMeters();
+    targetAreaThreshold = config.targetAreaThreshold();
+    maxHeadingTagDistanceMeters = headingConfig.maxTagDistanceMeters();
+    singleTagHeadingMaxDistanceMeters = headingConfig.singleTagMaxDistanceMeters();
     Objects.requireNonNull(cameraNames, "cameraNames");
     var names = new HashSet<String>();
     for (String name : cameraNames) {
@@ -225,6 +244,11 @@ public final class LimelightVision implements AutoCloseable {
     for (String name : cameraNames) {
       cameras.add(new Camera(nt, name));
     }
+    // A zero area threshold preserves the existing position acceptance policy.
+    PowerRobotContainer.setSubsystemVariableDefault("Vision", "Position/TargetAreaThreshold", targetAreaThreshold);
+    PowerRobotContainer.setSubsystemVariableDefault("Vision", "Position/MaxTargetDistanceMeters", maxTargetDistanceMeters);
+    PowerRobotContainer.setSubsystemVariableDefault("Vision", "Heading/MaxTagDistanceMeters", maxHeadingTagDistanceMeters);
+    PowerRobotContainer.setSubsystemVariableDefault("Vision", "Heading/SingleTagMaxDistanceMeters", singleTagHeadingMaxDistanceMeters);
     setIMUMode(0); // Use the robot's external orientation.
     setIMUAssistAlpha(0.03);
   }
@@ -260,6 +284,7 @@ public final class LimelightVision implements AutoCloseable {
     }
 
     double now = clockSeconds.getAsDouble();
+    syncTunableValues(now);
     for (Camera camera : cameras) {
       TimestampedDoubleArray frame = camera.pose.getAtomic();
       if (frame.timestamp > camera.lastSeenTimestamp) {
@@ -307,15 +332,15 @@ public final class LimelightVision implements AutoCloseable {
 
   private HeadingMeasurement parseHeadingMeasurement(String name, TimestampedDoubleArray frame,
       double now, boolean allowSingleTagHeading) {
-    Measurement measurement = parseMeasurement(name, frame, now);
+    Measurement measurement = parseMeasurement(name, frame, now, false);
     if (measurement == null || (!allowSingleTagHeading && measurement.tagCount() < 2)
         || frame.value[8] < 0 || (measurement.tagCount() >= 2 && frame.value[8] == 0)
-        || measurement.averageTagDistanceMeters() > headingConfig.maxTagDistanceMeters()
+        || measurement.averageTagDistanceMeters() > maxHeadingTagDistanceMeters
         || now - measurement.timestampSeconds() > headingConfig.maxMeasurementAgeSeconds()) return null;
     double[] values = frame.value;
     double maxDistance = measurement.tagCount() == 1
-        ? Math.min(headingConfig.maxTagDistanceMeters(), SINGLE_TAG_MAX_DISTANCE_METERS)
-        : headingConfig.maxTagDistanceMeters();
+        ? Math.min(maxHeadingTagDistanceMeters, singleTagHeadingMaxDistanceMeters)
+        : maxHeadingTagDistanceMeters;
     double maxAmbiguity = 0;
     for (int i = 11; i < values.length; i += 7) {
       double id = values[i], ambiguity = values[i + 6];
@@ -327,11 +352,15 @@ public final class LimelightVision implements AutoCloseable {
     }
     var heading = new HeadingMeasurement(name, measurement.pose(), measurement.timestampSeconds(),
         headingConfig.headingStdDevRadians(), measurement.tagCount(), measurement.averageTagDistanceMeters(),
-        maxAmbiguity, values[8]);
+        maxAmbiguity, values[8], maxDistance);
     return measurement.tagCount() > 1 || heading.reliableSingleTag(now) ? heading : null;
   }
 
   private Measurement parseMeasurement(String name, TimestampedDoubleArray frame, double now) {
+    return parseMeasurement(name, frame, now, true);
+  }
+
+  private Measurement parseMeasurement(String name, TimestampedDoubleArray frame, double now, boolean position) {
     double[] values = frame.value;
     if (values.length < 11 || (values.length - 11) % 7 != 0) {
       return null;
@@ -342,9 +371,11 @@ public final class LimelightVision implements AutoCloseable {
       }
     }
     // Pose header has 11 values followed by seven values per raw fiducial.
+    // Header[10] is average tag area as a percentage of the image.
     int count = (values.length - 11) / 7;
     if (count == 0 || values[7] != count || values[6] < 0.0
-        || values[9] < 0.0 || values[9] >= config.maxTagDistanceMeters()) {
+        || values[9] < 0.0 || (position && values[9] >= maxTargetDistanceMeters)
+        || (position && values[10] < targetAreaThreshold)) {
       return null;
     }
     double timestamp = frame.timestamp / 1000000.0 - values[6] / 1000.0;
@@ -360,6 +391,18 @@ public final class LimelightVision implements AutoCloseable {
     return new Measurement(name,
         new Pose2d(values[0], values[1], Rotation2d.fromDegrees(values[5])),
         timestamp, count, values[9], stdDev, values[2]);
+  }
+
+  private void syncTunableValues(double now) {
+    if (!PowerRobotContainer.isTuningEnabled() || !tuningCadence.isDue(now)) return;
+    double area = PowerRobotContainer.getSubsystemVariable("Vision", "Position/TargetAreaThreshold", targetAreaThreshold);
+    double distance = PowerRobotContainer.getSubsystemVariable("Vision", "Position/MaxTargetDistanceMeters", maxTargetDistanceMeters);
+    double headingDistance = PowerRobotContainer.getSubsystemVariable("Vision", "Heading/MaxTagDistanceMeters", maxHeadingTagDistanceMeters);
+    double singleTagDistance = PowerRobotContainer.getSubsystemVariable("Vision", "Heading/SingleTagMaxDistanceMeters", singleTagHeadingMaxDistanceMeters);
+    if (Double.isFinite(area) && area >= 0 && area <= 100) targetAreaThreshold = area;
+    if (Double.isFinite(distance) && distance > 0) maxTargetDistanceMeters = distance;
+    if (Double.isFinite(headingDistance) && headingDistance > 0) maxHeadingTagDistanceMeters = headingDistance;
+    if (Double.isFinite(singleTagDistance) && singleTagDistance > 0) singleTagHeadingMaxDistanceMeters = singleTagDistance;
   }
 
   /** Optional robot-specific adjustment, e.g. a value below one to trust vision more during slip. */

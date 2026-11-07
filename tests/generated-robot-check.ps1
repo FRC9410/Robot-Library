@@ -70,7 +70,12 @@ try {
     }
     $json = Join-Path $fixture 'power-tool/generated/powerlib-subsystems.json'
     New-Item -ItemType Directory -Path (Split-Path $json) -Force | Out-Null
-    [IO.File]::WriteAllText($json, (@{subsystems=$subsystems} | ConvertTo-Json -Depth 12))
+    $vision = @{ fovDegrees = 63.3; imageWidth = 640; imageHeight = 480; limelights = @(
+        @{ name = 'limelight-front' },
+        @{ name = 'limelight-back' }
+    ) }
+    $localization = @{ position=@{targetAreaThreshold=1; maxTargetDistanceMeters=5}; heading=@{maxTagDistanceMeters=5; singleTagMaxDistanceMeters=3} }
+    [IO.File]::WriteAllText($json, (@{subsystems=$subsystems; vision=$vision; localization=$localization; states=@('IDLE', 'READY', 'SHOOTING')} | ConvertTo-Json -Depth 12))
     $dashboard = Join-Path $fixture 'src/main/java/frc/robot/subsystems/PowerDashboard.java'
     $source = Get-Content $dashboard -Raw -Encoding UTF8
     $source = $source.Replace('.withPose(() -> stateMachine.drivetrain.getState().Pose)', ".withPose(() -> stateMachine.drivetrain.getState().Pose)`n        .withSpeeds(() -> stateMachine.drivetrain.getState().Speeds)")
@@ -93,6 +98,8 @@ try {
     }
     $configurationPath = Join-Path $fixture 'power-tool/generated/powerlib-constants.json'
     $configuration = Get-Content -LiteralPath $configurationPath -Raw | ConvertFrom-Json
+    $visionEntry = $configuration.files.PSObject.Properties['robot:Vision']
+    if ($null -ne $visionEntry -and @($visionEntry.Value.constants | Where-Object { $_.name -in @('POSITION_TARGET_AREA_THRESHOLD', 'POSITION_MAX_TARGET_DISTANCE_METERS', 'HEADING_MAX_TAG_DISTANCE_METERS', 'HEADING_SINGLE_TAG_MAX_DISTANCE_METERS') }).Count -ne 0) { throw 'Localization constants have conflicting defaults in powerlib-constants.json.' }
     $shooting = $configuration.files.PSObject.Properties['robot:Shooting']
     if ($null -eq $shooting) { throw 'Generation omitted a discovered non-subsystem constants group.' }
     ($shooting.Value.constants | Where-Object { $_.name -eq 'CHECK_DISTANCE' }).value = '3.25'

@@ -6,6 +6,12 @@ contextBridge.exposeInMainWorld("powerlib", {
   saveConstants: (id: string, source: string, constants: unknown[]) =>
     ipcRenderer.invoke("powerlib:save-constants", id, source, constants),
   readSubsystems: () => ipcRenderer.invoke("powerlib:read-subsystems"),
+  readVisionConfig: () => ipcRenderer.invoke("powerlib:read-vision"),
+  readStateConfig: () => ipcRenderer.invoke("powerlib:read-states"),
+  saveStateConfig: (config: unknown) => ipcRenderer.invoke("powerlib:save-states", config),
+  readLocalizationConfig: () => ipcRenderer.invoke("powerlib:read-localization"),
+  saveLocalizationConfig: (config: unknown) => ipcRenderer.invoke("powerlib:save-localization", config),
+  saveVisionConfig: (vision: unknown) => ipcRenderer.invoke("powerlib:save-vision", vision),
   saveSubsystems: (subsystems: unknown[], swerve?: unknown) =>
     ipcRenderer.invoke("powerlib:save-subsystems", subsystems, swerve),
   updateSubsystemCode: () => ipcRenderer.invoke("powerlib:update-subsystem-code"),
