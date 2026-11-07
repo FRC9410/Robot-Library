@@ -8,7 +8,7 @@ async function load(relativePath) {
   return import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].contents).toString("base64")}`);
 }
 const { normalizeWebUiUrl, getLimelightWebUiUrl, readWebUiOverride, saveWebUiOverride } = await load("../src/features/limelights/limelightUtils.ts");
-const { startCameraStream } = await load("../src/features/drive/cameraStream.ts");
+const { startCameraStream } = await load("../src/features/dashboard/cameraStream.ts");
 const storage = new Map();
 const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
 const originalDocument = globalThis.document;

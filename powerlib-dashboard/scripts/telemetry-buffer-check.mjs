@@ -47,12 +47,12 @@ assert.equal(complete.some(topic => topic.name.endsWith("/OldField")), false);
 assert.equal(complete.find(topic => topic.name === drivePrefix + "BatteryVolts").value, 12);
 assert.equal(complete.find(topic => topic.name.endsWith("/Shooter/Data/Velocity")).value, 35);
 assert.equal(complete.find(topic => topic.name.endsWith("/Shooter/Variables/Target")).value, 35);
-const modelBuild = await build({ entryPoints: [fileURLToPath(new URL("../src/features/drive/driveModel.ts", import.meta.url))],
+const modelBuild = await build({ entryPoints: [fileURLToPath(new URL("../src/features/dashboard/dashboardModel.ts", import.meta.url))],
   bundle: true, write: false, format: "esm", platform: "node" });
-const { driveModel } = await import(`data:text/javascript;base64,${Buffer.from(modelBuild.outputFiles[0].contents).toString("base64")}`);
-assert.deepEqual(driveModel(complete, true, 11200).pose, { x: 2, y: 3, heading: 90 });
-assert.equal(driveModel(complete, true, 11200).canSelectAuto, true);
-assert.equal(driveModel(complete, true, 12400).canSelectAuto, false);
+const { dashboardModel } = await import(`data:text/javascript;base64,${Buffer.from(modelBuild.outputFiles[0].contents).toString("base64")}`);
+assert.deepEqual(dashboardModel(complete, true, 11200).pose, { x: 2, y: 3, heading: 90 });
+assert.equal(dashboardModel(complete, true, 11200).canSelectAuto, true);
+assert.equal(dashboardModel(complete, true, 12400).canSelectAuto, false);
 buffer.upsert(sample(drivePrefix + "BatteryVolts", 99), 11150);
 assert.equal(buffer.flush(), null, "Old scalar publishers cannot mix with the complete map");
 for (let sequence = 2; sequence <= 100; sequence++) {

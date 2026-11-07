@@ -16,35 +16,20 @@ import {
   Typography
 } from "@mui/material";
 import CableIcon from "@mui/icons-material/Cable";
-import ConstructionIcon from "@mui/icons-material/Construction";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import ElectricBoltIcon from "@mui/icons-material/ElectricBolt";
-import SmartToyIcon from "@mui/icons-material/SmartToy";
 import VideocamIcon from "@mui/icons-material/Videocam";
+import { ConfigDialog } from "./features/config/ConfigDialog";
 import type {
-  CharacterizationCommand,
   GeneratedSubsystem,
-  SubsystemDocumentState,
-  SubsystemFormMotor,
-  SubsystemFormState
+  SubsystemDocumentState
 } from "./features/subsystems/types";
-import {
-  createEmptyMotor,
-  createEmptySubsystemForm,
-  formToSubsystem,
-  getCharacterizationName,
-  subsystemToForm,
-  summarizeUpdateOutput
-} from "./features/subsystems/subsystemUtils";
-import { CharacterizationDialog } from "./features/subsystems/components/CharacterizationDialog";
-import { DeleteSubsystemDialog } from "./features/subsystems/components/DeleteSubsystemDialog";
-import { SubsystemsPanel } from "./features/subsystems/components/SubsystemsPanel";
+import { summarizeUpdateOutput } from "./features/subsystems/subsystemUtils";
 import { UpdateCodeDialog } from "./features/subsystems/components/UpdateCodeDialog";
 import { NetworkTablesPanel } from "./features/networktables/NetworkTablesPanel";
 import { NetworkTablesProvider, useNetworkTables, useTopics } from "./features/networktables/NetworkTablesContext";
 import { ConnectionSettingsDialog } from "./features/networktables/ConnectionSettingsDialog";
 import { tuningModeRequestTopicName, tuningModeTopicName } from "./features/networktables/tuningUtils";
-import { RobotPanel } from "./features/robot/RobotPanel";
 import { DashboardPanel } from "../dashboard";
 import { LimelightsPanel } from "./features/limelights/LimelightsPanel";
 import { detectLimelights } from "./features/limelights/limelightUtils";
@@ -59,7 +44,7 @@ type ToastState = {
 };
 
 const networkTableWatchPrefixes = ["/PowerLib/Data", "/PowerLib/Subsystems/Drive/Data/",
-  "/PowerLib/Subsystems/Swerve/Data/", "/PowerLib/Drive/", "/PowerLib/Characterization/",
+  "/PowerLib/Subsystems/Swerve/Data/", "/PowerLib/Drive/",
   "/SmartDashboard/", "/Robot/", "/CameraPublisher/", "/limelight"];
 const autoConnectPausedKey = "powerlib.autoConnectPaused";
 
@@ -92,7 +77,7 @@ function AppContent() {
     pruneTopics
   } = useNetworkTables();
   const topics = useTopics("app");
-  const [activeView, setActiveView] = useState<AppView>("drive");
+  const [activeView, setActiveView] = useState<AppView>("dashboard");
   const [subsystemDocument, setSubsystemDocument] = useState<SubsystemDocumentState>({
     loading: false,
     exists: false,
@@ -100,19 +85,16 @@ function AppContent() {
     subsystems: [],
     error: null
   });
-  const [subsystemForm, setSubsystemForm] = useState<SubsystemFormState | null>(null);
   const [toast, setToast] = useState<ToastState>({
     open: false,
     message: "",
     severity: "info"
   });
-  const [subsystemSaving, setSubsystemSaving] = useState(false);
   const [subsystemUpdatingCode, setSubsystemUpdatingCode] = useState(false);
   const [installSectionUpdating, setInstallSectionUpdating] = useState<string | null>(null);
   const [powerToolUpdating, setPowerToolUpdating] = useState(false);
-  const [deleteSubsystemIndex, setDeleteSubsystemIndex] = useState<number | null>(null);
-  const [characterizationOpen, setCharacterizationOpen] = useState(false);
   const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(false);
+  const [configOpen, setConfigOpen] = useState(false);
   const [desiredTuningMode, setDesiredTuningMode] = useState<boolean | null>(null);
   const tuningSyncRef = useRef<TuningModeSync | null>(null);
   if (tuningSyncRef.current === null) {
@@ -139,77 +121,12 @@ function AppContent() {
   const tuningModePending = status === "connected" && tuningModeTopic?.value !== tuningModeEnabled;
   const limelights = useMemo(() => detectLimelights(topics), [topics]);
 
-  const characterizationCommands = useMemo<CharacterizationCommand[]>(() => {
-    if (!subsystemForm?.name) {
-      return [];
-    }
-
-    const characterizationName = getCharacterizationName(subsystemForm.name);
-    const prefix = `/PowerLib/Characterization/${characterizationName}/`;
-    return topics
-      .filter((topic) => topic.name.startsWith(prefix) && topic.name.endsWith("/.type") && topic.value === "PowerLibCommand")
-      .map((topic) => {
-        const baseTopic = topic.name.slice(0, -"/.type".length);
-        const label = baseTopic.slice(prefix.length);
-        const runningTopic = topics.find((candidate) => candidate.name === `${baseTopic}/running`);
-
-        return {
-          label,
-          baseTopic,
-          running: runningTopic?.value === true
-        };
-      })
-      .sort((left, right) => left.label.localeCompare(right.label));
-  }, [subsystemForm?.name, topics]);
-
   function showToast(message: string, severity: ToastState["severity"] = "info") {
     setToast({
       open: true,
       message,
       severity
     });
-  }
-
-  function updateSubsystemFormField<K extends keyof SubsystemFormState>(field: K, value: SubsystemFormState[K]) {
-    setSubsystemForm((current) => (current ? { ...current, [field]: value } : current));
-  }
-
-  function updateSubsystemMotor(index: number, patch: Partial<SubsystemFormMotor>) {
-    setSubsystemForm((current) => {
-      if (!current) {
-        return current;
-      }
-
-      const motors = current.motors.map((motor, motorIndex) => {
-        if (motorIndex !== index) {
-          return motor;
-        }
-
-        return {
-          ...motor,
-          ...patch,
-          role: motorIndex === 0 ? "leader" : patch.role ?? motor.role
-        };
-      });
-
-      return { ...current, motors };
-    });
-  }
-
-  function addSubsystemMotor() {
-    setSubsystemForm((current) =>
-      current ? { ...current, motors: [...current.motors, createEmptyMotor("follower")] } : current
-    );
-  }
-
-  function deleteSubsystemMotor(index: number) {
-    if (index === 0) {
-      return;
-    }
-
-    setSubsystemForm((current) =>
-      current ? { ...current, motors: current.motors.filter((_, motorIndex) => motorIndex !== index) } : current
-    );
   }
 
   async function loadSubsystems() {
@@ -250,66 +167,6 @@ function AppContent() {
       subsystems: result.subsystems as GeneratedSubsystem[],
       error: null
     });
-  }
-
-  async function saveSubsystemForm() {
-    if (!subsystemForm) {
-      return;
-    }
-
-    const existing =
-      subsystemForm.mode === "edit" && subsystemForm.index !== null
-        ? subsystemDocument.subsystems[subsystemForm.index]
-        : undefined;
-    const subsystem = formToSubsystem(subsystemForm, existing);
-    if (!subsystem.name || !subsystem.id) {
-      showToast("Subsystem name is required.", "error");
-      return;
-    }
-    if (/\s/.test(subsystem.name)) {
-      showToast("Subsystem names cannot contain spaces. Use IntakeRoller instead of Intake Roller.", "error");
-      return;
-    }
-
-    if (subsystem.motors?.some((motor) => !motor.id)) {
-      showToast("Every motor needs a CAN ID.", "error");
-      return;
-    }
-
-    setSubsystemSaving(true);
-    try {
-      const nextSubsystems = [...subsystemDocument.subsystems];
-      if (subsystemForm.mode === "edit" && subsystemForm.index !== null) {
-        nextSubsystems[subsystemForm.index] = subsystem;
-      } else {
-        nextSubsystems.push(subsystem);
-      }
-
-      await saveSubsystems(nextSubsystems);
-      showToast(`Saved ${subsystem.name}. Use File > Update Code when you are ready to regenerate Java files.`, "success");
-      setSubsystemForm(null);
-    } catch (caught) {
-      showToast(caught instanceof Error ? caught.message : "Could not save subsystem JSON.", "error");
-    } finally {
-      setSubsystemSaving(false);
-    }
-  }
-
-  async function deleteSubsystem(index: number) {
-    const subsystem = subsystemDocument.subsystems[index];
-    setSubsystemSaving(true);
-    try {
-      await saveSubsystems(subsystemDocument.subsystems.filter((_, currentIndex) => currentIndex !== index));
-      showToast(`Removed ${subsystem?.name ?? "subsystem"}. Use File > Update Code to reconcile generated Java files.`, "success");
-      setDeleteSubsystemIndex(null);
-      if (subsystemForm?.index === index) {
-        setSubsystemForm(null);
-      }
-    } catch (caught) {
-      showToast(caught instanceof Error ? caught.message : "Could not delete subsystem.", "error");
-    } finally {
-      setSubsystemSaving(false);
-    }
   }
 
   async function updateSubsystemCode() {
@@ -506,18 +363,8 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    if (
-      (activeView === "robot" || activeView === "subsystems") &&
-      !subsystemDocument.loading &&
-      !subsystemDocument.path
-    ) {
-      void loadSubsystems();
-    }
-  }, [activeView, subsystemDocument.loading, subsystemDocument.path]);
-
-  useEffect(() => {
     if (activeView === "limelights" && limelights.length === 0) {
-      setActiveView("robot");
+      setActiveView("dashboard");
     }
   }, [activeView, limelights.length]);
 
@@ -533,30 +380,8 @@ function AppContent() {
     return () => window.clearInterval(timer);
   }, []);
 
-  function watchCharacterizationPrefix() {
-    if (!subsystemForm?.name) {
-      return;
-    }
-
-    const prefix = `/PowerLib/Characterization/${getCharacterizationName(subsystemForm.name)}/`;
-    if (status === "connected" || status === "connecting") {
-      clientRef.current.watchPrefix(prefix, upsertTopic);
-    }
-  }
-
-  async function runCharacterizationCommand(command: CharacterizationCommand) {
-    try {
-      await clientRef.current.publish(`${command.baseTopic}/request`, "boolean", true);
-      upsertTopic({ name: `${command.baseTopic}/request`, type: "boolean", value: true });
-      showToast(`Started ${command.label}.`, "success");
-    } catch (caught) {
-      showToast(caught instanceof Error ? caught.message : "Could not start characterization command.", "error");
-    }
-  }
-
   return (
-    <Box sx={{ minHeight: activeView === "robot" ? 0 : "100vh", height: activeView === "robot" ? "100dvh" : undefined,
-      overflow: activeView === "robot" ? "hidden" : undefined, display: "flex", flexDirection: "column", bgcolor: "background.default" }}>
+    <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column", bgcolor: "background.default" }}>
       <AppBar
         position="sticky"
         color="inherit"
@@ -610,21 +435,7 @@ function AppContent() {
             </Stack>
           </Toolbar>
           <Tabs value={activeView} onChange={(_, value) => setActiveView(value)} sx={{ minHeight: 44 }}>
-            <Tab icon={<DashboardIcon />} iconPosition="start" label="Drive" value="drive" sx={{ minHeight: 44 }} />
-            <Tab
-              icon={<SmartToyIcon />}
-              iconPosition="start"
-              label="Robot"
-              value="robot"
-              sx={{ minHeight: 44 }}
-            />
-            <Tab
-              icon={<ConstructionIcon />}
-              iconPosition="start"
-              label="Subsystems"
-              value="subsystems"
-              sx={{ minHeight: 44 }}
-            />
+            <Tab icon={<DashboardIcon />} iconPosition="start" label="Dashboard" value="dashboard" sx={{ minHeight: 44 }} />
             {limelights.length > 0 && (
               <Tab
                 icon={<VideocamIcon />}
@@ -665,26 +476,11 @@ function AppContent() {
         }}
       />
 
-      <DeleteSubsystemDialog
-        open={deleteSubsystemIndex !== null}
-        name={deleteSubsystemIndex !== null ? subsystemDocument.subsystems[deleteSubsystemIndex]?.name : undefined}
-        saving={subsystemSaving}
-        onCancel={() => setDeleteSubsystemIndex(null)}
-        onConfirm={() => {
-          if (deleteSubsystemIndex !== null) {
-            void deleteSubsystem(deleteSubsystemIndex);
-          }
-        }}
-      />
-
-      <CharacterizationDialog
-        open={characterizationOpen}
-        subsystemName={subsystemForm?.name}
-        status={status}
-        commands={characterizationCommands}
-        onRunCommand={runCharacterizationCommand}
-        onClose={() => setCharacterizationOpen(false)}
-      />
+      {configOpen && <ConfigDialog document={subsystemDocument} onRefresh={() => void loadSubsystems()}
+        onClose={() => setConfigOpen(false)} onSave={async subsystems => {
+          await saveSubsystems(subsystems);
+          showToast("Subsystem configuration saved. Use File > Update Code when you are ready to regenerate Java files.", "success");
+        }} />}
 
       <Snackbar
         open={toast.open}
@@ -702,18 +498,12 @@ function AppContent() {
         </Alert>
       </Snackbar>
 
-      <Container maxWidth={false} disableGutters={activeView === "robot"} sx={activeView === "drive" ? { p: "0 !important" } : activeView === "robot"
-        ? { py: 0, pl: { xs: 2, sm: 3 }, flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" } : { py: 2 }}>
+      <Container maxWidth={false} sx={activeView === "dashboard" ? { p: "0 !important" } : { py: 2 }}>
         {telemetryError && <Alert severity="warning" sx={{ m: 1 }}>{telemetryError}</Alert>}
-        <Stack spacing={2} sx={activeView === "robot" ? { flex: 1, minHeight: 0 } : undefined}>
-          {activeView === "drive" && <DashboardPanel subsystems={subsystemDocument.subsystems} />}
-          {activeView === "robot" && (
-            <RobotPanelWithTelemetry
-              subsystems={subsystemDocument.subsystems}
-              tuningRequested={tuningModeEnabled}
-            />
-          )}
-
+        <Stack spacing={2}>
+          {activeView === "dashboard" && <DashboardPanel subsystems={subsystemDocument.subsystems}
+            tuningRequested={tuningModeEnabled}
+            onOpenConfig={() => { setConfigOpen(true); void loadSubsystems(); }} />}
           {activeView === "networktables" && (
             <NetworkTablesPanel />
           )}
@@ -721,35 +511,8 @@ function AppContent() {
           {activeView === "limelights" && (
             <LimelightsPanel limelights={limelights} />
           )}
-
-          {activeView === "subsystems" && (
-            <SubsystemsPanel
-                document={subsystemDocument}
-                form={subsystemForm}
-              saving={subsystemSaving}
-              setForm={setSubsystemForm}
-              updateField={updateSubsystemFormField}
-              updateMotor={updateSubsystemMotor}
-              addMotor={addSubsystemMotor}
-              deleteMotor={deleteSubsystemMotor}
-                onCreate={() => setSubsystemForm(createEmptySubsystemForm())}
-                onRefresh={() => void loadSubsystems()}
-                onSelect={(subsystem, index) => setSubsystemForm(subsystemToForm(subsystem, index))}
-                onSave={saveSubsystemForm}
-                onCancel={() => setSubsystemForm(null)}
-                onDelete={() => setDeleteSubsystemIndex(subsystemForm?.index ?? 0)}
-                onOpenCharacterization={() => {
-                  setCharacterizationOpen(true);
-                  watchCharacterizationPrefix();
-                }}
-              />
-          )}
         </Stack>
       </Container>
     </Box>
   );
-}
-
-function RobotPanelWithTelemetry({ subsystems, tuningRequested }: { subsystems: GeneratedSubsystem[]; tuningRequested: boolean }) {
-  return <RobotPanel subsystems={subsystems} topics={useTopics("robot")} tuningRequested={tuningRequested} />;
 }

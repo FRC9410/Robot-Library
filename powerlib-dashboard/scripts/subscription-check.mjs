@@ -20,7 +20,7 @@ assert.equal(views.get("tuning"), oldTuning, "Drive traffic must not rerender tu
 assert.equal(views.get("app"), oldApp, "Heartbeat/camera traffic must not rerender the app shell");
 views.replace([drive, { ...tuning, value: 3 }, camera]);
 assert.notEqual(views.get("tuning"), oldTuning);
-views.replace([]); assert.equal(views.get("drive").length, 0);
+views.replace([]); assert.equal(views.get("dashboard").length, 0);
 
 const { PowerLibNt4Client } = await load("../src/networktables/nt4Client.ts");
 const { tuningUpdateIntervalMs } = await load("../src/networktables/telemetryTiming.ts");

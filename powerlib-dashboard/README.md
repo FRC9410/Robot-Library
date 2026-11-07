@@ -36,8 +36,8 @@ Rows appear as matching topic values arrive from NetworkTables.
 
 ## Custom dashboard
 
-The Drive tab renders `dashboard/index.tsx`, which initially re-exports the
-generic Drive dashboard. Customize that entry point and keep all custom
+The Dashboard tab renders `dashboard/index.tsx`, which initially re-exports the
+generic dashboard. Customize that entry point and keep all custom
 components, styles and assets in `dashboard/`. Installs and updates seed this
 folder only when it is missing and preserve an existing folder without merging
 or overwriting any files. The shared application and generic dashboard still
@@ -51,8 +51,6 @@ the thumbnail resumes when another view is selected.
 Published stream addresses are tried in order; a failed request or four
 seconds without a first frame advances to the next address. When all addresses
 fail, the list retries after four seconds. Healthy streams stay connected.
-An explicit stream URL in Crew tools overrides the published addresses; clear it
-to return to automatic discovery.
 
 The Limelights tab embeds each camera's configuration page. If its automatic
 `.local:5801` address is unreachable, enter a full Configuration URL such as
@@ -60,13 +58,46 @@ The Limelights tab embeds each camera's configuration page. If its automatic
 laptop and used by both the frame and Open button. Reset restores the automatic
 address. This setting is separate from the camera's stream URL.
 
+## Configuration
+
+Open **Config** in the dashboard header for the settings modal. Select
+**Subsystems** on the left and expand a subsystem to inspect its read-only
+configuration. The **Edit** action stays in each expander header.
+
+**Add Subsystem** opens a wizard with Basics, Hardware, Controls and Review
+steps. The back arrow returns to settings; Previous returns to an earlier step.
+The final step shows the complete configuration and requires verification before
+saving. Edit uses the same wizard with the existing values prefilled. Saving
+updates the project configuration; use File > Update Code, rebuild and deploy
+to apply it to the robot. Run `npm run check:config` for validation checks.
+
+Select **Field** to change the full field length and width in meters. Save
+dimensions to update the main field and its thumbnail immediately. Dimensions
+must be positive and finite and are saved on this laptop. Reset to defaults
+loads the bundled template dimensions into the form; save to apply them.
+Field dimensions do not change robot calibration or constants.
+
 ## Robot tuning
 
-The Robot tab shows clickable subsystem cards with their live readings. Click a card to open all of its tunables in the side panel; there is no variable selection or separate Tuning/Constants tab. Other constants groups appear after the subsystem cards, including groups discovered from the project's constants files or live NetworkTables variables. Commands with tunables also get their own cards.
+With connected, acknowledged Tuning enabled, mechanism cards gain a glowing
+border, pointer cursor and hover highlight. With Tuning off they remain
+read-only, with no click action or tuning highlight.
+Click an enabled mechanism card on the Dashboard to open its live tuning
+sections: PID kP/kI/kD/kG, feedforward kS/kV/kA, and Motion Magic cruise velocity
+and acceleration. Sections start collapsed. A Sensor section appears when the
+mechanism publishes CANcoder tunables, with magnet offset and discontinuity
+point in rotations. A Custom section appears when that
+mechanism publishes supported values under `Variables/Custom/`; it supports
+numeric, boolean and text tunables. Edit values, then Apply; the reset beside a
+field clears its pending edit. Collapsing a section preserves pending edits.
+Editing requires a connected robot and acknowledged Tuning mode. Unpublished
+settings remain unavailable.
+These edits change live values; they do not save project defaults. Drivetrain,
+Vision and LED cards retain their existing behavior.
 
-The tuning switch stays in the header. Live edits require a connected robot and its acknowledgement that tuning is enabled. Apply publishes changes for that group; the Reset icon beside each field clears only that field's pending edit. Search filters the list without changing which variables belong to the group. Save Tuned Values saves that group's live values as project defaults.
-
-Existing constants appear directly in the same side panel, alongside the group's live tunables. A published constant has one live row rather than a duplicate saved row. Apply sends live edits through NetworkTables and saves edits to saved-only values in the project configuration. Live values show their baseline beneath the field. Saved values can also be changed while disconnected; run Update Code, rebuild, and deploy to apply those defaults. Names and Java types stay fixed, and constants cannot be added or deleted. Numeric edits must fit the declared Java type.
+The app routes only to Dashboard, Limelights and NetworkTables. Subsystem
+configuration is accessed through Config on the Dashboard; mechanism tuning is
+accessed through the enabled mechanism cards.
 
 ## Scripts
 

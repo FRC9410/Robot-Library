@@ -1,10 +1,10 @@
 import type { NtTopicSnapshot } from "../../networktables/nt4Client";
 import type { GeneratedSubsystem } from "../subsystems/types";
-import template from "./drive-template.json";
+import template from "./dashboard-template.json";
 
 export { template };
-export type DriveKey = keyof typeof template.topics;
-export type DriveCamera = { id: string; name: string; urls: string[]; connected?: boolean };
+export type DashboardKey = keyof typeof template.topics;
+export type DashboardCamera = { id: string; name: string; urls: string[]; connected?: boolean };
 export type AutoChooser = { path: string; name: string; options: string[]; active?: string; selected?: string; default?: string; controllable: boolean };
 
 /** Mechanism cards use the same measured values and targets as the shared data map. */
@@ -40,8 +40,8 @@ export function streamUrl(value: string): string | undefined {
   } catch { return undefined; }
 }
 
-export function discoverCameras(topics: NtTopicSnapshot[]): DriveCamera[] {
-  const cameras: DriveCamera[] = [];
+export function discoverCameras(topics: NtTopicSnapshot[]): DashboardCamera[] {
+  const cameras: DashboardCamera[] = [];
   for (const topic of topics) {
     const match = /^\/CameraPublisher\/(.+)\/streams$/.exec(topic.name);
     if (!match || !Array.isArray(topic.value)) continue;
@@ -74,13 +74,13 @@ export function getPowerLibAutoChooser(topics: NtTopicSnapshot[]): AutoChooser |
     active: text("active"), selected: text("selected"), default: text("default"), controllable: get(".controllable") !== false };
 }
 
-export function driveModel(topics: NtTopicSnapshot[], connected: boolean, now: number) {
+export function dashboardModel(topics: NtTopicSnapshot[], connected: boolean, now: number) {
   const byName = new Map(topics.map(topic => [topic.name, topic]));
-  const topic = (key: DriveKey) => template.topics[key].map(name => byName.get(name)).find(Boolean);
-  const value = (key: DriveKey) => topic(key)?.value;
-  const number = (key: DriveKey) => typeof value(key) === "number" && Number.isFinite(value(key)) ? value(key) as number : undefined;
-  const boolean = (key: DriveKey) => typeof value(key) === "boolean" ? value(key) as boolean : undefined;
-  const text = (key: DriveKey) => typeof value(key) === "string" ? value(key) as string : undefined;
+  const topic = (key: DashboardKey) => template.topics[key].map(name => byName.get(name)).find(Boolean);
+  const value = (key: DashboardKey) => topic(key)?.value;
+  const number = (key: DashboardKey) => typeof value(key) === "number" && Number.isFinite(value(key)) ? value(key) as number : undefined;
+  const boolean = (key: DashboardKey) => typeof value(key) === "boolean" ? value(key) as boolean : undefined;
+  const text = (key: DashboardKey) => typeof value(key) === "string" ? value(key) as string : undefined;
   const heartbeat = topic("heartbeat");
   const live = connected && heartbeat?.receivedAt !== undefined && now - heartbeat.receivedAt < 1200;
   const health = !live ? "unknown" : boolean("poseValid") === false ? "fault" : "unknown";

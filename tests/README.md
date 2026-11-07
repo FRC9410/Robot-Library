@@ -10,12 +10,19 @@ Run these checks from the Robot-Library root in PowerShell 7. They write fixture
 Push-Location powerlib-dashboard
 try {
     node scripts/telemetry-buffer-check.mjs --java-fixture
-    node scripts/drive-model-check.mjs
+    node scripts/dashboard-model-check.mjs
+    node scripts/config-check.mjs
     node scripts/subscription-check.mjs
     node scripts/tuning-check.mjs
+    node scripts/mechanism-tuning-check.mjs
     npm run build
 } finally { Pop-Location }
 ```
+
+For the isolated mechanism UI check, run
+`powerlib-dashboard/node_modules/electron/dist/electron.exe powerlib-dashboard/scripts/mechanism-tuning-electron-check.cjs`
+from the repository root. It uses simulated telemetry and captures all
+publications in memory without connecting to a robot.
 
 The generated-robot check runs the actual installer in an isolated fixture, compiles the full robot template with real WPILib/vendor jars, runs the actual generator using Windows PowerShell 5.1, verifies unchanged Java sources on a second update, and compiles all four generated mechanism types. Supply `-GradleExecutable` if Gradle 8.11 is outside the normal WPILib cache. This validates Java compilation, not deployment to a roboRIO.
 
