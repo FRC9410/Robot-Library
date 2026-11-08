@@ -2,7 +2,7 @@
 
 ## Shared field layouts
 
-Choose **View → Field Layout** or **Config → Field → Field layout** to select the
+Choose **View → Field Layout** or **File → Settings → Field → Field layout** to select the
 2026 REBUILT simplified drawing, 2026 field image, 2025 REEFSCAPE field image, or
 **None (custom dimensions)**. Dashboard, its thumbnail, the Autos field preview,
 and Logs position/heat-map views share the selection and blue-origin coordinates.
@@ -13,7 +13,7 @@ switching layouts preserves those custom values. These display preferences stay
 on this laptop and do not change robot Java or the coordinates stored in a log.
 Autos uses this shared field for its routine editor.
 
-In **Config → Field → Bumper perimeter**, enter the outside bumper length
+In **File → Settings → Field → Bumper perimeter**, enter the outside bumper length
 (front to back) and width (left to right) in inches. Both default to **32 inches**.
 Save bumper dimensions to update the scaled robot outline in Dashboard, its
 thumbnail, Autos, named-point editing, and log position/heat-map playback. Selected
@@ -125,7 +125,7 @@ and generated-robot fixture first. `scripts/auto-editor-electron-check.cjs` chec
 real App/preload/IPC workflow in an isolated robot with robot connections blocked;
 its Build Robot action uses a fixture stub. The real robot is built separately.
 
-In **Config → Field → Upload a field**, drop a PNG, JPEG, or WebP image or click
+In **File → Settings → Field → Upload a field**, drop a PNG, JPEG, or WebP image or click
 the drop box to browse (up to 10 MB). Preview it, set a name and full field length
 and width in meters, then save. Use an image cropped to the field edges with the
 blue origin at the bottom left; the rotation checkbox can turn it 180 degrees.
@@ -263,7 +263,7 @@ The app has Dashboard, Limelights and Logs tabs; NetworkTables opens in a drawer
 configuration is accessed through Config on the Dashboard; mechanism tuning is
 accessed through the enabled mechanism cards.
 
-Config → Vision manages an ordered list of Limelights, with Add, Edit and Delete.
+File → Settings → Vision manages an ordered list of Limelights, with Add, Edit and Delete.
 New names always use `limelight-` followed by lowercase letters, numbers and
 hyphen-separated words; duplicates are rejected. Camera entries contain only
 names. Horizontal FOV in degrees and positive integer image width/height are
@@ -271,11 +271,11 @@ shared Vision settings that apply to every Limelight. These describe the
 cameras; actual camera pipeline settings remain in their Limelight web UIs.
 Save updates `VisionConstants.LIMELIGHT_NAMES` and the shared scalar FOV/width/height declarations directly. Other vision policy and custom code remain intact. Build and deploy to apply changed camera names to the robot.
 
-Config > States manages names using the inline Add, Edit and Delete list. Names use uppercase letters, numbers and underscores. The list comes from `StateMachine.RobotState`; Java additions appear on refresh. Save updates the enum, creates missing handler files and updates the registry immediately. IDLE is implicit and hidden, and its enum value and handler stay last. Existing handler bodies, constructor expressions and priority are preserved. A handwritten opaque guard requires Java review rather than an unconditional generated fallback.
+File > Settings > States manages names using the inline Add, Edit and Delete list. Names use uppercase letters, numbers and underscores. The list comes from `StateMachine.RobotState`; Java additions appear on refresh. Save updates the enum, creates missing handler files and updates the registry immediately. IDLE is implicit and hidden, and its enum value and handler stay last. Existing handler bodies, constructor expressions and priority are preserved. A handwritten opaque guard requires Java review rather than an unconditional generated fallback.
 
 Deleting a state asks for confirmation to remove its Java file, including custom code. Cancel preserves it. A confirmed save still rejects references elsewhere in robot source, including a configured default state. New handlers need mechanism actions and readiness checks added in Java.
 
-Legacy configuration JSON is consumed only by a migration review. It compares real Java against saved fields, lets you choose values, backs up source and originals under `build/power-tool-migration/`, then archives legacy files after a successful source save. Normal operation creates no configuration JSON. The old JSON generator refuses to run. File > Build Robot compiles the source without regeneration.
+Legacy configuration JSON is consumed only by a migration review. It compares real Java against saved fields, lets you choose values, backs up source and originals under `build/power-tool-migration/`, then archives legacy files after a successful source save. Normal operation creates no configuration JSON. File > Build Robot compiles the source without regeneration.
 
 ## Scripts
 
@@ -289,62 +289,22 @@ npm run package:publish
 npm start        Run the built Electron app.
 ```
 
-## Publish The App
+## Distribute the app
 
-The GitHub installer downloads this source into the robot project, runs `npm ci` using the dependency lockfile, and builds the app. Installation fails if dependency installation or the build fails. It does not ship the compiled app because the packaged output is too large for normal repository pushes.
+The project ZIP on [GitHub Releases](https://github.com/FRC9410/Robot-Library/releases)
+contains the prebuilt Windows application and its Electron runtime. Users extract
+its contents into a clean WPILib robot project and launch **Power Tool.cmd**.
+They do not need Node or npm. The bundled `power-tool/app/` directory is ignored
+by Git; robot source and auto definitions remain available to commit.
 
-From an installed robot project, start Power Tool with:
-
-```powershell
-.\power-tool\scripts\power-tool.cmd
-```
-
-Or:
+Maintainers build the ZIP from the Robot-Library root with:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\power-tool\scripts\power-tool.ps1
+.\build-project-zip.ps1 -SkipInstall
 ```
 
-Installed launchers run `npm start`, so Power Tool opens from the built app instead of starting the Vite dev server.
-
-Installs and updates retain `build-dashboard.ps1` in the robot project root.
-To rebuild and package the installed app without updating Power Tool, run:
-
-```powershell
-cd power-tool
-npm run package:app
-```
-
-This uses the existing dependencies and writes to `PowerTool-local/` beside
-`power-tool/`. On Windows, launch `PowerTool-local/win-unpacked/Power Tool.exe`.
-The equivalent command from the robot root is
-`powershell -ExecutionPolicy Bypass -File .\build-dashboard.ps1 -SkipInstall`.
-Omit `-SkipInstall` when dependencies need to be installed. `-Publish` packages
-to `PowerTool/` locally; it does not upload a release.
-
-The same script also supports a local app rebuild from this library repo:
-
-```powershell
-cd E:\code\projects\Robot-Library
-.\build-dashboard.ps1
-```
-
-That writes to `E:\code\projects\Robot-Library\PowerTool-local\`.
-
-To make a compiled dashboard app locally:
-
-```powershell
-.\build-dashboard.ps1 -Publish
-```
-
-To target another platform explicitly:
-
-```powershell
-.\build-dashboard.ps1 -Platform win
-.\build-dashboard.ps1 -Platform mac
-.\build-dashboard.ps1 -Platform linux
-```
-
-Telemetry requests and screen updates use a 100 ms (10 Hz) cadence. PowerLib publishes the complete data map as one JSON frame at `/PowerLib/Data`. Each valid frame replaces the previous dashboard telemetry, including removed fields; intermediate frames are not queued. The pose is included in the map and is also exposed as a typed AdvantageScope topic from the same captured frame. SignalLogger records the latest map and log-only status every 20 ms (50 Hz); dashboard JSON serialization and typed-pose publication remain at 100 ms. Tuning subscriptions and the tuning display run every 200 ms (5 Hz), matching the robot's tuning reads and application. Apply sends edits immediately for the robot's next tuning pass. Older per-field robot publishers remain supported. Run `npm run check:telemetry` to verify complete-object replacement, arrival timestamps, invalid frames and connection resets.
-
-The tuning switch retains its requested state while this Power Tool session reconnects to the same robot. Every 200 ms the app compares that state with both the NetworkTables request and the robot's acknowledgement; it resends on mismatch and after reconnection, so a code deploy or robot reboot does not require toggling off and on. The switch shows `Tuning (syncing)` while awaiting acknowledgement. Changing the connection host/port starts with that robot's state. Run `npm run check:tuning` to check recovery, acknowledgement, retry and display timing behavior.
+Omit `-SkipInstall` when npm dependencies need to be installed. This builds the
+current UI and Electron code, then includes all release templates and pinned
+vendor dependency files. Output is
+`build/distributions/Robot-Library-2026-Windows-x64.zip`; attach it as a release
+asset. Packaging does not publish automatically.

@@ -1,6 +1,6 @@
 # Robot-Library
 
-Team 9410's robot library: PowerLib (Java, `templates/powerlib/`), the installer and generator
+Team 9410's robot library: PowerLib (Java, `templates/powerlib/`), the release packaging
 scripts, and Power Tool (Electron + React + MUI, `powerlib-dashboard/`).
 
 The docs for people and agents are in an Obsidian vault kept **outside this repo**, next to it

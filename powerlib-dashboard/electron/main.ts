@@ -1,10 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell } from "electron";
-import { execFile, spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { readConstantsFiles, saveConstantsFile } from "./constantsFiles.js";
 
@@ -26,7 +24,6 @@ import { runRobotAction } from "./robotActions.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const execFileAsync = promisify(execFile);
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 
@@ -52,7 +49,7 @@ function createAppMenu(window: BrowserWindow) {
         { type: "separator" },
         {
           label: "Build Robot",
-          click: () => window.webContents.send("powerlib:menu-update-subsystem-code")
+          click: () => window.webContents.send("powerlib:menu-robot-action", "build")
         },
         { label: "Build and Deploy", click: () => window.webContents.send("powerlib:menu-robot-action", "deploy") },
         { label: "Sim with DS", click: () => window.webContents.send("powerlib:menu-robot-action", "sim-ds") },
@@ -181,8 +178,7 @@ function getDetectedRobotRoot() {
     if (
       pathExistsSync(path.join(normalized, "build.gradle")) ||
       pathExistsSync(path.join(normalized, "settings.gradle")) ||
-      pathExistsSync(path.join(normalized, "src", "main", "java")) ||
-      pathExistsSync(path.join(normalized, "power-tool", "scripts", "generate-subsystem.ps1"))
+      pathExistsSync(path.join(normalized, "src", "main", "java"))
     ) {
       return normalized;
     }
@@ -240,175 +236,8 @@ ipcMain.handle("powerlib:read-constants", async () => readConstantsFiles(await g
 ipcMain.handle("powerlib:save-constants", async (_event, id, source, constants) =>
   saveConstantsFile(await getConstantsRobotRoot(), id, source, constants));
 
-// Compatibility IPC name; this builds existing Java and never regenerates source from JSON.
-ipcMain.handle("powerlib:update-subsystem-code", async () => {
-  return runRobotAction(getDetectedRobotRoot(), "build");
-});
 ipcMain.handle("powerlib:run-robot-action", (event, action: unknown) => runRobotAction(getDetectedRobotRoot(), action,
   message => { if (!event.sender.isDestroyed()) event.sender.send("powerlib:robot-action-error", message); }));
-
-ipcMain.handle("powerlib:update-install-section", async (_event, section: string) => {
-  const robotRoot = getDetectedRobotRoot();
-  const installerPath = path.join(robotRoot, "power-tool", "scripts", "install.ps1");
-  const repoRefPath = path.join(robotRoot, ".powerlib-repo-ref");
-  let repoRef = "main";
-  try {
-    const savedRepoRef = (await fs.readFile(repoRefPath, "utf-8")).trim();
-    if (savedRepoRef) {
-      repoRef = savedRepoRef;
-    }
-  } catch {
-    // Default to main for older installs without a saved repo ref.
-  }
-  await fs.mkdir(path.dirname(installerPath), { recursive: true });
-
-  const installScriptCandidates = [
-    installerPath,
-    path.join(robotRoot, "power-tool", "install.ps1"),
-    path.join(robotRoot, "install.ps1")
-  ];
-  const localLibraryInstallScript = path.resolve(app.getAppPath(), "..", "install.ps1");
-
-  let installScriptContent: string | null = null;
-  for (const candidate of installScriptCandidates) {
-    try {
-      installScriptContent = await fs.readFile(candidate, "utf-8");
-      break;
-    } catch {
-      // Keep looking.
-    }
-  }
-
-  if (!installScriptContent && pathExistsSync(localLibraryInstallScript)) {
-    installScriptContent = await fs.readFile(localLibraryInstallScript, "utf-8");
-  }
-
-  if (installScriptContent) {
-    await fs.writeFile(installerPath, installScriptContent, "utf-8");
-  } else {
-    const response = await fetch(`https://raw.githubusercontent.com/FRC9410/Robot-Library/${repoRef}/install.ps1`);
-    if (!response.ok) throw new Error(`Could not download the PowerLib installer: ${response.status}`);
-    await fs.writeFile(installerPath, await response.text(), "utf-8");
-  }
-
-  const sectionArgs: Record<string, string[]> = {
-    lib: [
-      "-PpowerlibInstallLib=true",
-      "-PpowerlibInstallTemplates=false",
-      "-PpowerlibInstallVendordeps=false",
-      "-PpowerlibInstallDashboard=false"
-    ],
-    vendordeps: [
-      "-PpowerlibInstallLib=false",
-      "-PpowerlibInstallTemplates=false",
-      "-PpowerlibInstallVendordeps=true",
-      "-PpowerlibInstallDashboard=false"
-    ]
-  };
-
-  const args = sectionArgs[section];
-  if (!args) {
-    throw new Error(`Unknown PowerLib update section: ${section}`);
-  }
-
-  const { stdout, stderr } = await execFileAsync(
-    "powershell",
-    [
-      "-ExecutionPolicy",
-      "Bypass",
-      "-File",
-      installerPath,
-      "-RepoRef",
-      repoRef,
-      "-PpowerlibInteractive=false",
-      ...args
-    ],
-    {
-      cwd: robotRoot,
-      windowsHide: true,
-      maxBuffer: 1024 * 1024 * 8
-    }
-  );
-
-  return { stdout, stderr };
-});
-
-ipcMain.handle("powerlib:update-power-tool", async () => {
-  const updaterCandidates = getPowerToolRootCandidates().map((candidate) =>
-    path.join(candidate, "scripts", "update-power-tool.ps1")
-  );
-  let updaterPath = updaterCandidates[0];
-
-  for (const candidate of updaterCandidates) {
-    try {
-      await fs.access(candidate);
-      updaterPath = candidate;
-      break;
-    } catch {
-      // Keep looking.
-    }
-  }
-
-  try {
-    await fs.access(updaterPath);
-  } catch {
-    throw new Error(`Missing ${updaterCandidates[0]}. Reinstall Power Tool to add the updater.`);
-  }
-
-  const toolRoot = path.dirname(path.dirname(updaterPath));
-  const robotRoot = path.dirname(toolRoot);
-  const tempUpdaterPath = path.join(toolRoot, "scripts", "power-tool-update.ps1");
-  const tempUpdaterRunnerPath = path.join(toolRoot, "scripts", "run-power-tool-update.ps1");
-  await fs.mkdir(path.dirname(tempUpdaterPath), { recursive: true });
-  await fs.copyFile(updaterPath, tempUpdaterPath);
-
-  await fs.writeFile(
-    tempUpdaterRunnerPath,
-    [
-      "$ErrorActionPreference = 'Stop'",
-      "try {",
-      `  & '${tempUpdaterPath.replace(/'/g, "''")}' -ParentPid ${process.pid}`,
-      "  if ($LASTEXITCODE -is [int] -and $LASTEXITCODE -ne 0) {",
-      "    throw \"Power Tool updater exited with code $LASTEXITCODE.\"",
-      "  }",
-      "  exit 0",
-      "} catch {",
-      "  Write-Host ''",
-      "  Write-Host $_",
-      "  Write-Host ''",
-      "  Write-Host 'Power Tool update failed. Press Enter to close.'",
-      "  [Console]::ReadLine() | Out-Null",
-      "  exit 1",
-      "}"
-    ].join("\r\n"),
-    "utf-8"
-  );
-
-  const child = spawn(
-    "cmd.exe",
-    [
-      "/c",
-      "start",
-      "Power Tool Update",
-      "powershell",
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-File",
-      tempUpdaterRunnerPath
-    ],
-    {
-      cwd: robotRoot,
-      detached: true,
-      stdio: "ignore",
-      windowsHide: false
-    }
-  );
-  child.unref();
-
-  app.quit();
-  return { started: true };
-});
 
 /** Folders that may hold CTRE's Owlet; AdvantageScope keeps every version it has downloaded. */
 function owletDirectories() {

@@ -24,10 +24,7 @@ contextBridge.exposeInMainWorld("powerlib", {
   saveVisionConfig: (vision: unknown) => ipcRenderer.invoke("powerlib:save-vision", vision),
   saveSubsystems: (subsystems: unknown[], swerve?: unknown, revision?: string, deleted?: string[]) =>
     ipcRenderer.invoke("powerlib:save-subsystems", subsystems, swerve, revision, deleted),
-  updateSubsystemCode: () => ipcRenderer.invoke("powerlib:update-subsystem-code"),
   runRobotAction: (action: string) => ipcRenderer.invoke("powerlib:run-robot-action", action),
-  updateInstallSection: (section: string) => ipcRenderer.invoke("powerlib:update-install-section", section),
-  updatePowerTool: () => ipcRenderer.invoke("powerlib:update-power-tool"),
   openLog: () => ipcRenderer.invoke("powerlib:open-log"),
   openLogPath: (filePath: string) => ipcRenderer.invoke("powerlib:open-log-path", filePath),
   openLogFiles: (filePaths: string[]) => ipcRenderer.invoke("powerlib:open-log-files", filePaths),
@@ -81,16 +78,4 @@ contextBridge.exposeInMainWorld("powerlib", {
   readUploadedField: () => ipcRenderer.invoke("powerlib:read-uploaded-field"),
   saveUploadedField: (field: unknown) => ipcRenderer.invoke("powerlib:save-uploaded-field", field),
   removeUploadedField: () => ipcRenderer.invoke("powerlib:remove-uploaded-field"),
-  onMenuUpdateSubsystemCode: (callback: () => void) => {
-    ipcRenderer.on("powerlib:menu-update-subsystem-code", callback);
-    return () => ipcRenderer.removeListener("powerlib:menu-update-subsystem-code", callback);
-  },
-  onMenuUpdateInstallSection: (callback: (_event: unknown, section: string) => void) => {
-    ipcRenderer.on("powerlib:menu-update-install-section", callback);
-    return () => ipcRenderer.removeListener("powerlib:menu-update-install-section", callback);
-  },
-  onMenuUpdatePowerTool: (callback: () => void) => {
-    ipcRenderer.on("powerlib:menu-update-power-tool", callback);
-    return () => ipcRenderer.removeListener("powerlib:menu-update-power-tool", callback);
-  }
 });

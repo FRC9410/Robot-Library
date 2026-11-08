@@ -1,12 +1,9 @@
 # Custom dashboard
 
-This folder belongs to your robot project. Power Tool installs and updates copy
-it only when it does not exist; an existing folder is kept in full, including
-components, CSS, images, JSON and other assets.
-
-`index.tsx` exports the `DashboardPanel` component rendered on the Dashboard tab.
-Initially it re-exports the generic dashboard, so you keep receiving
-generic dashboard improvements until you replace that export.
+This folder is part of the Power Tool source checkout. The Dashboard tab renders
+`dashboard/index.tsx`; the default exports the generic Drive dashboard. Customize
+it here and rebuild the release ZIP to distribute your changes. The prebuilt
+release does not load editable React source from the robot project.
 
 To customize it, export your own component with an optional `subsystems` prop:
 
@@ -29,13 +26,11 @@ To extend the generic view without copying it, pass `renderTopCards` and
 from the existing 100 ms display loop. Top cards appear after the match timer;
 sidebar content appears below the autonomous selector.
 
-The surrounding Power Tool header, tuning switch and navigation tabs stay
-managed by Robot-Library. Files under `src/` and `electron/` are refreshed during
-updates; move any existing custom dashboard edits into this folder first.
-Shared component interfaces may change between releases, so the update build
-still checks your custom dashboard for compatibility without overwriting it.
+The surrounding Power Tool header, tuning switch and navigation tabs are shared
+with the other app views. Keep your dashboard customization in version control
+and review shared component interfaces when updating the source checkout.
 
-Run `npm run build` from `power-tool/` after editing. `npm run package:app` also
-builds this dashboard and includes its imported assets in the packaged app.
-Commit this folder with your robot project. To return to the generic view,
+Run `npm run build` from `powerlib-dashboard/` after editing. Run
+`./build-project-zip.ps1 -SkipInstall` from the repository root to package the
+application and starter robot files together. To return to the generic view,
 restore the original export in `index.tsx`.

@@ -41,4 +41,4 @@ app.on('browser-window-created', (_, window) => {
     finally { window.destroy(); app.exit(process.exitCode||0); }
   });
 });
-import(pathToFileURL(path.join(tool,'dist-electron/main.js')).href).catch(error=>{console.error(error);app.exit(1);});
+import(pathToFileURL(path.join(tool,'app/resources/app.asar/dist-electron/main.js')).href).catch(error=>{console.error(error);app.exit(1);});

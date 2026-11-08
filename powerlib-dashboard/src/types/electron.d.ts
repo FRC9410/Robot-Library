@@ -58,21 +58,10 @@ declare global {
         swerve?: unknown;
         revision?: string;
       }>;
-      updateSubsystemCode: () => Promise<{
-        stdout: string;
-        stderr: string;
-      }>;
       runRobotAction: (action: import("../../electron/robotActions").RobotAction) => Promise<import("../../electron/robotActions").RobotActionResult>;
       onMenuSettings: (callback: () => void) => () => void;
       onMenuRobotAction: (callback: (action: import("../../electron/robotActions").RobotAction) => void) => () => void;
       onRobotActionError: (callback: (message: string) => void) => () => void;
-      updateInstallSection: (section: string) => Promise<{
-        stdout: string;
-        stderr: string;
-      }>;
-      updatePowerTool: () => Promise<{
-        started: boolean;
-      }>;
       openLog: () => Promise<OpenedLog | { canceled: true }>;
       openLogPath: (filePath: string) => Promise<OpenedLog>;
       /** Opens these files as one session, in this order (the roboRIO's first). */
@@ -102,9 +91,6 @@ declare global {
       readUploadedField: () => Promise<UploadedField | null>;
       saveUploadedField: (field: UploadedField) => Promise<UploadedField>;
       removeUploadedField: () => Promise<void>;
-      onMenuUpdateSubsystemCode: (callback: () => void) => () => void;
-      onMenuUpdateInstallSection: (callback: (_event: unknown, section: string) => void) => () => void;
-      onMenuUpdatePowerTool: (callback: () => void) => () => void;
     };
   }
 }

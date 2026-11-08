@@ -1,12 +1,21 @@
 # Library validation and review
 
+For the Windows ZIP distribution, build with `./build-project-zip.ps1 -SkipInstall`, then run:
+
+```powershell
+python tests/project-zip-check.py
+node powerlib-dashboard/scripts/packaged-project-check.mjs
+```
+
+The first check creates a disposable project from the installed WPILib 2026.2.1 VS Code extension, extracts the actual release ZIP, checks every template and Git exclusion, preserves project settings/team/wrapper/entry points, and runs GradleRIO build plus simulation preparation. It uses cached dependencies in offline mode. The second launches the extracted packaged executable with isolated preferences and tests renderer/preload, source and auto IPC, and log list/download against a local fake SFTP robot. It requires Node only on the maintainer's test machine. Evidence stays under `build/project-zip-check-*/`; no robot is deployed.
+
 Run these checks from the Robot-Library root in PowerShell 7. They write fixtures and logs under ignored `build/` directories. Java checks need the installed WPILib 2026 JDK/Maven files and cached Phoenix/vendor dependencies. Dashboard checks need its npm dependencies installed.
 
 ```powershell
 ./tests/run-library-checks.ps1
 ./tests/drive-to-pose-check.ps1
 ./tests/state-machine-check.ps1
-./tests/generator-checks.ps1
+./tests/source-config-checks.ps1
 ./tests/generated-robot-check.ps1
 ./tests/app-generation-check.ps1
 Push-Location powerlib-dashboard
@@ -30,10 +39,20 @@ For the isolated mechanism UI check, run
 from the repository root. It uses simulated telemetry and captures all
 publications in memory without connecting to a robot.
 
+Additional standalone checks from the repository root:
+
+```powershell
+node powerlib-dashboard/scripts/robot-actions-check.mjs
+powerlib-dashboard/node_modules/electron/dist/electron.exe powerlib-dashboard/scripts/camera-electron-check.cjs
+powerlib-dashboard/node_modules/electron/dist/electron.exe powerlib-dashboard/scripts/vision-config-electron-check.cjs
+```
+
+The robot-action check uses a disposable fake Gradle project to verify build-before-deploy/simulation, failure handling and Driver Station mode selection. The Electron checks exercise camera behavior and vision settings with isolated fixtures.
+
 `powerlib-dashboard/node_modules/electron/dist/electron.exe powerlib-dashboard/scripts/networktables-drawer-electron-check.cjs`
 checks the production View menu/preload with an in-memory NT client: right-side drawer layout, filtering, menu/close/Escape toggles, full-topic subscription cleanup, and Logs navigation, window sizing and preservation across tab switches. Robot connections are blocked.
 
-The generated-robot check runs the actual installer in an isolated fixture, compiles the full robot template with real WPILib/vendor jars, runs the shared Java source editor, verifies initializer-only edits and unchanged custom source, and compiles all four mechanism types. Supply `-GradleExecutable` if Gradle 8.11 is outside the normal WPILib cache. This validates Java compilation, not deployment to a roboRIO.
+The generated-robot check copies the release template trees into an isolated fixture, compiles the full robot template with real WPILib/vendor jars, runs the shared Java source editor, verifies initializer-only edits and unchanged custom source, and compiles all four mechanism types. Supply `-GradleExecutable` if Gradle 8.11 is outside the normal WPILib cache. This validates Java compilation, not deployment to a roboRIO.
 
 `auto-editor-check.mjs` uses a disposable copy of that fixture, checks authoring-only
 saves and explicit generation, stale revisions, newer/unsupported documents, name and
@@ -64,7 +83,7 @@ requested state, continued active execution, returning to Idle and request/actua
 | --- | --- | --- |
 | 1 | One complete startup motor configuration preserves inversion, neutral mode, feedback, gains and limits | MotorConfigurationTest |
 | 2 | Relative control caching tracks mode and invalidates after reset/stop | RelativeControlTest |
-| 3 | Installer and generator share the dashboard template; migration retains custom code and Unicode | Inventory, migration, locale/precision checks and full generated robot compilation |
+| 3 | Release templates match the archive; source edits and migration retain custom code and Unicode | Inventory, migration, locale/precision checks and full generated robot compilation |
 | 4 | Java snapshots and dashboard decoding agree on names, nulls and typed poses; malformed frames retain valid readings and show a diagnostic | TelemetryContractTest, Java-to-TypeScript fixture and telemetry-buffer checks |
 | 5 | Running detection uses finite absolute velocity and handles missing/empty motors | RunningStateTest |
 | 6 | Runtime configuration runs on a serial worker, coalesces requests, checks status, acknowledges success and delays retries | ConfigurationQueueTest |
@@ -95,10 +114,10 @@ The follow-up quality review adds these checks without changing the vision flush
 - Relative `slowThreshold` remains in the constructor and legacy import format for compatibility; its accessor is deprecated. Decreasing/equal position requests select the slow profile, and increasing requests select the normal profile. No new threshold behavior was added.
 - Actual state must be updated by the robot's state controller when a transition happens; it is not inferred from requested state.
 - State requests are stored per owner and arbitrated by handler registration order. The state-machine fixture covers independent requests, priority changes, guarded transitions, and skipping selection for an unchanged single request. ButtonBindingsTest verifies one action per press/release edge and stable, distinct owners for state bindings.
-- AutoTest checks equivalent direct-point and path-cursor sequences, drive completion before subsequent commands, copied destinations, mixed styles, fresh command instances, subsystem requirements, interrupted drive cleanup and invalid definitions. AutoBuilderTest checks chooser registration snapshots, repeated runs, alliance filtering, defaults and existing factory registration. The fresh-install check also verifies the Auto definition class and RobotAutos starter are installed and wired, and reinstalling preserves custom robot autos without a template copy.
+- AutoTest checks equivalent direct-point and path-cursor sequences, drive completion before subsequent commands, copied destinations, mixed styles, fresh command instances, subsystem requirements, interrupted drive cleanup and invalid definitions. AutoBuilderTest checks chooser registration snapshots, repeated runs, alliance filtering, defaults and existing factory registration. The release-template check also verifies the Auto definition class and RobotAutos starter are present and wired, and source edits preserve custom robot checks and autos.
 - DriveToPoseControllerTest checks convergence, velocity/acceleration limits, measured-velocity handoffs, deceleration into a lower limit, initially moving away, and finish tolerances. LegSubpointsTest and LegHeadingTest check progress ordering, one-shot actions, replay/reset behavior, delayed turns, and facing a point. `drive-to-pose-check.ps1` runs the actual robot command with real WPILib commands/CTRE request types and hardware IO replaced: ideal tracking, scheduler cancellation, drivetrain ownership, blue-origin requests, measured-velocity conversion, heading/turn-rate requests, normal versus interrupted subpoints, command reuse, and stopping both translation and rotation. These are command/control checks; native drivetrain response remains part of manual simulation testing.
 - HealthChecksTest covers freshness boundaries, invalid timestamps/poses, and missing feedback. ConfigurationValidationTest verifies that simulation health checks still reject failed startup configuration.
-- LimelightVisionTest uses real local NetworkTables and a pose estimator to verify independent MT1 heading, unchanged MT2 weights, gradual drift correction, delayed-heading fusion that preserves newer translation and intervening rotation, timestamp/latency handling, angle wrapping, malformed/poor tag rejection, fast-turn suppression, camera priority, and consuming skipped/repeated frames. Disabled single-tag fallback tests cover quality checks, preference for multi-tag frames across cameras, stable heading initialization, and single-tag rejection during motion, with strict stationary fallback after enabling. VisionHeadingInitializerTest verifies default-enabled initialization, explicit disabling, configurable stationary limits, distinct stable frames, angle wrapping, and resets after motion or inconsistent observations. Fresh-install compilation verifies the heading configuration and robot integration are installed together. Camera calibration and correction strength still need real-robot validation.
+- LimelightVisionTest uses real local NetworkTables and a pose estimator to verify independent MT1 heading, unchanged MT2 weights, gradual drift correction, delayed-heading fusion that preserves newer translation and intervening rotation, timestamp/latency handling, angle wrapping, malformed/poor tag rejection, fast-turn suppression, camera priority, and consuming skipped/repeated frames. Disabled single-tag fallback tests cover quality checks, preference for multi-tag frames across cameras, stable heading initialization, and single-tag rejection during motion, with strict stationary fallback after enabling. VisionHeadingInitializerTest verifies default-enabled initialization, explicit disabling, configurable stationary limits, distinct stable frames, angle wrapping, and resets after motion or inconsistent observations. Release-template compilation verifies the heading configuration and robot integration together. Camera calibration and correction strength still need real-robot validation.
 - MotorConfigurationTest verifies optional stator limits preserve other velocity settings and reject invalid limits. The generated-robot check carries a configured limit through both velocity mechanism types, repeated saves, and compilation.
 - Mechanism simulation is a deterministic control/readiness model with acceleration and soft limits. It is not a calibrated model of mechanism inertia or loads. Swerve/MapleSim integration remains separate.
 
@@ -172,8 +191,8 @@ cannot alter heading through ordinary weighted fusion while its stability window
 
 ## Source configuration migration
 
-`generator-checks.ps1` is the compatibility entry point for the Java editor checks. It verifies all four mechanism types, single-field edits, optional values, annotations, structural changes, custom state guards, Java-added states, confirmed removal and reference conflicts. Transaction checks inject a failed write, recover an interrupted save and preserve later external edits. Migration checks compare unapplied JSON with Java, require explicit selections/deletion confirmation, preserve source backups and reject malformed or stale reviews. Old generator switches must refuse to replay JSON.
+`source-config-checks.ps1` runs the Java editor checks. It verifies all four mechanism types, single-field edits, optional values, annotations, structural changes, custom state guards, Java-added states, confirmed removal and reference conflicts. Transaction checks inject a failed write, recover an interrupted save and preserve later external edits. Migration checks compare unapplied JSON with Java, require explicit selections/deletion confirmation, preserve source backups and reject malformed or stale reviews.
 
-`dashboard-update-check.ps1` verifies fresh install and repeated update preserve the project-owned dashboard and leave legacy documents untouched for review. `tuning-session-check.mjs` tests app-local recovery across module restart, concurrent merging, project/profile/endpoint isolation and corrupt-file protection. `tuning-recovery-electron-check.cjs` additionally reloads a real renderer and verifies pending drafts, explicit Apply, failed-publication exclusion and profile isolation. Recovery never publishes automatically.
+`tuning-session-check.mjs` tests app-local recovery across module restart, concurrent merging, project/profile/endpoint isolation and corrupt-file protection. `tuning-recovery-electron-check.cjs` additionally reloads a real renderer and verifies pending drafts, explicit Apply, failed-publication exclusion and profile isolation. Recovery never publishes automatically.
 
-`installed-source-electron-check.cjs <robot-project>` opens the installed production app with robot connections blocked and isolated preferences. It verifies source discovery, the Build Robot menu and no-op Config saves against a byte snapshot of every Java file. Use it on a migrated project; it rejects active legacy configuration files.
+`installed-source-electron-check.cjs <robot-project>` opens the packaged production app with robot connections blocked and isolated preferences. It verifies source discovery, the Build Robot menu and no-op Settings saves against a byte snapshot of every Java file. Use it on a migrated project; it rejects active legacy configuration files.

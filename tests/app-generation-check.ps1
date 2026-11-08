@@ -20,14 +20,13 @@ $originalJavaHome = $env:JAVA_HOME
 $env:JAVA_HOME = Join-Path $WpilibRoot 'jdk'
 Push-Location $fixture
 try {
-    & $GradleExecutable --offline --no-daemon --console=plain -g (Join-Path $root 'build/validation-gradle-cache') -I (Join-Path $root 'install.gradle') robotLibraryInstall -PpowerlibInteractive=false -PpowerlibInstall=true -PpowerlibInstallLib=true -PpowerlibInstallTemplates=true -PpowerlibInstallVendordeps=false -PpowerlibInstallTools=false -PpowerlibInstallSkills=false -PpowerlibSkipBuild=true *> (Join-Path $fixture 'install.log')
-    if ($LASTEXITCODE -ne 0) { throw (Get-Content (Join-Path $fixture 'install.log') -Tail 30 | Out-String) }
-    # Use the ordinary generator/build command, with the real cached Gradle distribution.
+    foreach ($tree in @('powerlib', 'replacements')) {
+        foreach ($item in Get-ChildItem -LiteralPath (Join-Path $root "templates/$tree") -Force) {
+            Copy-Item -LiteralPath $item.FullName -Destination $fixture -Recurse -Force
+        }
+    }
+    # Use the ordinary robot build command, with the real cached Gradle distribution.
     [IO.File]::WriteAllText((Join-Path $fixture 'gradlew.bat'), "@echo off`r`ncall `"$GradleExecutable`" --offline -g `"$(Join-Path $root 'build/validation-gradle-cache')`" %*`r`nexit /b %errorlevel%`r`n")
-    $scripts = Join-Path $fixture 'power-tool/scripts'
-    New-Item -ItemType Directory -Force -Path $scripts | Out-Null
-    Copy-Item -LiteralPath (Join-Path $root 'generate-subsystem.ps1') -Destination (Join-Path $scripts 'generate-subsystem.ps1')
-    Copy-Item -LiteralPath (Join-Path $root 'powerlib-dashboard/scripts/project-layout.ps1') -Destination (Join-Path $scripts 'project-layout.ps1')
     [IO.File]::WriteAllText((Join-Path $fixture 'src/main/java/frc/robot/constants/AuditGlobalConstants.java'), @'
 package frc.robot.constants;
 public class AuditGlobalConstants {

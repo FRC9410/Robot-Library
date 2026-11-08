@@ -1,20 +1,19 @@
 # Generic dashboard
 
-The Dashboard tab renders the project-owned `dashboard/index.tsx`, initially an
-export of this generic view. Customize the component and keep its assets in
-`dashboard/` to preserve them through Power Tool updates and reinstalls. The
-generic `src/features/dashboard/` files remain managed by Robot-Library. See
-[the custom dashboard guide](dashboard/README.md) before moving existing edits.
+The Dashboard tab renders `dashboard/index.tsx` from the Power Tool source tree,
+initially an export of the generic view. Customize it in a source checkout and
+rebuild the release package to include your components and assets. See
+[the custom dashboard guide](dashboard/README.md).
 
 Power Tool opens on the **Dashboard** tab. It is a season-independent competition view: match time, battery voltage and robot state use the game prototype's header cards. Camera thumbnails sit on the left, a field or selected camera in the center, autonomous selection on the right, and drivetrain feedback at the bottom above the connection status bar. The drivetrain card shows X, Y, signed heading and an active heading target. Requested and actual robot states appear separately beside battery voltage. Invalid pose produces a fault indication; valid pose does not establish hardware health. The layout measures the Power Tool header and uses the remaining window height without page scrolling. The camera list scrolls independently; field and camera images preserve their actual aspect ratios.
 
-No shooter, intake, hub, passing, or other game-specific telemetry is assumed. Optional information appears only when its topics exist. The bottom row discovers subsystem `Velocity` or `Position` readings in the shared data map. Each mechanism card shows its actual value and, when published, a smaller yellow setpoint directly beneath it. Velocity uses `VelocitySetpoint`; position uses `SetpointRotations` or `Setpoint`. Zero is a valid setpoint; missing, invalid, disconnected, or stale targets stay hidden. Position units come from the subsystem configuration when available. The drivetrain heading target also appears below the measured heading. A grid provides the generic field view; initial field dimensions are defined in `src/features/dashboard/dashboard-template.json`. The initial dimensions are 16.54 × 8.07 m; use **Config > Field** to set positive length and width in meters for the field being used. Saving updates the main field and its thumbnail immediately and retains the dimensions on this laptop. Coordinates use the blue origin; flipping rotates the display without changing coordinates.
+No shooter, intake, hub, passing, or other game-specific telemetry is assumed. Optional information appears only when its topics exist. The bottom row discovers subsystem `Velocity` or `Position` readings in the shared data map. Each mechanism card shows its actual value and, when published, a smaller yellow setpoint directly beneath it. Velocity uses `VelocitySetpoint`; position uses `SetpointRotations` or `Setpoint`. Zero is a valid setpoint; missing, invalid, disconnected, or stale targets stay hidden. Position units come from the subsystem configuration when available. The drivetrain heading target also appears below the measured heading. A grid provides the generic field view; initial field dimensions are defined in `src/features/dashboard/dashboard-template.json`. The initial dimensions are 16.54 × 8.07 m; use **File > Settings > Field** to set positive length and width in meters for the field being used. Saving updates the main field and its thumbnail immediately and retains the dimensions on this laptop. Coordinates use the blue origin; flipping rotates the display without changing coordinates.
 
 ## Robot integration
 
-Fresh PowerLib installations wire `DriveTelemetry` into `PowerDashboard`. It collects drive data into the subsystem data map, then `SubsystemTelemetry` publishes one complete JSON map at `/PowerLib/Data` every 100 ms (10 Hz), while logging the latest values every 20 ms (50 Hz). Power Tool requests the latest NT4 feedback every 100 ms and batches screen updates at that cadence. Robot control and input collection continue at the normal scheduler rate.
+The release templates wire `DriveTelemetry` into `PowerDashboard`. It collects drive data into the subsystem data map, then `SubsystemTelemetry` publishes one complete JSON map at `/PowerLib/Data` every 100 ms (10 Hz), while logging the latest values every 20 ms (50 Hz). Power Tool requests the latest NT4 feedback every 100 ms and batches screen updates at that cadence. Robot control and input collection continue at the normal scheduler rate.
 
-For an existing project, update PowerLib and run Update Code to migrate `PowerDashboard` to this shared flow. For a custom integration, collect drive data before the shared publisher runs:
+For an existing project, compare the release templates with your `PowerDashboard` integration. For a custom integration, collect drive data before the shared publisher runs:
 
 ```java
 private final DriveTelemetry driveTelemetry = new DriveTelemetry()
@@ -74,16 +73,15 @@ AutoBuilder filters options using the Driver Station alliance: red shows red-spe
 
 Selection writes `<chooser>/selected`. The display follows the robot's `<chooser>/active` acknowledgement and reports a missing acknowledgement after three seconds. Changes are locked while enabled, disconnected, stale, or when the chooser explicitly publishes `.controllable=false`. A live `Enabled=false` and Drive heartbeat are required; a missing enabled state does not count as disabled. The team's robot remains responsible for deciding which autonomous command runs.
 
-The dashboard header provides **Config**, a settings modal with read-only subsystem expanders and Add/Edit wizards. The wizard validates Basics, Hardware and Controls before a final Review step with explicit verification. Saved configuration requires Update Code, rebuild and deployment. Robot-specific driver bindings are left for each team to define.
+**File > Settings** opens subsystem settings and Add/Edit wizards from any tab. The wizard validates Basics, Hardware and Controls before a final Review step with explicit verification. Save writes Java source directly; rebuild, then deploy or restart simulation to run the changes. Robot-specific driver bindings are left for each team to define.
 
 ## Validation
 
 Run `npm run check:dashboard` for discovery, URL, chooser, freshness, validity, struct-pose, and clock checks. Run `npm run build` for renderer and Electron compilation. Live verification uses an isolated NT4 server and MJPEG fixtures; actual robot cameras should also be checked on the team's network before competition.
 
-From Robot-Library, run `powershell -NoProfile -ExecutionPolicy Bypass -File
-tests/dashboard-update-check.ps1` to check that fresh installs seed the dashboard,
-custom code and assets survive reinstalls and repeated updates, and managed app
-files still refresh. This uses an isolated fixture with npm and app launch stubbed.
+From Robot-Library, run `python tests/project-zip-check.py` and
+`node powerlib-dashboard/scripts/packaged-project-check.mjs` after packaging to
+verify fresh-project extraction, Git exclusions, robot build and the standalone app.
 
 Drivetrain displays X, Y, heading, and a heading target only while heading control is active.
 Manual rotation, command completion, cancellation, disabled mode, and Test mode clear the

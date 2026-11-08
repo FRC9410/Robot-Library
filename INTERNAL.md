@@ -1,308 +1,46 @@
-# Robot-Library
+# Robot-Library maintainer notes
 
-One-time installer for Team 9410 robot project setup.
+End users download the project ZIP from [GitHub Releases](https://github.com/FRC9410/Robot-Library/releases), extract it into a clean WPILib 2026 Java Command Robot project, and open **Power Tool.cmd**. See [README.md](README.md) for setup. Distribution uses a prebuilt application; there is no source installer or in-app updater.
 
-The installer is meant to be run from inside a newly-created WPILib Java robot project. It uses the robot project's Gradle wrapper, so Gradle does not need to be installed globally.
+## Packaging
 
-## What It Installs
-
-PowerLib files:
-
-```text
-src/main/java/frc/powerlib/PowerRobotContainer.java
-src/main/java/frc/powerlib/configs/*.java
-src/main/java/frc/powerlib/math/*.java
-src/main/java/frc/powerlib/subsystems/*.java
-src/main/java/frc/powerlib/utils/*.java
-```
-
-Replacement starter files:
-
-```text
-src/main/java/frc/robot/RobotContainer.java
-src/main/java/frc/robot/subsystems/StateMachine.java
-src/main/java/frc/robot/subsystems/LED.java
-```
-
-Vendor dependencies:
-
-```text
-vendordeps/ChoreoLib2026.json
-vendordeps/PathplannerLib-<latest>.json
-vendordeps/maple-sim-0.4.0-beta.json
-vendordeps/Phoenix6-replay-<latest>.json
-vendordeps/Phoenix5-replay-<latest>.json
-```
-
-Power Tool:
-
-```text
-power-tool/
-power-tool/scripts/power-tool.cmd
-power-tool/scripts/power-tool.ps1
-power-tool/scripts/generate-subsystem.ps1
-power-tool/scripts/powerlib-generate-subsystem.cmd
-power-tool/scripts/powerlib-update-subsystems.cmd
-```
-
-PowerLib skills:
-
-```text
-skills/SKILL.md
-skills/SimManager-template.md
-skills/Swerve-sim-thread-template.md
-skills/MapleSimSwerveDrivetrain-template.md
-```
-
-Before replacing a stock file during the first install, the installer creates a temporary backup. If the install succeeds, that backup is deleted during cleanup unless you pass `-PpowerlibKeepBackups=true`. If the install fails halfway through, the backup is left in place next to the original file.
-
-After PowerLib has already been installed once, robot starter/template files are no longer overwritten when the destination already exists. Instead, the installer writes the updated template beside the existing file with a `.template` suffix, for example `RobotContainer.java.template` or `settings.json.template`. PowerLib library files under `frc.powerlib` still update in place.
-
-When installing vendordeps, the installer first downloads the official latest JSONs for all five packages. By default, it then applies pinned overrides for any packages we know need pinning, currently MapleSim `0.4.0-beta`. Pass `-PpowerlibLatestVendordeps=true` to keep the latest vendordeps instead of applying pinned overrides. The installer saves each JSON using its `fileName`, and removes older vendordep JSONs with the same vendor `name` or `uuid`.
-
-## Windows
-
-From the root of the new robot project:
+Run from the repository root on Windows:
 
 ```powershell
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FRC9410/Robot-Library/main/install.ps1" -OutFile ".robot-library-install.ps1"
-powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1
+.\build-project-zip.ps1
+# Reuse existing npm dependencies, while still rebuilding the app:
+.\build-project-zip.ps1 -SkipInstall
 ```
 
-To install from a branch or tag, download `install.ps1` from that ref and pass `-RepoRef` so `install.gradle`, templates, vendordep pins, Power Tool source, and future Power Tool updates use the same ref:
+Output: `build/distributions/Robot-Library-2026-Windows-x64.zip`. Attach this file as a GitHub Release asset; creating it does not publish anything automatically. Do not substitute GitHub's automatic source-code ZIP.
 
-```powershell
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/FRC9410/Robot-Library/feature/maple-sim-integration/install.ps1" -OutFile ".robot-library-install.ps1"
-powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -RepoRef "feature/maple-sim-integration"
-```
+`build-dashboard.ps1` builds the renderer and Electron code and packages a standalone app under `PowerTool-local/win-unpacked/`. The ZIP builder calls it, then copies the complete `templates/powerlib/` and `templates/replacements/` trees, the five pinned dependency files in `templates/vendordeps/`, `skills/`, and `distribution/project-overlay/`. Newly imported UI components and assets are rebuilt; new library and robot template files are picked up recursively. A new npm dependency requires running without `-SkipInstall`.
 
-To keep replacement backups after a successful install, add this flag:
+`-PowerToolDirectory` reuses an already packaged application; use this only when its build is current. The ZIP has no enclosing directory and includes `.gitignore`, which excludes the full prebuilt `power-tool/app/` tree while preserving robot source and auto definitions for Git. The receiver keeps their Gradle wrapper, build configuration, team preferences, `Main.java` and `Robot.java`.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -PpowerlibKeepBackups=true
-```
+## Validation
 
-To update only part of an installed project, turn off the sections you do not want. By default, all sections are installed.
+See [tests/README.md](tests/README.md). The ZIP checks extract into an actual stock WPILib template and build it, verify Git exclusions, and launch the packaged executable against a fake SFTP robot. Source-editor and UI checks seed isolated fixtures directly from release templates. Runtime build, deployment and simulation live in `powerlib-dashboard/electron/robotActions.ts`; all File actions use the same typed action bridge.
 
-```powershell
-# Update templates, Power Tool/scripts, and vendordeps, but leave PowerLib library files alone.
-powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -PpowerlibInstallLib=false
+## Power Tool development
 
-# Update PowerLib library files, Power Tool/scripts, and vendordeps, but leave robot templates alone.
-powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -PpowerlibInstallTemplates=false
-
-# Update Java files and Power Tool/scripts, but leave vendordeps alone.
-powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -PpowerlibInstallVendordeps=false
-
-# Update only vendordeps.
-powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -PpowerlibInstall=false -PpowerlibInstallTools=false
-```
-
-When run from an interactive terminal, the installer asks whether to install PowerLib, vendor dependencies, and Power Tool. PowerLib includes library files, robot templates, and skills.
-
-The downloaded `.robot-library-install.ps1` deletes itself after the run. Add `-KeepInstaller` if you want to reuse it for repeated update tests.
-
-## macOS / Linux
-
-From the root of the new robot project:
-
-```bash
-curl -fsSL "https://raw.githubusercontent.com/FRC9410/Robot-Library/main/install.ps1" -o ".robot-library-install.ps1"
-pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1
-```
-
-To keep replacement backups after a successful install, add this flag:
-
-```bash
-pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1 -PpowerlibKeepBackups=true
-```
-
-To update only part of an installed project, turn off the sections you do not want. By default, all sections are installed.
-
-```bash
-# Update templates, Power Tool/scripts, and vendordeps, but leave PowerLib library files alone.
-pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1 -PpowerlibInstallLib=false
-
-# Update PowerLib library files, Power Tool/scripts, and vendordeps, but leave robot templates alone.
-pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1 -PpowerlibInstallTemplates=false
-
-# Update Java files and Power Tool/scripts, but leave vendordeps alone.
-pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1 -PpowerlibInstallVendordeps=false
-
-# Update only vendordeps.
-pwsh -ExecutionPolicy Bypass -File ./.robot-library-install.ps1 -PpowerlibInstall=false -PpowerlibInstallTools=false
-```
-
-When run from an interactive terminal, the installer asks whether to install PowerLib, vendor dependencies, and Power Tool. PowerLib includes library files, robot templates, and skills.
-
-## Install Sections
-
-These flags control the three install choices. They default to `true`.
-
-```text
--PpowerlibInstall=true
--PpowerlibInstallVendordeps=true
--PpowerlibInstallDashboard=true
--PpowerlibInteractive=true
--PpowerlibRepoRef=main
-```
-
-At the beginning of an interactive install, the installer asks whether to install:
-
-```text
-PowerLib install (library files, robot templates, and skills)
-vendor dependencies
-Power Tool source, npm dependencies, and scripts
-```
-
-The Power Tool option downloads the app source, runs `npm ci` using the committed dependency lockfile, builds the app, and writes the run/update/generation scripts. An npm or build failure fails the install instead of reporting success without a launcher. Updating Power Tool refreshes those scripts and project-local skills too. PowerLib skills are installed to the robot project's root-level `skills/` directory.
-
-Set `-PpowerlibInteractive=false` to skip prompts and use the flag/default values directly.
-
-To skip the complete PowerLib install:
-
-```powershell
--PpowerlibInstall=false
-```
-
-To skip the Power Tool installation:
-
-```powershell
--PpowerlibInstallDashboard=false
-```
-
-For targeted updates, `powerlibInstallLib`, `powerlibInstallTemplates`, and
-`powerlibInstallSkills` override individual parts of the PowerLib choice without
-adding prompts. `powerlibInstallTools=false` disables Power Tool; skills follow
-the PowerLib choice independently.
-
-To install PowerLib but skip its skills:
-
-```powershell
--PpowerlibInstallSkills=false
-```
-
-To start Power Tool after it is installed:
-
-```powershell
-.\power-tool\scripts\power-tool.cmd
-```
-
-Or:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\power-tool\scripts\power-tool.ps1
-```
-
-The Power Tool source stays in the robot project so it can be run or edited locally. The installer builds the app once, then the launchers run the built Electron app with `npm start`. Its `node_modules` folder is created by `npm ci` and should not be committed.
-
-Use `Update Power Tool` inside the app to download the latest Power Tool source, refresh the scripts and project-local skills, reinstall npm dependencies, and restart the app.
-
-To build the dashboard locally from this library repo:
-
-```powershell
-cd E:\code\projects\Robot-Library
-.\build-dashboard.ps1
-```
-
-To make a compiled dashboard app locally:
-
-```powershell
-.\build-dashboard.ps1 -Publish
-```
-
-To target another platform explicitly:
-
-```powershell
-.\build-dashboard.ps1 -Platform win
-.\build-dashboard.ps1 -Platform mac
-.\build-dashboard.ps1 -Platform linux
-```
-
-Compiled app output is ignored by Git and is not used by the GitHub installer.
-
-
-## Latest Vendordeps
-
-By default, the installer downloads latest vendordeps first, then applies pinned overrides for known fragile packages. To keep the latest vendordeps instead, add this flag:
-
-```powershell
--PpowerlibLatestVendordeps=true
-```
-
-Example:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\.robot-library-install.ps1 -PpowerlibLatestVendordeps=true
-```
-## Local Test
-
-From the root of a test robot project, run the installer directly from a local checkout:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File E:\code\projects\Robot-Library\install.ps1
-```
-
-
+Work in `powerlib-dashboard/`; run `npm ci`, `npm run dev`, or `npm run build` there. The custom dashboard source and imported assets are compiled into the packaged app; a release ZIP contains the runtime, not an editable Node project. See [the dashboard guide](powerlib-dashboard/dashboard/README.md) for source customization.
 
 ## Edit robot configuration
 
-Power Tool's Config wizard creates and edits velocity, velocity-torque, absolute-position and relative-position mechanisms directly in Java. It maintains constants classes, Constants aliases, StateMachine instances, tunable registration and characterization integration as needed. Ordinary value changes patch individual initializers. Runtime renames preserve the stable Java class identity and subsystem ID comment.
+Power Tool's Settings wizard creates and edits velocity, velocity-torque, absolute-position and relative-position mechanisms directly in Java. It maintains constants classes, Constants aliases, StateMachine instances, tunable registration and characterization integration as needed. Ordinary value changes patch individual initializers. Runtime renames preserve the stable Java class identity and subsystem ID comment.
 
-Config also saves camera descriptions and state names immediately. Idle is implicit and always last. Existing state bodies and guarded handler priority remain team-owned. Deleting a state requires confirmation and rejects remaining source references. Build and deploy are separate from saving.
+Settings also saves camera descriptions and state names immediately. Idle is implicit and always last. Existing state bodies and guarded handler priority remain team-owned. Deleting a state requires confirmation and rejects remaining source references. Build and deploy are separate from saving.
 
-The shared engine is in `powerlib-dashboard/electron/java-config/`. Renderer forms, Electron IPC, legacy migration and the installed CLI use this engine. Writes check revisions, retain source spans, serialize saves and keep a recovery journal under `build/power-tool-edits/`. An interrupted save rolls back recognized writes while refusing to overwrite later external edits. This is a bounded source editor; arbitrary Java factories and expressions stay read-only.
+The shared engine is in `powerlib-dashboard/electron/java-config/`. Renderer forms, Electron IPC, legacy migration and the development CLI use this engine. Writes check revisions, retain source spans, serialize saves and keep a recovery journal under `build/power-tool-edits/`. An interrupted save rolls back recognized writes while refusing to overwrite later external edits. This is a bounded source editor; arbitrary Java factories and expressions stay read-only.
 
 ```powershell
-node power-tool/scripts/source-config.cjs validate
-node power-tool/scripts/source-config.cjs migration-preview
+node E:/code/projects/Robot-Library/powerlib-dashboard/scripts/source-config.cjs validate
+node E:/code/projects/Robot-Library/powerlib-dashboard/scripts/source-config.cjs migration-preview
 ```
 
-Review the preview's individual saved differences before using `migration-apply <revision> <selected-change-ids>`. Destructive state imports additionally require `--confirm-state-deletions`. Originals and source are backed up under `build/power-tool-migration/`; legacy JSON is archived only after successful source edits. Normal saves never read or create configuration JSON. The old generator switches refuse JSON replay. The no-argument compatibility wrapper performs source validation only.
+Review the preview's individual saved differences before using `migration-apply <revision> <selected-change-ids>`. Destructive state imports additionally require `--confirm-state-deletions`. Originals and source are backed up under `build/power-tool-migration/`; legacy JSON is archived only after successful source edits. Normal saves never read or create configuration JSON.
 
 Custom constants markers remain supported, and existing custom methods and comments survive structural edits. Existing numeric fields retain their tuning annotation; newly added numeric custom fields become tunable. Save Tuned Values saves selected defaults together in one source transaction. Live Apply uses the same NetworkTables keys as before and stays separate from code saving.
 
 Temporary tuning recovery JSON lives in app user-data, isolated by robot project and target/profile/host/port. Only successfully published variable values are cached. Restore fills pending drafts and requires explicit Apply; it never replaces Java defaults or replays automatically.
-
-## Build Check
-
-By default, the installer runs the robot project's `build` task in a fresh Gradle process after installing files and vendordeps. This fresh process is important because Gradle configures WPILib vendordeps before installer tasks run. To skip that build check, add this flag:
-
-```powershell
--PpowerlibSkipBuild=true
-```
-## After Install
-
-The initial `.robot-library-install.ps1` is a temporary bootstrap file in the project root. The Gradle installer runs from `power-tool/scripts/.robot-library-install.gradle`. The installer deletes these temporary files automatically unless you pass `-KeepInstaller`. Power Tool's persistent installer, launcher, generator, updater, and update runner all live in `power-tool/scripts/`.
-
-Future installer steps can live in `install.gradle`.
-
-Files that should be added under `frc.powerlib` belong under:
-
-```text
-templates/powerlib/
-```
-
-Files that intentionally replace stock robot project files belong under:
-
-```text
-templates/replacements/
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

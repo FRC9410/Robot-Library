@@ -1,4 +1,4 @@
-// Real Config/Save Tuned Values views, real preload/IPC/file handlers and installed generator.
+// Real Settings/Save Tuned Values views, production preload/IPC/source handlers and robot build.
 // Only the disposable robot selected by the PowerShell runner can be modified.
 const { app } = require('electron');
 const assert = require('node:assert/strict');
@@ -173,8 +173,8 @@ async function run() {
   document=await readJava();assert.deepEqual(document.states,['READY','HOMING','IDLE']);assert.equal(document.subsystems[0].pid.kP,100.25);
   fs.writeFileSync(path.join(fixture,'tuned-from-app.json'),JSON.stringify(document,null,2));
   console.log('Actual app views saved four mechanism types, motors/sensor, states, cameras, field display and 60 tuned values through production IPC.');
-  const first=await renderRun(`return window.powerlib.updateSubsystemCode();`);
-  fs.writeFileSync(path.join(fixture,'update-code-first.log'),first.stdout+'\n'+first.stderr);assert.ok(first.stdout.includes('BUILD SUCCESSFUL'));
+  const first=await renderRun(`return window.powerlib.runRobotAction("build");`);
+  fs.writeFileSync(path.join(fixture,'build-first.log'),first.stdout+'\n'+first.stderr);assert.ok(first.stdout.includes('BUILD SUCCESSFUL'));
   document=await readJava();const inventory=checkGenerated(document);
   assert.ok(!fs.existsSync(path.join(fixture,'src/main/java/frc/robot/subsystems/states/RetiringState.java')),'Confirmed customized execute handler deleted');
   assert.ok(!fs.existsSync(jsonFile),'Normal saves must not create subsystem JSON');
@@ -182,8 +182,8 @@ async function run() {
   const javaRoot=path.join(fixture,'src/main/java');
   const javaFiles=fs.readdirSync(javaRoot,{recursive:true}).filter(name=>name.endsWith('.java')).sort();
   const before=new Map(javaFiles.map(name=>[name,fs.readFileSync(path.join(javaRoot,name),'utf8')]));
-  const second=await renderRun(`return window.powerlib.updateSubsystemCode();`);
-  fs.writeFileSync(path.join(fixture,'update-code-second.log'),second.stdout+'\n'+second.stderr);assert.ok(second.stdout.includes('BUILD SUCCESSFUL'));
+  const second=await renderRun(`return window.powerlib.runRobotAction("build");`);
+  fs.writeFileSync(path.join(fixture,'build-second.log'),second.stdout+'\n'+second.stderr);assert.ok(second.stdout.includes('BUILD SUCCESSFUL'));
   checkGenerated(await readJava());assert.deepEqual(await readJava(),document,'Repeat build changed configuration');
   assert.deepEqual(fs.readdirSync(javaRoot,{recursive:true}).filter(name=>name.endsWith('.java')).sort(),javaFiles,'Repeat build changed the file inventory');
   for(const [name,value]of before)assert.equal(fs.readFileSync(path.join(javaRoot,name),'utf8'),value,`Repeat build changed ${name}`);

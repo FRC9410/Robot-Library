@@ -8,10 +8,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$dashboardRoot = Join-Path $repoRoot "power-tool"
-if (-not (Test-Path -LiteralPath (Join-Path $dashboardRoot "package.json"))) {
-    $dashboardRoot = Join-Path $repoRoot "powerlib-dashboard"
-}
+$dashboardRoot = Join-Path $repoRoot "powerlib-dashboard"
 
 if (-not (Test-Path -LiteralPath (Join-Path $dashboardRoot "package.json"))) {
     throw "Could not find Power Tool project at $dashboardRoot"
@@ -52,7 +49,13 @@ try {
         "linux" { @("--linux") }
     })
 
-    & $npx --no-install electron-builder --dir @platformArgs --config.directories.output="$outputRoot"
+    # SSH2's native CPU detection is optional; its portable JS fallback works in Electron.
+    # Avoid requiring Visual Studio to rebuild that optional accelerator when packaging.
+    $packagingArgs = @('--config.npmRebuild=false')
+    if ($isWindowsHost -and $Platform -in @('current', 'win')) {
+        $packagingArgs += @('--config.win.signAndEditExecutable=false', "--config.electronDist=$(Join-Path $dashboardRoot 'node_modules/electron/dist')")
+    }
+    & $npx --no-install electron-builder --dir @platformArgs @packagingArgs --config.directories.output="$outputRoot"
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }

@@ -1,0 +1,49 @@
+# Prebuilt Power Tool, including Electron and all packaged dependencies/resources.
+/power-tool/app/
+node_modules/
+
+# WPILib / Gradle output. Keep the project's Gradle wrapper in version control.
+.gradle/
+/build/
+/bin/
+/out/
+*.class
+*.jar
+!gradle-wrapper.jar
+*.exe
+*.dll
+*.so
+*.dylib
+*.zip
+*.log
+hs_err_pid*
+.classpath
+.project
+.settings/
+.factorypath
+.gradletasknamecache
+gradle-app.setting
+
+# IDE and OS files.
+.idea/
+*.iml
+*.ipr
+*.iws
+.fleet/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local simulation state and recordings.
+networktables.json
+simgui.json
+*-window.json
+logs/
+ctre_sim/
+/.cache/
+compile_commands.json

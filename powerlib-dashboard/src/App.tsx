@@ -288,7 +288,6 @@ function AppContent() {
       setConnectionSettingsOpen(true);
     });
     const removeSettings = window.powerlib?.onMenuSettings?.(() => { setConfigOpen(true); void loadSubsystems(); });
-    const removeBuild = window.powerlib?.onMenuUpdateSubsystemCode?.(() => { void robotActionRef.current("build"); });
     const removeRobotAction = window.powerlib?.onMenuRobotAction?.(action => { void robotActionRef.current(action); });
     const removeActionError = window.powerlib?.onRobotActionError?.(message => showToast(message, "error"));
     const removeToggleNetworkTables = window.powerlib?.onMenuToggleNetworkTables?.(() => {
@@ -300,7 +299,7 @@ function AppContent() {
 
     return () => {
       removeConnectionSettings?.();
-      removeSettings?.(); removeBuild?.(); removeRobotAction?.(); removeActionError?.();
+      removeSettings?.(); removeRobotAction?.(); removeActionError?.();
       removeToggleNetworkTables?.();
       removeFieldLayout?.();
     };
