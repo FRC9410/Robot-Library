@@ -13,6 +13,13 @@ switching layouts preserves those custom values. These display preferences stay
 on this laptop and do not change robot Java or the coordinates stored in a log.
 Autos uses this shared field for its routine editor.
 
+In **Config → Field → Bumper perimeter**, enter the outside bumper length
+(front to back) and width (left to right) in inches. Both default to **32 inches**.
+Save bumper dimensions to update the scaled robot outline in Dashboard, its
+thumbnail, Autos, named-point editing, and log position/heat-map playback. Selected
+auto points and new-point previews show the footprint at their commanded heading.
+The dimensions persist on this laptop across field-layout changes and restarts.
+
 ## Autos editor
 
 Power Tool opens at 1920 × 1200. Create a routine with **New auto**. The Steps panel
@@ -53,8 +60,50 @@ Drive steps finish within their distance and measured-speed tolerances. Enable
 **Wait for heading** to also require alignment with the commanded heading; its
 default tolerance is 10 degrees, adjustable above 0 through 180 degrees. It is off
 for new steps and older documents. Java callers can opt in with
-`.withHeadingTolerance(Rotation2d.fromDegrees(10))`. Saved documents use version 4
-so older generators cannot silently ignore point state actions or heading completion.
+`.withHeadingTolerance(Rotation2d.fromDegrees(10))`. Saved documents use version 5
+so older generators cannot silently ignore named points, mirroring, or point settings.
+
+Undo and redo icons sit beside the **Steps** label. Each row has a move icon,
+duplicate icon, and trash icon. Drag anywhere on a row to move it; using the move
+icon is optional. Duplicate inserts a copy immediately after that row, regardless
+of which steps are selected. Copy/paste and group actions remain available through
+the keyboard shortcuts. A yellow insertion line marks
+the exact drop position above/below a step or at the end of the list. Shift-click a point or step row
+to select every step between the current selection and the clicked item, including
+wait/state steps. Ctrl/Cmd-click toggles an individual item. A plain click selects one
+item; dragging a selected point keeps the group together. Drag a box on empty field
+space to select points; Ctrl or Shift adds the box to the current selection. Dragging a selected point moves
+the selected group while keeping its spacing; one drag is one undo action. Click
+blank field space (including the dark margin), blank space in the steps list, or
+press Escape to deselect. Escape also works from a numeric/text field. Group
+settings align positions and edit motion limits. Snapping aligns positions with
+other points, field edges/center, and 45° neighbor lines; headings snap near 45°
+angles and other point headings. Creating a point by dragging **+** uses only
+its source point's X/Y and 45° lines for point alignment, plus field edges/center.
+Hold Ctrl while dragging to bypass snapping, including when starting a **+** drag.
+
+Use **Save as named point** in a point's settings, then select that name from another
+point's **Named point** dropdown to share its position and heading across routines.
+Editing any link updates all links. Use the highlighted **Routines / Points** switch
+at the top of the left card. In Points, **New point** adds a shared point; selecting
+one opens its name, X/Y, and heading editor on the right in place of Steps. Drag its
+position or heading on the field to edit it there. Point edits autosave; Save updates
+generated Java. The list trash icon removes the name and unlinks uses while preserving
+their coordinates. There is no named-points dialog or Routine settings menu.
+Drag either inter-card gap to resize panes; widths persist on this computer.
+
+In Routines, the bottom divider separates the list from **New auto**, followed by
+**Duplicate auto**. Select a routine and click Duplicate auto to create another routine.
+Choose a name and **Mirror axis**: None for an exact copy, X for field length, Y for
+field width, or both. The copy appears in the left list and can be edited independently;
+its points are unlinked from shared named points. X reflection switches Blue/Red
+alliance; Y reflection keeps the source alliance. Save to update generated robot code.
+
+**Help → Auto Keyboard Shortcuts** lists the controls from any tab: Ctrl/Cmd Z for undo, Shift Z or Y
+for redo, C/V/D for copy/paste/duplicate, A to select all, and S to Save. Delete removes
+selected steps. Arrows move selected points 5 cm (Shift: 25 cm), Q/E rotate headings
+15° (Shift: 1°), and Alt+Up/Down reorders steps. Text and numeric fields keep their
+normal typing behavior. Undo history lasts for the current app session.
 
 Edits autosave to the detected robot project's `power-tool/generated/powerlib-autos.json`.
 The single **Save** button stays at the bottom of Steps. It flushes the authoring

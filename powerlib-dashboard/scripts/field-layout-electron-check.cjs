@@ -104,7 +104,7 @@ const saveUpload = async()=>{
   await evaluate(`[...document.querySelectorAll('button')].find(el=>/^(Save|Replace) uploaded field$/.test(el.textContent)).click()`);
   await wait(()=>evaluate(`document.body.textContent.includes('Uploaded field saved and selected')`));
 };
-setTimeout(()=>{console.error('Field check timed out.');app.exit(1);},60000).unref();
+setTimeout(()=>{console.error('Field check timed out.');app.exit(1);},90000).unref();
 app.on('browser-window-created', (_event, created)=>{
   window=created;window.hide();window.webContents.setBackgroundThrottling(false);
   window.webContents.on('console-message',details=>{if(details.level==='error')console.error(details.message);});
@@ -114,6 +114,7 @@ app.on('browser-window-created', (_event, created)=>{
       await window.loadURL(pathToFileURL(path.join(fixture,'index.html')).href);
       await wait(()=>fieldState(dashboard));
       assert.deepEqual(await fieldState(dashboard),{id:'none',length:12,width:6});
+      await require('./bumper-field-ui-check.cjs').checkBumperFields({window,evaluate,wait,tab,choose,openFieldConfig,closeConfig,screenshot});
       assert.equal(await evaluate(`[...document.querySelectorAll('[role=tab]')].at(-1).textContent`),'Autos');
       for(const [id,length,width] of [['2026-rebuilt-simplified',16.541,8.069],['2026-rebuilt',16.541,8.069],['2025-reefscape',17.548,8.052]]){
         await tab('Dashboard');await choose(id);
@@ -137,7 +138,7 @@ app.on('browser-window-created', (_event, created)=>{
       await wait(()=>evaluate(`!![...document.querySelectorAll('nav button,nav [role=button]')].find(el=>el.textContent==='Field')`));
       await evaluate(`[...document.querySelectorAll('nav button,nav [role=button]')].find(el=>el.textContent==='Field').click()`);
       await wait(()=>evaluate(`!!document.querySelector('form input[type=number]')`));
-      assert.deepEqual(await evaluate(`[...document.querySelectorAll('form input[type=number]')].map(el=>({value:+el.value,disabled:el.disabled}))`),
+      assert.deepEqual(await evaluate(`[...document.querySelectorAll('form input[type=number]')].filter(el=>el.labels?.[0]?.textContent.startsWith('Field ')).map(el=>({value:+el.value,disabled:el.disabled}))`),
         [{value:17.548,disabled:true},{value:8.052,disabled:true}]);
       await evaluate(`document.querySelector('form [role=combobox]').dispatchEvent(new MouseEvent('mousedown',{bubbles:true}))`);
       await wait(()=>evaluate(`!!document.querySelector('[role=option][data-value="2026-rebuilt-simplified"]')`));

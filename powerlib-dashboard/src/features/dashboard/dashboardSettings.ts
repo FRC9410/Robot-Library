@@ -1,8 +1,9 @@
 import template from "./dashboard-template.json";
 import { streamUrl } from "./dashboardModel";
+import { defaultBumperDimensions, validBumperDimensions, type BumperDimensions } from "../field/robotFootprint";
 
 export type FieldDimensions = { length: number; width: number };
-export type DashboardSettings = FieldDimensions & { flip: boolean; urls: Record<string, string> };
+export type DashboardSettings = FieldDimensions & { flip: boolean; urls: Record<string, string>; bumper: BumperDimensions };
 // Keep existing laptop preferences, including field orientation and camera overrides.
 export const dashboardSettingsKey = "powerlib.driveDisplay.v1";
 export const defaultFieldDimensions: FieldDimensions = { length: template.field.lengthMeters, width: template.field.widthMeters };
@@ -14,7 +15,7 @@ export function validFieldDimensions(dimensions: FieldDimensions) {
 }
 
 function readSettings(): DashboardSettings {
-  const defaults = { ...defaultFieldDimensions, flip: false, urls: {} };
+  const defaults = { ...defaultFieldDimensions, flip: false, urls: {}, bumper: { ...defaultBumperDimensions } };
   try {
     const value = JSON.parse(localStorage.getItem(dashboardSettingsKey) || "{}");
     if (!value || typeof value !== "object") return defaults;
@@ -22,6 +23,7 @@ function readSettings(): DashboardSettings {
       length: Number.isFinite(value.length) && value.length > 0 ? value.length : defaults.length,
       width: Number.isFinite(value.width) && value.width > 0 ? value.width : defaults.width,
       flip: value.flip === true,
+      bumper: value.bumper && validBumperDimensions(value.bumper) ? { lengthInches: value.bumper.lengthInches, widthInches: value.bumper.widthInches } : defaults.bumper,
       urls: value.urls && typeof value.urls === "object" ? Object.fromEntries(Object.entries(value.urls)
         .filter((entry): entry is [string, string] => typeof entry[1] === "string" && !!streamUrl(entry[1]))) : {}
     };
@@ -35,6 +37,14 @@ export function getDashboardSettings() {
 export function saveFieldDimensions(dimensions: FieldDimensions) {
   if (!validFieldDimensions(dimensions)) throw new Error("Field dimensions must be positive, finite numbers.");
   const next = { ...getDashboardSettings(), length: dimensions.length, width: dimensions.width };
+  localStorage.setItem(dashboardSettingsKey, JSON.stringify(next));
+  settings = next;
+  listeners.forEach(listener => listener());
+}
+
+export function saveBumperDimensions(bumper: BumperDimensions) {
+  if (!validBumperDimensions(bumper)) throw new Error("Bumper dimensions must be positive, finite numbers.");
+  const next = { ...getDashboardSettings(), bumper: { ...bumper } };
   localStorage.setItem(dashboardSettingsKey, JSON.stringify(next));
   settings = next;
   listeners.forEach(listener => listener());

@@ -117,7 +117,8 @@ function createAppMenu(window: BrowserWindow) {
     {
       id: "powerlib-menu-help",
       label: "Help",
-      submenu: []
+      submenu: [{ id: "powerlib-help-auto-shortcuts", label: "Auto Keyboard Shortcuts",
+        click: () => window.webContents.send("powerlib:menu-auto-shortcuts") }]
     }
   ];
 

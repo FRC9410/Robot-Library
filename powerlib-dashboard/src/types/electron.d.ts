@@ -92,6 +92,7 @@ declare global {
       getPathForFile: (file: File) => string;
       onMenuConnectionSettings: (callback: () => void) => () => void;
       onMenuToggleNetworkTables: (callback: () => void) => () => void;
+      onMenuAutoShortcuts: (callback: () => void) => () => void;
       onMenuFieldLayout: (callback: (_event: unknown, id: string) => void) => () => void;
       setFieldLayoutMenu: (id: string, uploadedAvailable?: boolean) => void;
       readUploadedField: () => Promise<UploadedField | null>;

@@ -121,7 +121,7 @@ fs.promises.rename = async (from,to) => {
   if(failNextSave && String(to).endsWith('powerlib-autos.json')){failNextSave=false;throw Error('Injected auto save failure');}
   return rename(from,to);
 };
-setTimeout(()=>{console.error('Autos editor check timed out.');app.exit(1);},90000).unref();
+setTimeout(()=>{console.error('Autos editor check timed out.');app.exit(1);},120000).unref();
 app.on('browser-window-created',(_event,created)=>{
   window=created;window.hide();window.webContents.setBackgroundThrottling(false);
   window.webContents.session.webRequest.onBeforeRequest({urls:['ws://*/*','wss://*/*']},(_details,done)=>done({cancel:true}));
@@ -131,9 +131,43 @@ app.on('browser-window-created',(_event,created)=>{
       assert.deepEqual(window.getSize(),[1920,1200],'Power Tool launches at the requested window size');
       await tab('Autos');
       await wait(()=>evaluate(`[...document.querySelectorAll('button')].some(el=>el.textContent==='New auto' && !el.disabled)`));
+      const shortcutItem=Menu.getApplicationMenu().getMenuItemById('powerlib-menu-help').submenu.items.find(item=>item.label==='Auto Keyboard Shortcuts');
+      assert.ok(shortcutItem,'Help includes Auto Keyboard Shortcuts');
+      const beforeHelp=readDoc();
+      for(const view of ['Dashboard','Logs','Autos']) {
+        await tab(view); shortcutItem.click();
+        await wait(()=>evaluate(`document.querySelector('[role=dialog]')?.textContent.includes('Auto keyboard shortcuts')`));
+        assert.ok(await evaluate(`(()=>{const dialog=document.querySelector('[role=dialog]');return dialog.getBoundingClientRect().width>0&&dialog.textContent.includes('Ctrl/Cmd click')&&dialog.textContent.includes('Select steps between');})()`));
+        assert.equal(await evaluate(`document.querySelector('[role=tab][aria-selected=true]').textContent`),view,'Help keeps the current tab');
+        await click('Done'); await wait(()=>evaluate(`!document.querySelector('[role=dialog]')`));
+      }
+      assert.deepEqual(readDoc(),beforeHelp,'Opening Help never changes auto data');
+      console.log('Help menu passed: production menu/preload opens Auto Keyboard Shortcuts from Dashboard, Logs and Autos without navigating or editing drafts.');
+      if(process.argv.includes('--help-only')) return;
+      if(process.argv.includes('--bumper-only')) {
+        await require('./auto-bumper-ui-check.cjs').checkAutoBumper({window,evaluate,click,wait,saved,fill,addStep,readDoc,screenshot});
+        return;
+      }
+      if(process.argv.includes('--points-only')) {
+        await require('./auto-points-pane-ui-check.cjs').checkPointsPaneUI({window,evaluate,click,wait,saved,fill,addStep,selectOption,readDoc,jsonPath,generatedPath,reloadApp,screenshot});
+        return;
+      }
+      if(process.argv.includes('--selection-only')||process.argv.includes('--snap-only')||process.argv.includes('--reorder-only')||process.argv.includes('--actions-only')) {
+        await click('New auto');
+        for(const [x,y] of [[1.5,2],[3.5,2],[5,3]]) { await addStep('Add point'); await fill('X (m)',x); await fill('Y (m)',y); }
+        await addStep('Add wait'); await saved();
+        if(process.argv.includes('--actions-only')) {
+          await require('./auto-step-actions-ui-check.cjs').checkStepActionsUI({window,evaluate,wait,saved,readDoc,selectStep,screenshot});
+          await require('./auto-step-drag-ui-check.cjs').checkStepDragUI({window,evaluate,wait,saved,readDoc,screenshot});
+        }
+        else if(process.argv.includes('--reorder-only')) await require('./auto-step-drag-ui-check.cjs').checkStepDragUI({window,evaluate,wait,saved,readDoc,screenshot});
+        else if(process.argv.includes('--snap-only')) await require('./auto-plus-snap-ui-check.cjs').checkPlusSnapUI({ window, evaluate, wait, saved, selectStep, readDoc });
+        else await require('./auto-selection-ui-check.cjs').checkSelectionUI({ window, evaluate, wait, saved, readDoc });
+        return;
+      }
       const baseline=javaSnapshot();
       await click('New auto');await fill('Auto name','UI basic');
-      assert.ok(await evaluate(`(()=>{const editor=document.querySelector('[aria-label="Autos editor"]'),steps=document.querySelector('[aria-label="Steps card"]');const box=editor.getBoundingClientRect(),cards=[...editor.children].slice(0,3).map(el=>el.getBoundingClientRect());const bar=document.querySelector('[role=tablist]').getBoundingClientRect();const gaps=[box.left,innerWidth-box.right,innerHeight-box.bottom,box.top-bar.bottom,cards[1].left-cards[0].right,cards[2].left-cards[1].right];return gaps.every(gap=>Math.abs(gap-12)<=1)&&!!steps.querySelector('button')&&[...steps.querySelectorAll('button')].some(el=>el.textContent==='Save')&&!document.querySelector('h1')&&![...document.querySelectorAll('button')].some(el=>el.textContent==='Generate Java'||el.textContent==='Reload');})()`),'Header is removed, Save is in Steps, and all outer/card gaps match');
+      assert.ok(await evaluate(`(()=>{const editor=document.querySelector('[aria-label="Autos editor"]'),steps=document.querySelector('[aria-label="Steps card"]');const box=editor.getBoundingClientRect(),cards=["Routines card","Auto field card","Steps card"].map(label=>document.querySelector('[aria-label="'+label+'"]').getBoundingClientRect());const bar=document.querySelector('[role=tablist]').getBoundingClientRect();const gaps=[box.left,innerWidth-box.right,innerHeight-box.bottom,box.top-bar.bottom,cards[1].left-cards[0].right,cards[2].left-cards[1].right];return gaps.every(gap=>Math.abs(gap-12)<=1)&&!!steps.querySelector('button')&&[...steps.querySelectorAll('button')].some(el=>el.textContent==='Save')&&!document.querySelector('h1')&&![...document.querySelectorAll('button')].some(el=>el.textContent==='Generate Java'||el.textContent==='Reload');})()`),'Header is removed, Save is in Steps, and all outer/card gaps match');
       assert.equal(await evaluate(`document.body.textContent.includes('Default auto') || document.body.textContent.includes("Clear this auto's state requests")`),false);
       assert.equal(await evaluate(`!!document.querySelector('[aria-label="Generated Java preview"]') || [...document.querySelectorAll('button')].some(el=>el.textContent==='Code')`),false);
       assert.ok(await evaluate(`(()=>{const name=[...document.querySelectorAll('input')].find(el=>el.labels?.[0]?.textContent==='Auto name');const alliance=[...document.querySelectorAll('[role=combobox]')].find(el=>el.closest('.MuiFormControl-root')?.textContent.includes('Alliance'));return Math.abs(name.getBoundingClientRect().top-alliance.getBoundingClientRect().top)<5;})()`),'Name and alliance share one row');
@@ -246,6 +280,13 @@ app.on('browser-window-created',(_event,created)=>{
       assert.ok(fs.readFileSync(generatedPath,'utf8').includes('.finallyDo(interrupted -> robot.clearRequest(OWNER))'));
       assert.ok(fs.readFileSync(generatedPath,'utf8').includes('.withHeadingTolerance(Rotation2d.fromDegrees(7.0))'));
       await screenshot('editor');
+      await require('./auto-duplicate-ui-check.cjs').checkDuplicateUI({ window, evaluate, click, wait, saved, selectStep, selectOption, fill, screenshot, readDoc, jsonPath, generatedPath, reloadApp });
+      await require('./auto-selection-ui-check.cjs').checkSelectionUI({ window, evaluate, wait, saved, readDoc });
+      await require('./auto-step-drag-ui-check.cjs').checkStepDragUI({window,evaluate,wait,saved,readDoc,screenshot});
+      await require('./auto-step-actions-ui-check.cjs').checkStepActionsUI({window,evaluate,wait,saved,readDoc,selectStep,screenshot});
+      await require('./auto-plus-snap-ui-check.cjs').checkPlusSnapUI({ window, evaluate, wait, saved, selectStep, readDoc });
+      await require('./auto-editing-ui-check.cjs').checkEditingUI({ window, evaluate, click, wait, saved, selectStep, selectOption, fill, screenshot, readDoc, jsonPath, generatedPath, reloadApp });
+      await require('./auto-points-pane-ui-check.cjs').checkPointsPaneUI({window,evaluate,click,wait,saved,fill,addStep,selectOption,readDoc,jsonPath,generatedPath,reloadApp,screenshot});
       window.setSize(1024,768);await screenshot('editor-1024');window.setSize(1920,1200);
       await window.webContents.reload();
       await tab('Autos');await wait(()=>evaluate(`[...document.querySelectorAll('input')].find(el=>el.labels?.[0]?.textContent==='Auto name')?.value==='UI basic'`));

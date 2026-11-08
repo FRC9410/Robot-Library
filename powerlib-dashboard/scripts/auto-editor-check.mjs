@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { build } from "esbuild";
 import { checkGeneratedCommands } from "./auto-command-check.mjs";
+import { checkAutoEditing } from "./auto-editing-check.mjs";
 
 const project = fileURLToPath(new URL("..", import.meta.url));
 const fixture = await fs.mkdtemp(path.join(os.tmpdir(), "power-tool-auto-check-"));
@@ -137,7 +138,7 @@ public final class HandwrittenAutos {
   assert.ok(model.hasErrors(model.validateAutos(badState, context)));
   for (const bad of [
     { ...document, version: 99 }, { ...document, autos: [{ ...auto, steps: [{ id: "unknown", type: "future" }] }] },
-    { ...document, autos: [{ ...auto, symmetry: { flipX: true, flipY: false } }] },
+    { ...document, cameras: [{ id: "unsupported-camera" }] },
     { ...document, autos: [{ ...auto, steps: [{ ...auto.steps[0], x: null }] }] },
     { ...document, autos: [{ ...auto, steps: [{ ...auto.steps[0], endHeadingTolerance: "7" }] }] },
     { ...document, autos: [{ ...auto, steps: [{ ...auto.steps[0], executeState: 123 }] }] },
@@ -176,6 +177,13 @@ public final class HandwrittenAutos {
   assert.ok(injected); assert.deepEqual(await sourceSnapshot(), beforeFailure, "Failed generation rolls back both Java files");
   state = await files.readAutoFiles(root);
   state = (await files.generateAutoCode(root, state.revision, state.sourceRevision, context.field)).state;
+
+  const editingDocument = await checkAutoEditing({ load, model, docs, context });
+  state = await files.saveAutoFiles(root, { ...state.document, points: editingDocument.points, autos: [...state.document.autos, ...editingDocument.autos] }, state.revision);
+  state = (await files.generateAutoCode(root, state.revision, state.sourceRevision, context.field)).state;
+  const editingJava = await fs.readFile(generatedPath, "utf8");
+  await files.generateAutoCode(root, state.revision, state.sourceRevision, context.field);
+  assert.equal(await fs.readFile(generatedPath, "utf8"), editingJava, "Named points and mirrored routines regenerate without source drift");
 
   if (!process.argv.includes("--skip-compile")) {
     const javaHome = process.env.POWERLIB_JAVA_HOME || path.join(process.env.PUBLIC || "C:/Users/Public", "wpilib/2026/jdk");

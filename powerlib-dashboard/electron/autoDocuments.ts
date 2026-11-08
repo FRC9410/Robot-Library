@@ -17,7 +17,7 @@ export function readAutoDocument(value: unknown): AutoDocument {
   if (raw.periodSeconds !== undefined && (!finite(raw.periodSeconds) || (raw.periodSeconds as number) <= 0)) throw Error("Invalid autonomous period.");
   for (const key of ["points", "cameras"]) {
     if (raw[key] !== undefined && !Array.isArray(raw[key])) throw Error(`Invalid ${key} list.`);
-    if ((raw[key] as unknown[] | undefined)?.length) unsupported();
+    if (key === "cameras" && (raw[key] as unknown[] | undefined)?.length) unsupported();
   }
   const ids = new Set<string>();
   let steps = 0;
@@ -25,6 +25,14 @@ export function readAutoDocument(value: unknown): AutoDocument {
     if (typeof value !== "string" || !value || value.length > 200 || ids.has(value)) throw Error("Auto and step IDs must be unique, nonempty strings.");
     ids.add(value);
   };
+  const pointIds = new Set<string>();
+  const points = (raw.points ?? []) as unknown[];
+  if (points.length > 5000) throw Error("Auto document exceeds 5000 named points.");
+  for (const entry of points) {
+    const point = record(entry); id(point.id); pointIds.add(point.id as string);
+    if (typeof point.name !== "string" || point.name.length > 100 || /[\x00-\x1f\x7f]/.test(point.name)) throw Error("Invalid named point name.");
+    if (![point.x, point.y, point.heading].every(finite)) throw Error("Named point coordinates must be finite numbers.");
+  }
   for (const entry of raw.autos) {
     const auto = record(entry); id(auto.id);
     if (typeof auto.name !== "string" || auto.name.length > 100 || /[\x00-\x1f\x7f]/.test(auto.name)) throw Error("Auto names must be single-line text up to 100 characters.");
@@ -33,7 +41,6 @@ export function readAutoDocument(value: unknown): AutoDocument {
     if (auto.symmetry !== undefined) {
       const symmetry = record(auto.symmetry);
       for (const key of ["flipX", "flipY"]) if (symmetry[key] !== undefined && typeof symmetry[key] !== "boolean") throw Error("Invalid symmetry setting.");
-      if (symmetry.flipX || symmetry.flipY) unsupported();
     }
     if (!Array.isArray(auto.steps)) throw Error("Every auto must have a step list.");
     steps += auto.steps.length;
@@ -50,7 +57,8 @@ export function readAutoDocument(value: unknown): AutoDocument {
             if (step[key] != null && typeof step[key] !== "string") throw Error("Point state settings must name a robot state or be null.");
           if (step.stateTimeoutSeconds != null && !finite(step.stateTimeoutSeconds)) throw Error("Point state timeout must be a finite number or null.");
           if (step.subpoints !== undefined && !Array.isArray(step.subpoints)) throw Error("Invalid subpoint list.");
-          if ((step.subpoints as unknown[] | undefined)?.length || step.pointId || step.maxTurnRate != null) unsupported();
+          if (step.pointId != null && (typeof step.pointId !== "string" || !pointIds.has(step.pointId))) throw Error("Drive point links must reference an existing named point.");
+          if ((step.subpoints as unknown[] | undefined)?.length || step.maxTurnRate != null) unsupported();
           if (step.turn !== undefined && record(step.turn).mode !== "now") unsupported();
           break;
         case "requestState":

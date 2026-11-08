@@ -1,0 +1,52 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+
+exports.checkPointsPaneUI = async ({window,evaluate,click,wait,saved,fill,addStep,selectOption,readDoc,jsonPath,generatedPath,reloadApp,screenshot}) => {
+  const original=fs.existsSync(jsonPath)?fs.readFileSync(jsonPath,'utf8'):null, java=fs.readFileSync(generatedPath,'utf8');
+  const initialAutos=readDoc()?.autos.length??0;
+  assert.ok(await evaluate(`(()=>{const card=document.querySelector('[aria-label="Routines card"]'),a=[...card.querySelectorAll('button')].find(el=>el.textContent==='New auto').getBoundingClientRect(),b=[...card.querySelectorAll('button')].find(el=>el.textContent==='Duplicate auto').getBoundingClientRect(),line=card.querySelector('hr').getBoundingClientRect(),toggle=card.querySelector('[aria-label="Auto library view"]').getBoundingClientRect();return toggle.bottom<line.top&&line.bottom<=a.top&&a.bottom<=b.top;})()`),'Toggle is at the top; divider, New auto and Duplicate auto are ordered at the bottom');
+  await click('Points'); await wait(()=>evaluate(`!!document.querySelector('[aria-label="Named point editor"]') && !document.querySelector('[aria-label="Steps card"]')`));
+  assert.equal(await evaluate(`[...document.querySelectorAll('[aria-label="Auto library view"] button')].find(el=>el.textContent==='Points').getAttribute('aria-pressed')`),'true');
+  await click('New point'); await fill('Point name','Sidebar target'); await fill('X (m)',2); await fill('Y (m)',3); await fill('Heading (deg)',90); await saved();
+  const targetId=readDoc().points.find(point=>point.name==='Sidebar target').id;
+  assert.equal(readDoc().autos.length,initialAutos,'A named point can be created without creating an auto');
+  assert.equal(await evaluate(`!!document.querySelector('[role=dialog]')`),false,'Point editing has no dialog');
+  await click('New point'); await fill('Point name','Sidebar target');
+  assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(el=>el.textContent==='Save').disabled`),true,'Duplicate point names block Save');
+  await fill('Point name','Sidebar other'); await fill('X (m)',5); await fill('Y (m)',5); await saved();
+  assert.equal(await evaluate(`document.querySelectorAll('[data-drive-leg],[data-add-point-handle]').length`),0,'Named points are not connected as a routine');
+  await click('Routines'); await wait(()=>evaluate(`!!document.querySelector('[aria-label="Steps card"]')`));
+  assert.equal(await evaluate(`!!document.querySelector('[aria-label="Auto editing tools"],[role=dialog]')`),false,'Old Edit/settings button and point dialog are removed');
+  for(const name of ['Sidebar A','Sidebar B']) {
+    await click('New auto'); await fill('Auto name',name); await addStep('Add point'); await selectOption('Named point','Sidebar target');
+  }
+  await saved();
+  await click('Points');
+  await evaluate(`[...document.querySelectorAll('[aria-label="Named points"] .MuiListItemButton-root')].find(el=>el.textContent.includes('Sidebar target')).click()`);
+  await fill('X (m)',2.5); await saved();
+  const links=()=>readDoc().autos.flatMap(auto=>auto.steps.filter(step=>step.type==='drive'&&step.pointId===targetId));
+  assert.equal(links().length,2); assert.ok(links().every(step=>step.x===2.5),'Side editor updates links in both routines');
+  const coordinate=async(x,y)=>evaluate(`(()=>{const svg=document.querySelector('svg[aria-label="Field and robot position"]'),length=Number(svg.dataset.fieldLength),width=Number(svg.dataset.fieldWidth),p=new DOMPoint(${x}/length*(480*length/width),480-${y}/width*480).matrixTransform(svg.getScreenCTM());return {x:Math.round(p.x),y:Math.round(p.y)};})()`);
+  const start=await coordinate(2.5,3),end=await coordinate(2.9,3.7);
+  window.webContents.sendInputEvent({type:'mouseMove',...start}); window.webContents.sendInputEvent({type:'mouseDown',...start,button:'left',clickCount:1});
+  window.webContents.sendInputEvent({type:'mouseMove',...end,modifiers:['leftButtonDown','control']});
+  await wait(()=>evaluate(`Number([...document.querySelectorAll('input')].find(el=>el.labels?.[0]?.textContent==='X (m)').value)>2.7`));
+  window.webContents.sendInputEvent({type:'mouseUp',...end,button:'left',clickCount:1});
+  await wait(()=>readDoc().points.find(point=>point.id===targetId).x>2.7); await saved();
+  assert.ok(links().every(step=>Math.abs(step.x-2.9)<.03&&Math.abs(step.y-3.7)<.03),'Field edits move named-point links');
+  window.webContents.sendInputEvent({type:'keyDown',keyCode:'Z',modifiers:['control']}); window.webContents.sendInputEvent({type:'keyUp',keyCode:'Z',modifiers:['control']});
+  await wait(()=>readDoc().points.find(point=>point.id===targetId).x===2.5); await saved();
+  assert.ok(links().every(step=>step.x===2.5&&step.y===3),'Undo restores the named point and every link together');
+  await screenshot('points-side-editor'); window.setSize(1024,768); await screenshot('points-side-editor-1024'); window.setSize(1920,1200);
+  await click('Save'); await wait(()=>evaluate(`document.querySelector('[data-auto-code-current]').dataset.autoCodeCurrent==='true'`));
+  assert.ok(fs.readFileSync(generatedPath,'utf8').includes('SIDEBAR_TARGET'));
+  await reloadApp(); await click('Points');
+  await evaluate(`[...document.querySelectorAll('[aria-label="Named points"] .MuiListItemButton-root')].find(el=>el.textContent.includes('Sidebar target')).click()`);
+  assert.equal(await evaluate(`[...document.querySelectorAll('input')].find(el=>el.labels?.[0]?.textContent==='X (m)').value`),'2.5','Side editor reads persisted named points after restart');
+  await evaluate(`document.querySelector('[aria-label="Delete named point Sidebar target"]').click()`); await saved();
+  assert.equal(links().length,0);
+  assert.ok(readDoc().autos.filter(auto=>['Sidebar A','Sidebar B'].includes(auto.name)).every(auto=>auto.steps[0].x===2.5&&auto.steps[0].pointId===null),'Deleting preserves linked coordinates');
+  if(original===null) fs.unlinkSync(jsonPath); else fs.writeFileSync(jsonPath,original);
+  fs.writeFileSync(generatedPath,java); await reloadApp();
+  console.log('Points pane passed: highlighted switch, button/divider placement, no settings/dialogs, standalone creation, right-side editing, name validation, shared links, field drag/undo, Save, reload and unlinking.');
+};

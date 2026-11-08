@@ -97,13 +97,13 @@ export type CameraMount = {
 
 /** `periodSeconds` is the autonomous period the replay timeline marks (20 s in 2026 REBUILT). */
 /**
- * The powerlib-autos.json format version. Keep in step with autosFileVersion in electron/autoFiles.ts,
- * which refuses to write over a file with a higher number. Raise both when older copies would lose
+ * The powerlib-autos.json format version, also used by the file guards, which refuse
+ * to write over a file with a higher number. Raise it when older copies would lose
  * something by reading and saving the file, such as a new step type; new fields older copies can
  * ignore don't need it, since parseAutoDocument keeps fields it doesn't know. Changes to execution
  * semantics also need a version bump so older generators cannot silently omit them.
  */
-export const autosFileVersion = 4;
+export const autosFileVersion = 5;
 
 export type AutoDocument = { version: typeof autosFileVersion; periodSeconds: number; points: NamedPoint[]; cameras: CameraMount[]; autos: AutoRoutine[] };
 export const defaultPeriodSeconds = 20;
@@ -535,6 +535,14 @@ const constraintNames: Record<keyof LegConstraints, string> = {
 /** Mirrors the exceptions Auto, AutoBuilder and DriveConstraints throw, plus field sanity checks. */
 export function validateAutos(document: AutoDocument, project: AutoProject): AutoIssue[] {
   const issues: AutoIssue[] = [];
+  const pointNames = new Set<string>();
+  for (const point of document.points) {
+    const name = point.name.trim();
+    if (!name || pointNames.has(name) || ![point.x, point.y, point.heading].every(Number.isFinite)) {
+      issues.push({ autoId: document.autos[0]?.id ?? "", severity: "error", message: "Named points need unique names and finite coordinates." });
+    }
+    pointNames.add(name);
+  }
   const names = new Map<string, number>();
   const registered = document.autos.flatMap(auto => [auto, mirroredAuto(auto, project.field)].filter((candidate): candidate is AutoRoutine => candidate !== null));
   for (const auto of registered) names.set(auto.name.trim(), (names.get(auto.name.trim()) ?? 0) + 1);

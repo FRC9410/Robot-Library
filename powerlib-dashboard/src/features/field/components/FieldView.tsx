@@ -2,6 +2,7 @@ import { useId } from "react";
 import type { KeyboardEventHandler, MouseEventHandler, PointerEventHandler, ReactNode } from "react";
 import type { FieldLayout } from "../fieldLayouts";
 import { FieldBackdrop } from "./FieldBackdrop";
+import { RobotFootprint } from "./RobotFootprint";
 
 type FieldViewProps = {
   dimensions: { length: number; width: number };
@@ -14,6 +15,7 @@ type FieldViewProps = {
   emptyMessage?: string;
   children?: ReactNode;
   onClick?: MouseEventHandler<SVGSVGElement>;
+  onPointerDown?: PointerEventHandler<SVGSVGElement>;
   onPointerMove?: PointerEventHandler<SVGSVGElement>;
   onPointerUp?: PointerEventHandler<SVGSVGElement>;
   onPointerCancel?: PointerEventHandler<SVGSVGElement>;
@@ -22,7 +24,7 @@ type FieldViewProps = {
 };
 
 /** All views use blue-origin meters; flipping changes only the display. */
-export function FieldView({ dimensions, layout, pose, flip = false, labels = false, padding = 12, emptyMessage, children, onClick, onPointerMove, onPointerUp, onPointerCancel, onLostPointerCapture, onKeyDown }: FieldViewProps) {
+export function FieldView({ dimensions, layout, pose, flip = false, labels = false, padding = 12, emptyMessage, children, onClick, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onLostPointerCapture, onKeyDown }: FieldViewProps) {
   const gridId = `field-grid-${useId().replaceAll(":", "")}`;
   const field = layout ?? dimensions;
   const height = 480;
@@ -30,7 +32,7 @@ export function FieldView({ dimensions, layout, pose, flip = false, labels = fal
   const outOfBounds = pose && (pose.x < 0 || pose.x > field.length || pose.y < 0 || pose.y > field.width);
   return <svg viewBox={`${-padding} ${-padding} ${width + padding * 2} ${height + padding * 2}`} role="img" aria-label="Field and robot position"
     tabIndex={onKeyDown ? -1 : undefined}
-    onClick={onClick} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}
+    onClick={onClick} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}
     onLostPointerCapture={onLostPointerCapture} onKeyDown={onKeyDown}
     data-field-layout={layout?.id ?? "none"} data-field-length={field.length} data-field-width={field.width}
     preserveAspectRatio="xMidYMid meet">
@@ -47,7 +49,7 @@ export function FieldView({ dimensions, layout, pose, flip = false, labels = fal
       </>}
       {pose && !outOfBounds && <g data-robot-pose="true"
         transform={`translate(${pose.x / field.length * width} ${height - pose.y / field.width * height}) rotate(${-pose.heading})`}>
-        <rect x="-15" y="-15" width="30" height="30" rx="4" fill="#ffdc00" stroke="#fff" strokeWidth="2" />
+        <RobotFootprint scale={height / field.width} fill="#ffdc00" stroke="#fff" />
         <path d="M -5 -7 L 9 0 L -5 7" fill="none" stroke="#14212c" strokeWidth="4" />
       </g>}
       {children}

@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AutoFilesState } from "../../../electron/autoFiles";
-import { emptyDocument, generateAutosJava, hasErrors, validateAutos, type AutoDocument, type AutoProject } from "./autoModel";
+import { emptyDocument, generateAutosJava, hasErrors, validateAutos, type AutoProject } from "./autoModel";
+import { useAutoHistory } from "./useAutoHistory";
 
 type Dimensions = { length: number; width: number };
 
 export function useAutoEditor(field: Dimensions) {
-  const [document, setDocument] = useState<AutoDocument>(emptyDocument);
+  const history = useAutoHistory(emptyDocument);
+  const { document, setDocument, reset } = history;
   const [files, setFiles] = useState<AutoFilesState | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -34,11 +36,11 @@ export function useAutoEditor(field: Dimensions) {
       if (!mounted.current || sequence !== loadSequence.current) return;
       const next = state.document ?? emptyDocument();
       saved.current = JSON.stringify(next); current.current = next;
-      accept(state); setDocument(next);
+      accept(state); reset(next);
       if (state.error) setError(state.error);
     } catch (caught) { if (mounted.current && sequence === loadSequence.current) setError(caught instanceof Error ? caught.message : "Could not read autos."); }
     finally { if (mounted.current && sequence === loadSequence.current) setLoading(false); }
-  }, [accept]);
+  }, [accept, reset]);
 
   useEffect(() => {
     mounted.current = true; void reload();
@@ -69,10 +71,10 @@ export function useAutoEditor(field: Dimensions) {
 
   const dirty = JSON.stringify(document) !== saved.current;
   useEffect(() => {
-    if (!dirty || loading || files?.error || generating) return;
+    if (!dirty || loading || files?.error || generating || history.gesturing) return;
     const timer = window.setTimeout(() => { void flush().catch(report); }, 600);
     return () => window.clearTimeout(timer);
-  }, [document, dirty, loading, files?.error, generating, flush, report]);
+  }, [document, dirty, loading, files?.error, generating, history.gesturing, flush, report]);
 
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
@@ -91,7 +93,7 @@ export function useAutoEditor(field: Dimensions) {
   useEffect(() => { setMessage(""); }, [document]);
 
   async function generate() {
-    if (generating || loading || files?.error) return;
+    if (generating || loading || files?.error || history.gesturing) return;
     setGenerating(true); setError(""); setMessage("");
     try {
       await flush();
@@ -105,6 +107,6 @@ export function useAutoEditor(field: Dimensions) {
   }
 
   return { document, setDocument, files, loading, saving, generating, dirty, error, message, project, issues,
-    generatedCurrent, reload, save: generate,
+    generatedCurrent, reload, save: generate, history,
     readOnly: loading || generating || !files || !!files.error };
 }

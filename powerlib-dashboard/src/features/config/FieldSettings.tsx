@@ -6,6 +6,7 @@ import { fieldLayouts, noFieldLayout, setFieldLayoutId } from "../field/fieldLay
 import { useFieldLayout } from "../field/useFieldLayout";
 import { useUploadedField } from "../field/useUploadedField";
 import { FieldUpload } from "./FieldUpload";
+import { BumperSettings } from "./BumperSettings";
 
 export function FieldSettings() {
   const settings = useDashboardSettings();
@@ -39,6 +40,7 @@ export function FieldSettings() {
           {fieldLayouts.map(option => <MenuItem key={option.id} value={option.id}>{option.label}</MenuItem>)}
           {uploaded && <MenuItem value={uploaded.id}>{uploaded.label} (uploaded)</MenuItem>}
         </TextField>
+        <BumperSettings />
         <FieldUpload dimensions={field} />
         <Box><Typography variant="subtitle1" sx={{ fontWeight: 650 }}>Field dimensions</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>{layout

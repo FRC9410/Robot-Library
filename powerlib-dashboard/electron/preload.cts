@@ -52,6 +52,11 @@ contextBridge.exposeInMainWorld("powerlib", {
     ipcRenderer.on("powerlib:menu-toggle-network-tables", callback);
     return () => ipcRenderer.removeListener("powerlib:menu-toggle-network-tables", callback);
   },
+  onMenuAutoShortcuts: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("powerlib:menu-auto-shortcuts", listener);
+    return () => ipcRenderer.removeListener("powerlib:menu-auto-shortcuts", listener);
+  },
   onMenuFieldLayout: (callback: (_event: unknown, id: string) => void) => {
     ipcRenderer.on("powerlib:menu-field-layout", callback);
     return () => ipcRenderer.removeListener("powerlib:menu-field-layout", callback);
