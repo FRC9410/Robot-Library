@@ -6,6 +6,9 @@
   "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {
+    "check:fields": "node scripts/field-layout-check.mjs",
+    "check:autos": "node scripts/auto-editor-check.mjs",
+    "check:field-upload": "node scripts/field-upload-check.mjs",
     "check:telemetry": "node scripts/telemetry-buffer-check.mjs",
     "check:dashboard": "node scripts/dashboard-model-check.mjs",
     "check:config": "node scripts/config-check.mjs",

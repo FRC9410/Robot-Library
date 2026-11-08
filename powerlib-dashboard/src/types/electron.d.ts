@@ -6,6 +6,9 @@ import type { LocalizationConfig } from "../../electron/localizationConfig";
 import type { TunedSourceSave } from "../../electron/java-config/service";
 import type { MigrationChange } from "../../electron/java-config/legacyMigration";
 import type { TuningConnection, TuningSessionValue, TuningSessionFile } from "../../electron/tuningSession";
+import type { UploadedField } from "../../electron/uploadedField";
+import type { AutoFilesState } from "../../electron/autoFiles";
+import type { AutoDocument } from "../../electron/autoModel";
 export {};
 
 export type OpenedLog = {
@@ -24,6 +27,9 @@ declare global {
       platform: NodeJS.Platform;
       showAppMenu: (menuId: string, position: { x: number; y: number }) => Promise<void>;
       readConstants: () => Promise<ConstantsFile[]>;
+      readAutos: () => Promise<AutoFilesState>;
+      saveAutos: (document: AutoDocument, revision: string) => Promise<AutoFilesState>;
+      generateAutos: (revision: string, sourceRevision: string, field: { length: number; width: number }) => Promise<{ generatedPath: string; hookAdded: boolean; state: AutoFilesState }>;
       readTuningSession: (connection: TuningConnection) => Promise<TuningSessionFile>;
       saveTuningSession: (connection: TuningConnection, values: TuningSessionValue[]) => Promise<TuningSessionFile>;
       readLegacyMigration: () => Promise<{ revision: string; files: string[]; changes: MigrationChange[] }>;
@@ -86,6 +92,11 @@ declare global {
       getPathForFile: (file: File) => string;
       onMenuConnectionSettings: (callback: () => void) => () => void;
       onMenuToggleNetworkTables: (callback: () => void) => () => void;
+      onMenuFieldLayout: (callback: (_event: unknown, id: string) => void) => () => void;
+      setFieldLayoutMenu: (id: string, uploadedAvailable?: boolean) => void;
+      readUploadedField: () => Promise<UploadedField | null>;
+      saveUploadedField: (field: UploadedField) => Promise<UploadedField>;
+      removeUploadedField: () => Promise<void>;
       onMenuUpdateSubsystemCode: (callback: () => void) => () => void;
       onMenuUpdateInstallSection: (callback: (_event: unknown, section: string) => void) => () => void;
       onMenuUpdatePowerTool: (callback: () => void) => () => void;

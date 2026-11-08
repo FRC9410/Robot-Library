@@ -29,6 +29,7 @@ try {
     & $GradleExecutable --offline --no-daemon --console=plain -g (Join-Path $root 'build/validation-gradle-cache') -I (Join-Path $root 'install.gradle') robotLibraryInstall -PpowerlibInteractive=false -PpowerlibInstall=true -PpowerlibInstallLib=true -PpowerlibInstallTemplates=true -PpowerlibInstallVendordeps=false -PpowerlibInstallTools=false -PpowerlibInstallDashboard=false -PpowerlibInstallSkills=false -PpowerlibSkipBuild=true *> $installLog
     if ($LASTEXITCODE -ne 0) { throw (Get-Content $installLog -Tail 35 | Out-String) }
     foreach ($helper in @('health/HealthChecks.java', 'controls/ButtonBindings.java', 'auto/Auto.java',
+        'auto/DriveConstraints.java', 'auto/DriveToPoseController.java', 'auto/LegSubpoints.java', 'auto/LegHeading.java',
         'configs/LimelightHeadingConfig.java', 'configs/VisionHeadingInitializationConfig.java',
         'configs/VisionPoseFilterConfig.java', 'vision/VisionPoseFilter.java',
         'vision/LimelightVision.java', 'vision/VisionHeadingInitializer.java', 'vision/VisionHeadingReadiness.java',
@@ -39,7 +40,18 @@ try {
     }
     $robotAutos = Join-Path $fixture 'src/main/java/frc/robot/autos/RobotAutos.java'
     if (-not (Test-Path -LiteralPath $robotAutos)) { throw 'Fresh install omitted RobotAutos template.' }
+    $generatedAutos = Join-Path $fixture 'src/main/java/frc/robot/autos/GeneratedAutos.java'
+    if (-not (Test-Path -LiteralPath $generatedAutos)) { throw 'Fresh install omitted GeneratedAutos template.' }
+    if (-not ([IO.File]::ReadAllText($robotAutos).Contains('GeneratedAutos.register(autoBuilder, robot);'))) {
+        throw 'Fresh RobotAutos does not register generated autos.'
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $fixture 'src/main/java/frc/robot/commands/DriveToPose.java'))) {
+        throw 'Fresh install omitted DriveToPose command.'
+    }
     $robotContainer = Join-Path $fixture 'src/main/java/frc/robot/RobotContainer.java'
+    if (-not ([IO.File]::ReadAllText($robotContainer).Contains('new AutoBuilder(pose -> new DriveToPose(stateMachine.drivetrain, pose))'))) {
+        throw 'Fresh RobotContainer does not configure its drive-to-point factory.'
+    }
     if (-not ([IO.File]::ReadAllText($robotContainer).Contains('RobotAutos.register(autoBuilder, stateMachine);'))) {
         throw 'Fresh RobotContainer does not register RobotAutos before publishing the chooser.'
     }
@@ -52,9 +64,12 @@ try {
         'public static void register(AutoBuilder autoBuilder, StateMachine robot) {',
         'public static void register(AutoBuilder autoBuilder, StateMachine robot) { autoBuilder.addAuto("Custom Auto", edu.wpi.first.wpilibj2.command.Commands::none);')
     [IO.File]::WriteAllText($robotAutos, $customAutoSource)
+    $customGeneratedSource = [IO.File]::ReadAllText($generatedAutos) + "`n// Preserve generated routines during reinstall.`n"
+    [IO.File]::WriteAllText($generatedAutos, $customGeneratedSource)
     & $GradleExecutable --offline --no-daemon --console=plain -g (Join-Path $root 'build/validation-gradle-cache') -I (Join-Path $root 'install.gradle') robotLibraryInstall -PpowerlibInteractive=false -PpowerlibInstall=true -PpowerlibInstallLib=true -PpowerlibInstallTemplates=true -PpowerlibInstallVendordeps=false -PpowerlibInstallTools=false -PpowerlibInstallDashboard=false -PpowerlibInstallSkills=false -PpowerlibSkipBuild=true *> (Join-Path $fixture 'reinstall.log')
     if ($LASTEXITCODE -ne 0) { throw (Get-Content (Join-Path $fixture 'reinstall.log') -Tail 35 | Out-String) }
     if ([IO.File]::ReadAllText($robotAutos) -cne $customAutoSource) { throw 'Reinstall overwrote custom RobotAutos.' }
+    if ([IO.File]::ReadAllText($generatedAutos) -cne $customGeneratedSource) { throw 'Reinstall overwrote GeneratedAutos.' }
     if (Test-Path -LiteralPath "$robotAutos.template") { throw 'Reinstall created an unnecessary RobotAutos template copy.' }
     Write-Host 'Reinstall preserved custom robot autos without creating a template copy.'
 

@@ -1,4 +1,3 @@
-import { template } from "../dashboard/dashboardModel";
 import { indexAt } from "./logModel";
 import type { LogMechanism, LogModel, Series } from "./logModel";
 
@@ -79,20 +78,6 @@ export const formatMatchClock = (seconds: number) => {
   return `${Math.floor(whole / 60)}:${(whole % 60).toString().padStart(2, "0")}`;
 };
 
-/** The same field size and flip the Dashboard tab is set to on this machine. */
-export function readFieldSettings() {
-  const defaults = { length: template.field.lengthMeters, width: template.field.widthMeters, flip: false };
-  try {
-    const saved = JSON.parse(localStorage.getItem("powerlib.driveDisplay.v1") || "{}");
-    return {
-      length: typeof saved.length === "number" && saved.length > 0 ? saved.length : defaults.length,
-      width: typeof saved.width === "number" && saved.width > 0 ? saved.width : defaults.width,
-      flip: saved.flip === true
-    };
-  } catch {
-    return defaults;
-  }
-}
 
 export function readSaved<T>(key: string, fallback: T, valid: (value: unknown) => value is T): T {
   try {

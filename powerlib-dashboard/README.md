@@ -1,5 +1,98 @@
 # Power Tool
 
+## Shared field layouts
+
+Choose **View → Field Layout** or **Config → Field → Field layout** to select the
+2026 REBUILT simplified drawing, 2026 field image, 2025 REEFSCAPE field image, or
+**None (custom dimensions)**. Dashboard, its thumbnail, the Autos field preview,
+and Logs position/heat-map views share the selection and blue-origin coordinates.
+Logs retains its vertical field presentation, robot trail, heat map, and swerve view.
+
+Layouts supply their calibrated dimensions. Choose None to edit custom dimensions;
+switching layouts preserves those custom values. These display preferences stay
+on this laptop and do not change robot Java or the coordinates stored in a log.
+Autos uses this shared field for its routine editor.
+
+## Autos editor
+
+Power Tool opens at 1920 × 1200. Create a routine with **New auto**. The Steps panel
+has one **Add step** dropdown with **Add point**, **Add wait**, **Execute state**, and
+**Wait for state**. The standalone state steps use a Robot state dropdown and run
+in list order. A drive point's
+settings include optional **Execute state** and **Wait for state** dropdowns, both
+None by default. After arrival, the robot requests the Execute state if set, then
+waits for the selected actual state if set, before proceeding. State waits have no
+timeout; older saved state timeouts are disabled. Either option works independently.
+Add wait inserts a timed delay. The settings divider stays outside the scroll area.
+All new steps go immediately after the selected step, or at the end when none is
+selected. Each step row has a trash icon. Select a step to edit its settings. Empty
+field clicks do nothing. Create the first point with **Add step → Add point**.
+Select a point to show its green **+** handle, then drag it to preview a new point and release
+to insert it immediately after its source. The new point inherits the source heading;
+the source stays fixed. Clicking the handle without dragging adds nothing; Escape
+or pointer cancellation discards the preview. Dragging a point's center changes
+its position. Select a drive point and drag the handle at the tip of its heading
+arrow to turn it without moving the point. The handle also accepts arrow keys
+(1 degree, or 15 degrees with Shift); the numeric heading remains editable.
+Numbers sit inside point dots; the selected point is filled without a focus box.
+The dotted segment leading into the selected point is highlighted white and thicker.
+Field drags do not select text or highlight the field border, and creation handles
+only appear on the selected point, hide while dragging the heading, and return on release.
+The first point is the simulation start. Existing standalone state steps from older
+documents retain their original order and behavior. Existing point state actions
+also remain available and unchanged. Mid-drive progress actions are planned for a later phase.
+Name and alliance share one
+row above the field. Delete a routine from its list row; confirmation is required.
+Generated routines are never defaults: None remains the initial chooser selection.
+Every generated routine clears its owned state request on completion or cancellation.
+This releases the requested state so another request or the fallback state can take
+over; it does not clear other owners' requests. The center contains the field and
+name/alliance controls, with no code preview or optional cleanup controls.
+
+Drive steps finish within their distance and measured-speed tolerances. Enable
+**Wait for heading** to also require alignment with the commanded heading; its
+default tolerance is 10 degrees, adjustable above 0 through 180 degrees. It is off
+for new steps and older documents. Java callers can opt in with
+`.withHeadingTolerance(Rotation2d.fromDegrees(10))`. Saved documents use version 4
+so older generators cannot silently ignore point state actions or heading completion.
+
+Edits autosave to the detected robot project's `power-tool/generated/powerlib-autos.json`.
+The single **Save** button stays at the bottom of Steps. It flushes the authoring
+document, updates `GeneratedAutos.java`, and adds the registration hook without
+replacing handwritten routines. There is no Autos header/toolbar; outer margins and
+card gaps are all 12 px. **Build Robot** remains compile-only. Build and restart
+simulation or deploy after saving. The
+generation step uses current Java state names and rejects duplicate auto names,
+invalid steps, source conflicts, and files owned by handwritten code. Reload reads
+current project files through the Reload action shown with a save/read error;
+unsaved changes require confirmation before discarding. Reopening the app also reads
+current Java state names and handwritten autos.
+Newer or unsupported auto formats are preserved read-only.
+
+`npm run check:autos` validates persistence, version guards, name/state checks,
+recoverable Java writes, source preservation, generated-code compilation, and command
+execution with real WPILib scheduling and stubbed hardware. Run the library checks
+and generated-robot fixture first. `scripts/auto-editor-electron-check.cjs` checks the
+real App/preload/IPC workflow in an isolated robot with robot connections blocked;
+its Build Robot action uses a fixture stub. The real robot is built separately.
+
+In **Config → Field → Upload a field**, drop a PNG, JPEG, or WebP image or click
+the drop box to browse (up to 10 MB). Preview it, set a name and full field length
+and width in meters, then save. Use an image cropped to the field edges with the
+blue origin at the bottom left; the rotation checkbox can turn it 180 degrees.
+The saved upload is selected immediately in every field view and is also available
+under **View → Field Layout → Uploaded field**. Edit its name, dimensions, or
+orientation with **Edit uploaded field**, or replace/remove it from Config.
+The image is copied into Power Tool's local app data and survives moving the original
+file or restarting the app. Built-in layouts and saved custom grid dimensions are preserved.
+
+Run `npm run check:fields` for field geometry checks. Run
+`npm run check:field-upload` for uploaded-field validation and persistence checks. Run
+`node_modules/electron/dist/electron.exe scripts/field-layout-electron-check.cjs`
+for the isolated App/menu/preload check, or append an installed `power-tool` path
+to run the same check against that copy. It blocks robot connections, generates
+a sample log, and saves screenshots under `build/dashboard-checks/`.
+
 Electron React app for Team 9410 PowerLib tools and FRC NT4 NetworkTables.
 
 ## Setup

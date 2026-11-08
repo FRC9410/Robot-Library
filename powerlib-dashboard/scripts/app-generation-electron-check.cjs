@@ -36,7 +36,7 @@ buildSync({ stdin: { contents: `
       {tuned&&<SaveTunedValuesDialog open topics={tuned} onClose={()=>setTuned(null)}/>}</>;
   }
   createRoot(document.getElementById('root')).render(<Fixture/>);
-`, resolveDir: project, loader: 'jsx' }, bundle: true, platform: 'browser', format: 'iife', outfile: path.join(ui, 'fixture.js'), define: { 'process.env.NODE_ENV': '"production"' } });
+`, resolveDir: project, loader: 'jsx' }, bundle: true, loader: { ".png": "file" }, platform: 'browser', format: 'iife', outfile: path.join(ui, 'fixture.js'), define: { 'process.env.NODE_ENV': '"production"' } });
 fs.writeFileSync(path.join(ui, 'index.html'), '<html><head><link rel="stylesheet" href="fixture.css"></head><body><div id="root"></div><script src="fixture.js"></script></body></html>');
 
 async function renderRun(code) { return window.webContents.executeJavaScript(`(async()=>{${helpers}\n${code}})()`); }

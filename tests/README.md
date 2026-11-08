@@ -4,6 +4,7 @@ Run these checks from the Robot-Library root in PowerShell 7. They write fixture
 
 ```powershell
 ./tests/run-library-checks.ps1
+./tests/drive-to-pose-check.ps1
 ./tests/state-machine-check.ps1
 ./tests/generator-checks.ps1
 ./tests/generated-robot-check.ps1
@@ -12,6 +13,9 @@ Push-Location powerlib-dashboard
 try {
     node scripts/telemetry-buffer-check.mjs --java-fixture
     node scripts/dashboard-model-check.mjs
+    npm run check:fields
+    npm run check:field-upload
+    npm run check:autos
     node scripts/config-check.mjs
     node scripts/subscription-check.mjs
     node scripts/tuning-check.mjs
@@ -30,6 +34,17 @@ publications in memory without connecting to a robot.
 checks the production View menu/preload with an in-memory NT client: right-side drawer layout, filtering, menu/close/Escape toggles, full-topic subscription cleanup, and Logs navigation, window sizing and preservation across tab switches. Robot connections are blocked.
 
 The generated-robot check runs the actual installer in an isolated fixture, compiles the full robot template with real WPILib/vendor jars, runs the shared Java source editor, verifies initializer-only edits and unchanged custom source, and compiles all four mechanism types. Supply `-GradleExecutable` if Gradle 8.11 is outside the normal WPILib cache. This validates Java compilation, not deployment to a roboRIO.
+
+`auto-editor-check.mjs` uses a disposable copy of that fixture, checks authoring-only
+saves and explicit generation, stale revisions, newer/unsupported documents, name and
+state validation, handwritten-source protection, idempotent registration, failed-write
+rollback, and removal of generated routines. It compiles the emitted source against
+the full robot and real dependencies. Its generated-command behavior check uses real
+WPILib scheduling with hardware-owning classes replaced to verify actual-state waits,
+timeouts, normal/cancel owner cleanup, fresh factories, and simulation-only pose seeding.
+`auto-editor-electron-check.cjs` additionally checks the production UI/preload/IPC,
+autosave/reload, field insertion, preview, generation, deletion, failed-save draft
+retention, and read-only protection. Screenshots remain under `build/dashboard-checks/`.
 
 The app-generation check uses the actual Config wizard and Save Tuned Values dialog with the production preload, IPC handlers, direct Java saves, and Build Robot command. In a disposable robot it creates all four mechanism types, edits a subsystem name, configures leader/follower motors and a CANcoder, adds/edits/deletes states and cameras, and saves field dimensions locally. It saves 60 deterministic tunable samples (mechanism, sensor, default position, torque feedforward, drivetrain, localization, and custom constants), checks the generated Java values and registrations, builds twice, and verifies that repeat builds preserve the files and configuration. Its hidden window disables background timer throttling so form interactions finish within the check's timeout. Robot connections are blocked; no running robot or existing robot project is modified. Logs and `result.json` stay under `build/app-generation-check-*`.
 
@@ -81,6 +96,7 @@ The follow-up quality review adds these checks without changing the vision flush
 - Actual state must be updated by the robot's state controller when a transition happens; it is not inferred from requested state.
 - State requests are stored per owner and arbitrated by handler registration order. The state-machine fixture covers independent requests, priority changes, guarded transitions, and skipping selection for an unchanged single request. ButtonBindingsTest verifies one action per press/release edge and stable, distinct owners for state bindings.
 - AutoTest checks equivalent direct-point and path-cursor sequences, drive completion before subsequent commands, copied destinations, mixed styles, fresh command instances, subsystem requirements, interrupted drive cleanup and invalid definitions. AutoBuilderTest checks chooser registration snapshots, repeated runs, alliance filtering, defaults and existing factory registration. The fresh-install check also verifies the Auto definition class and RobotAutos starter are installed and wired, and reinstalling preserves custom robot autos without a template copy.
+- DriveToPoseControllerTest checks convergence, velocity/acceleration limits, measured-velocity handoffs, deceleration into a lower limit, initially moving away, and finish tolerances. LegSubpointsTest and LegHeadingTest check progress ordering, one-shot actions, replay/reset behavior, delayed turns, and facing a point. `drive-to-pose-check.ps1` runs the actual robot command with real WPILib commands/CTRE request types and hardware IO replaced: ideal tracking, scheduler cancellation, drivetrain ownership, blue-origin requests, measured-velocity conversion, heading/turn-rate requests, normal versus interrupted subpoints, command reuse, and stopping both translation and rotation. These are command/control checks; native drivetrain response remains part of manual simulation testing.
 - HealthChecksTest covers freshness boundaries, invalid timestamps/poses, and missing feedback. ConfigurationValidationTest verifies that simulation health checks still reject failed startup configuration.
 - LimelightVisionTest uses real local NetworkTables and a pose estimator to verify independent MT1 heading, unchanged MT2 weights, gradual drift correction, delayed-heading fusion that preserves newer translation and intervening rotation, timestamp/latency handling, angle wrapping, malformed/poor tag rejection, fast-turn suppression, camera priority, and consuming skipped/repeated frames. Disabled single-tag fallback tests cover quality checks, preference for multi-tag frames across cameras, stable heading initialization, and single-tag rejection during motion, with strict stationary fallback after enabling. VisionHeadingInitializerTest verifies default-enabled initialization, explicit disabling, configurable stationary limits, distinct stable frames, angle wrapping, and resets after motion or inconsistent observations. Fresh-install compilation verifies the heading configuration and robot integration are installed together. Camera calibration and correction strength still need real-robot validation.
 - MotorConfigurationTest verifies optional stator limits preserve other velocity settings and reject invalid limits. The generated-robot check carries a configured limit through both velocity mechanism types, repeated saves, and compilation.

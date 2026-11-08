@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import TuneIcon from "@mui/icons-material/Tune";
 import { FormControl, InputLabel, MenuItem, Select } from "@mui/material";
@@ -8,7 +8,8 @@ import { canTuneMechanism } from "./mechanismTunables";
 import { useNetworkTables, useTopics } from "../networktables/NetworkTablesContext";
 import { tuningModeTopicName } from "../networktables/tuningUtils";
 import { discoverCameras, discoverMechanisms, getPowerLibAutoChooser, dashboardModel, formatTime } from "./dashboardModel";
-import type { DashboardSettings } from "./dashboardSettings";
+import { FieldView } from "../field/components/FieldView";
+import { useFieldLayout } from "../field/useFieldLayout";
 import { useDashboardSettings } from "./useDashboardSettings";
 import type { DashboardCamera } from "./dashboardModel";
 import { startCameraStream } from "./cameraStream";
@@ -16,32 +17,6 @@ import type { GeneratedSubsystem } from "../subsystems/types";
 import type { ReactNode } from "react";
 import type { NtTopicSnapshot } from "../../networktables/nt4Client";
 import "./dashboard.css";
-
-function Field({ pose, settings }: { pose?: { x: number; y: number; heading: number }; settings: DashboardSettings }) {
-  const gridId = `dashboard-grid-${useId().replaceAll(":", "")}`;
-  const height = 480;
-  const width = height * settings.length / settings.width;
-  const outOfBounds = pose && (pose.x < 0 || pose.x > settings.length || pose.y < 0 || pose.y > settings.width);
-  return <svg viewBox={`-12 -12 ${width + 24} ${height + 24}`} role="img" aria-label="Field and robot position" preserveAspectRatio="xMidYMid meet">
-    <defs><pattern id={gridId} width={width / 16} height={height / 8} patternUnits="userSpaceOnUse">
-      <path d={`M ${width / 16} 0 H 0 V ${height / 8}`} fill="none" stroke="#355060" strokeWidth="1" />
-    </pattern></defs>
-    <g transform={settings.flip ? `translate(${width} ${height}) rotate(180)` : undefined}>
-      <rect width={width} height={height} rx="5" fill="#101e29" stroke="#7993a5" strokeWidth="3" />
-      <rect width={width} height={height} fill={`url(#${gridId})`} />
-      <rect width="16" height={height} fill="#307de0" opacity=".55" />
-      <rect x={width - 16} width="16" height={height} fill="#ec4d5d" opacity=".55" />
-      <path d={`M ${width / 2} 0 V ${height}`} stroke="#698191" strokeDasharray="10 9" />
-      {pose && !outOfBounds && <g transform={`translate(${pose.x / settings.length * width} ${height - pose.y / settings.width * height}) rotate(${-pose.heading})`}>
-        <rect x="-15" y="-15" width="30" height="30" rx="4" fill="#ffdc00" stroke="#fff" strokeWidth="2" />
-        <path d="M -5 -7 L 9 0 L -5 7" fill="none" stroke="#14212c" strokeWidth="4" />
-      </g>}
-    </g>
-    {(!pose || outOfBounds) && <text x={width / 2} y={height / 2} textAnchor="middle" fill="#a8bbca" fontSize="18">
-      {outOfBounds ? "Pose outside configured field" : "Waiting for live robot pose"}
-    </text>}
-  </svg>;
-}
 
 function CameraCanvas({ camera, images, failed, active = true }: { camera: DashboardCamera; images: React.MutableRefObject<Map<string, HTMLImageElement>>; failed: boolean; active?: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -101,6 +76,8 @@ export function DashboardPanel({ subsystems = [], renderTopCards, renderSidebar,
   const tuningEnabled = status === "connected" && tuningRequested
     && appTopics.find(topic => topic.name === tuningModeTopicName)?.value === true;
   const settings = useDashboardSettings();
+  const layout = useFieldLayout();
+  const field = layout ?? settings;
   const [now, setNow] = useState(performance.now());
   const [selectedView, setSelectedView] = useState("field");
   const [visibleCameraIds, setVisibleCameraIds] = useState<string[]>([]);
@@ -193,7 +170,7 @@ export function DashboardPanel({ subsystems = [], renderTopCards, renderSidebar,
     <div className="dashboard-main">
       <div className={`dashboard-rail ${cameras.length ? "" : "without-cameras"}`}>
         <button className={`dashboard-thumb dashboard-field-thumb ${selectedView === "field" ? "selected" : ""}`} onClick={() => setSelectedView("field")} aria-label="Show field view">
-          <div className="dashboard-thumb-preview dashboard-field-preview" style={{ aspectRatio: `${settings.length} / ${settings.width}` }}><Field pose={model.pose} settings={settings} /></div><b>FIELD</b>
+          <div className="dashboard-thumb-preview dashboard-field-preview" style={{ aspectRatio: `${field.length} / ${field.width}` }}><FieldView pose={model.pose} dimensions={settings} layout={layout} flip={settings.flip} emptyMessage="Waiting for live robot pose" /></div><b>FIELD</b>
         </button>
         {cameras.length > 0 && <div className="dashboard-camera-list" ref={cameraList} role="region" aria-label="Camera views" tabIndex={0}>
         {cameras.map(camera => <button key={camera.id} data-camera-id={camera.id} className={`dashboard-thumb ${selectedView === camera.id ? "selected" : ""}`}
@@ -205,7 +182,7 @@ export function DashboardPanel({ subsystems = [], renderTopCards, renderSidebar,
         {!cameras.length && <div className="dashboard-no-cameras">Cameras appear here when published to NetworkTables.</div>}
       </div>
       <div className="dashboard-stage">{selectedCamera ? <CameraCanvas camera={selectedCamera} images={images} failed={!!failed[selectedCamera.id] || selectedCamera.connected === false} />
-        : <Field pose={model.pose} settings={settings} />}</div>
+        : <FieldView pose={model.pose} dimensions={settings} layout={layout} flip={settings.flip} emptyMessage="Waiting for live robot pose" />}</div>
       <aside className="dashboard-sidebar">
         {chooser && <section className="dashboard-auto"><FormControl fullWidth size="small">
           <InputLabel id="dashboard-auto-label" shrink>Autonomous</InputLabel>

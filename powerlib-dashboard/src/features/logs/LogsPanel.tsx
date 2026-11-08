@@ -6,7 +6,9 @@ import type { GeneratedSubsystem } from "../subsystems/types";
 import { buildLogModel, busiestMechanism, canPercentAt } from "./logModel";
 import type { GraphView } from "./logModel";
 import type { SavedLog } from "./logLibraryModel";
-import { groupColor, logDetails, readFieldSettings, readSaved, writeSaved } from "./logUtils";
+import { groupColor, logDetails, readSaved, writeSaved } from "./logUtils";
+import { useDashboardSettings } from "../dashboard/useDashboardSettings";
+import { useFieldLayout } from "../field/useFieldLayout";
 import { useLoadedLogs } from "./useLoadedLogs";
 import { useLogPlayback } from "./useLogPlayback";
 import { FieldView } from "./components/FieldView";
@@ -55,7 +57,9 @@ export function LogsPanel({ active, subsystems }: LogsPanelProps) {
   }, []);
   const model = useMemo(() => (loaded ? buildLogModel(loaded.sources, subsystems, assignments, driveMotorIds) : null),
     [loaded, subsystems, assignments, driveMotorIds]);
-  const field = useMemo(readFieldSettings, [active]);
+  const settings = useDashboardSettings();
+  const layout = useFieldLayout();
+  const field = { length: layout?.length ?? settings.length, width: layout?.width ?? settings.width, flip: settings.flip };
   const duration = model?.duration ?? 0;
   const playback = useLogPlayback(duration, active, model !== null);
   const { time, setTime, setPlaying } = playback;
@@ -146,7 +150,7 @@ export function LogsPanel({ active, subsystems }: LogsPanelProps) {
       <LogsLayout
         graphs={<SubsystemGraphs subsystems={model.mechanisms} selected={selected} onSelect={selectMechanisms} views={views} onView={setView} time={time}
           colorOf={id => (model.powerGroups.some(group => group.id === id) ? groupColor(id, model.powerGroups) : undefined)} />}
-        field={<FieldView pose={model.pose} swerve={model.swerve} periods={model.periods} time={time} field={field} orientation="vertical"
+        field={<FieldView pose={model.pose} swerve={model.swerve} periods={model.periods} time={time} field={field} layout={layout} orientation="vertical"
           sx={model.pose || model.swerve ? { flex: "1 1 0", minHeight: 210 } : { flexShrink: 0 }} />}
         power={<PowerCard allGroups={model.powerGroups} selected={selected} battery={model.battery} motorCount={model.motors.length} time={time}
           onAssign={() => setAssigningMotors(true)} graphHeight={180} sx={{ flex: "1 1 0", minHeight: 230 }} />} />

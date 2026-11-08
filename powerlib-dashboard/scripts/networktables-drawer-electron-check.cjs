@@ -33,7 +33,7 @@ buildSync({ stdin: { contents: `
   };
   PowerLibNt4Client.prototype.isWatchedValue=function(name){return [...window.watched].some(prefix=>name.startsWith(prefix));};
   createRoot(document.getElementById('root')).render(<ThemeProvider theme={createTheme({palette:{mode:'dark'}})}><LoadedLogsProvider><App/></LoadedLogsProvider></ThemeProvider>);
-`, loader: 'jsx', resolveDir: project }, bundle: true, platform: 'browser', format: 'iife', outfile: path.join(fixture, 'fixture.js'), define: { 'process.env.NODE_ENV': '"production"' } });
+`, loader: 'jsx', resolveDir: project }, bundle: true, loader: { ".png": "file" }, platform: 'browser', format: 'iife', outfile: path.join(fixture, 'fixture.js'), define: { 'process.env.NODE_ENV': '"production"' } });
 fs.writeFileSync(path.join(fixture, 'index.html'), '<html><head><link rel="stylesheet" href="fixture.css"></head><body><div id="root"></div><script src="fixture.js"></script></body></html>');
 let window;
 const wait = async predicate => { for(let i=0;i<200;i++){if(await predicate())return;await new Promise(resolve=>setTimeout(resolve,25));}throw Error('UI wait timed out'); };

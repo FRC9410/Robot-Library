@@ -21,7 +21,7 @@ app.whenReady().then(async () => {
     createRoot(document.getElementById('root')).render(React.createElement(ConfigDialog,{
       document:{loading:false,exists:true,path:'fixture',subsystems:[],error:null},onRefresh(){},onSave:async()=>{},onClose(){}
     }));
-  `, resolveDir: project }, bundle: true, platform: "browser", format: "iife", outfile: path.join(temporary, "fixture.js"), define: { "process.env.NODE_ENV": '"production"' } });
+  `, resolveDir: project }, bundle: true, loader: { ".png": "file" }, platform: "browser", format: "iife", outfile: path.join(temporary, "fixture.js"), define: { "process.env.NODE_ENV": '"production"' } });
   fs.writeFileSync(path.join(temporary, "index.html"), '<html><head><link rel="stylesheet" href="fixture.css"></head><body style="margin:0;background:#101217;color:#ddd"><div id="root"></div><script src="fixture.js"></script></body></html>');
   window = new BrowserWindow({ show: false, width: 1280, height: 900, webPreferences: { partition: "vision-config-check", backgroundThrottling: false } });
   await window.loadFile(path.join(temporary, "index.html"));

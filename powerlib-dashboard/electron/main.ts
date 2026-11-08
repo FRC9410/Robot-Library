@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell } from "electron";
 import { execFile, spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
@@ -19,6 +19,9 @@ import { saveTunedSourceValues } from "./java-config/service.js";
 import { readLegacyMigration, applyLegacyMigration } from "./java-config/legacyMigration.js";
 import { readTuningSession, saveTuningSession } from "./tuningSessionFiles.js";
 import type { GeneratedSubsystem } from "./java-config/configTypes.js";
+import { readUploadedField, removeUploadedField, saveUploadedField } from "./uploadedFieldFiles.js";
+import { validateUploadedField } from "./uploadedField.js";
+import { generateAutoCode, readAutoFiles, saveAutoFiles } from "./autoFiles.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -84,6 +87,23 @@ function createAppMenu(window: BrowserWindow) {
       label: "View",
       submenu: [
         { label: "Toggle Network Tables", click: () => window.webContents.send("powerlib:menu-toggle-network-tables") },
+        {
+          label: "Field Layout",
+          submenu: [
+            { id: "none", label: "None (custom dimensions)" },
+            { id: "2026-rebuilt-simplified", label: "2026 REBUILT (Simplified)" },
+            { id: "2026-rebuilt", label: "2026 REBUILT (Field image)" },
+            { id: "2025-reefscape", label: "2025 REEFSCAPE (Field image)" }
+          ].map((layout): Electron.MenuItemConstructorOptions => ({
+            id: `field-layout:${layout.id}`, label: layout.label, type: "radio" as const,
+            checked: layout.id === "none",
+            click: () => window.webContents.send("powerlib:menu-field-layout", layout.id)
+          })).concat([{
+            id: "field-layout:uploaded-field", label: "Uploaded field", type: "radio" as const,
+            checked: false, enabled: false,
+            click: () => window.webContents.send("powerlib:menu-field-layout", "uploaded-field")
+          }])
+        },
         { type: "separator" },
         { role: "reload" }, { role: "forceReload" }, { role: "toggleDevTools" }, { type: "separator" },
         { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }
@@ -103,6 +123,25 @@ function createAppMenu(window: BrowserWindow) {
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
+
+ipcMain.on("powerlib:set-field-layout-menu", (event, id: unknown, uploadedAvailable: unknown) => {
+  if (typeof id !== "string" || !BrowserWindow.fromWebContents(event.sender)) return;
+  const item = Menu.getApplicationMenu()?.getMenuItemById(`field-layout:${id}`);
+  const uploaded = Menu.getApplicationMenu()?.getMenuItemById("field-layout:uploaded-field");
+  if (uploaded && typeof uploadedAvailable === "boolean") uploaded.enabled = uploadedAvailable;
+  if (item) item.checked = true;
+});
+
+ipcMain.handle("powerlib:read-uploaded-field", () => readUploadedField(app.getPath("userData")));
+ipcMain.handle("powerlib:save-uploaded-field", async (_event, value: unknown) => {
+  const field = validateUploadedField(value);
+  const image = nativeImage.createFromDataURL(field.image.href);
+  const size = image.getSize();
+  if (image.isEmpty() || size.width !== field.image.pixelWidth || size.height !== field.image.pixelHeight)
+    throw Error("The field image could not be decoded. Choose a valid PNG, JPEG, or WebP image.");
+  return saveUploadedField(app.getPath("userData"), field);
+});
+ipcMain.handle("powerlib:remove-uploaded-field", () => removeUploadedField(app.getPath("userData")));
 
 ipcMain.handle("powerlib:show-app-menu", (event, menuId: unknown, position: { x?: unknown; y?: unknown } | undefined) => {
   const window = BrowserWindow.fromWebContents(event.sender);
@@ -175,6 +214,9 @@ function getPowerToolRootCandidates() {
 }
 
 ipcMain.handle("powerlib:read-vision", async () => readVisionConfig(getDetectedRobotRoot()));
+ipcMain.handle("powerlib:read-autos", () => readAutoFiles(getDetectedRobotRoot()));
+ipcMain.handle("powerlib:save-autos", (_event, document: unknown, revision: unknown) => saveAutoFiles(getDetectedRobotRoot(), document, revision));
+ipcMain.handle("powerlib:generate-autos", (_event, revision: unknown, sourceRevision: unknown, field: unknown) => generateAutoCode(getDetectedRobotRoot(), revision, sourceRevision, field));
 ipcMain.handle("powerlib:read-tuning-session", async (_event, connection) => readTuningSession(app.getPath("userData"), getDetectedRobotRoot(), connection));
 ipcMain.handle("powerlib:save-tuning-session", async (_event, connection, values) => saveTuningSession(app.getPath("userData"), getDetectedRobotRoot(), connection, values));
 ipcMain.handle("powerlib:read-legacy-migration", async () => readLegacyMigration(getDetectedRobotRoot()));
@@ -520,8 +562,8 @@ ipcMain.handle("powerlib:choose-logs-folder", async (event) => {
 
 function createWindow() {
   const window = new BrowserWindow({
-    width: 1180,
-    height: 780,
+    width: 1920,
+    height: 1200,
     minWidth: 960,
     minHeight: 640,
     title: "Power Tool",

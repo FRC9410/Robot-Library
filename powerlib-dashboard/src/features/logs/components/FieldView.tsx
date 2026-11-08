@@ -10,6 +10,7 @@ import { FieldHeatmap } from "./FieldHeatmap";
 import { LogCard } from "./LogCard";
 import { RobotPose } from "./RobotPose";
 import { SwerveModulesView } from "./SwerveModulesView";
+import type { FieldLayout } from "../../field/fieldLayouts";
 
 type FieldViewProps = {
   pose?: Series<Pose>;
@@ -17,6 +18,7 @@ type FieldViewProps = {
   periods: LogPeriod[];
   time: number;
   field: { length: number; width: number; flip: boolean };
+  layout?: FieldLayout | null;
   /** "vertical" stands the field up with the driver station side at the bottom, for a tall narrow column. */
   orientation?: "horizontal" | "vertical";
   sx?: SxProps<Theme>;
@@ -29,7 +31,7 @@ const toggleSx = { py: 0, px: 1, textTransform: "none", fontSize: 12 } as const;
  * The field card: the robot now with its last 3 s of path, a heat map of where it has spent the match (while enabled)
  * up to the playhead, or its swerve wheels close up. On the field, each wheel has an arrow when the log has module data.
  */
-export function FieldView({ pose, swerve, periods, time, field, orientation = "horizontal", sx }: FieldViewProps) {
+export function FieldView({ pose, swerve, periods, time, field, layout, orientation = "horizontal", sx }: FieldViewProps) {
   const [mode, setMode] = useState<FieldMode>("position");
   const heatmap = useMemo(() => (pose && mode === "heatmap" ? poseHeatmap(pose, periods, field.length, field.width, 0.3, time) : null),
     [pose, periods, field.length, field.width, mode, time]);
@@ -57,7 +59,7 @@ export function FieldView({ pose, swerve, periods, time, field, orientation = "h
       {mode === "swerve" && <SwerveModulesView swerve={swerve} time={time} />}
       {mode !== "swerve" && (pose
         ? (
-          <FieldCanvas field={field} orientation={orientation}>
+          <FieldCanvas field={field} layout={layout} orientation={orientation}>
             {heatmap && <FieldHeatmap heatmap={heatmap} fieldWidth={field.width} />}
             <RobotPose pose={pose} time={time} fieldWidth={field.width} trailSeconds={mode === "position" ? 3 : 0} modules={swerve?.states} />
           </FieldCanvas>

@@ -4,6 +4,10 @@ contextBridge.exposeInMainWorld("powerlib", {
   platform: process.platform,
   showAppMenu: (menuId: string, position: { x: number; y: number }) => ipcRenderer.invoke("powerlib:show-app-menu", menuId, position),
   readConstants: () => ipcRenderer.invoke("powerlib:read-constants"),
+  readAutos: () => ipcRenderer.invoke("powerlib:read-autos"),
+  saveAutos: (document: unknown, revision: string) => ipcRenderer.invoke("powerlib:save-autos", document, revision),
+  generateAutos: (revision: string, sourceRevision: string, field: { length: number; width: number }) =>
+    ipcRenderer.invoke("powerlib:generate-autos", revision, sourceRevision, field),
   readTuningSession: (connection: unknown) => ipcRenderer.invoke("powerlib:read-tuning-session", connection),
   saveTuningSession: (connection: unknown, values: unknown[]) => ipcRenderer.invoke("powerlib:save-tuning-session", connection, values),
   readLegacyMigration: () => ipcRenderer.invoke("powerlib:read-legacy-migration"),
@@ -48,6 +52,14 @@ contextBridge.exposeInMainWorld("powerlib", {
     ipcRenderer.on("powerlib:menu-toggle-network-tables", callback);
     return () => ipcRenderer.removeListener("powerlib:menu-toggle-network-tables", callback);
   },
+  onMenuFieldLayout: (callback: (_event: unknown, id: string) => void) => {
+    ipcRenderer.on("powerlib:menu-field-layout", callback);
+    return () => ipcRenderer.removeListener("powerlib:menu-field-layout", callback);
+  },
+  setFieldLayoutMenu: (id: string, uploadedAvailable?: boolean) => ipcRenderer.send("powerlib:set-field-layout-menu", id, uploadedAvailable),
+  readUploadedField: () => ipcRenderer.invoke("powerlib:read-uploaded-field"),
+  saveUploadedField: (field: unknown) => ipcRenderer.invoke("powerlib:save-uploaded-field", field),
+  removeUploadedField: () => ipcRenderer.invoke("powerlib:remove-uploaded-field"),
   onMenuUpdateSubsystemCode: (callback: () => void) => {
     ipcRenderer.on("powerlib:menu-update-subsystem-code", callback);
     return () => ipcRenderer.removeListener("powerlib:menu-update-subsystem-code", callback);

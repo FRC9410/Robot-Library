@@ -17,6 +17,7 @@ import {
 import CableIcon from "@mui/icons-material/Cable";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import TimelineIcon from "@mui/icons-material/Timeline";
+import RouteIcon from "@mui/icons-material/Route";
 import { WindowTitleBar } from "./components/WindowTitleBar";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import { ConfigDialog } from "./features/config/ConfigDialog";
@@ -35,6 +36,8 @@ import { tuningModeRequestTopicName, tuningModeTopicName } from "./features/netw
 import { DashboardPanel } from "../dashboard";
 import { LimelightsPanel } from "./features/limelights/LimelightsPanel";
 import { LogsPanel } from "./features/logs/LogsPanel";
+import { AutosPanel } from "./features/autos/AutosPanel";
+import { getFieldLayoutId, loadUploadedField, setFieldLayoutId } from "./features/field/fieldLayouts";
 import { detectLimelights } from "./features/limelights/limelightUtils";
 import type { AppView } from "./types/app";
 import { TuningModeSync } from "./networktables/TuningModeSync";
@@ -364,6 +367,9 @@ function AppContent() {
     const removeToggleNetworkTables = window.powerlib?.onMenuToggleNetworkTables?.(() => {
       setNetworkTablesOpen(current => !current);
     });
+    const removeFieldLayout = window.powerlib?.onMenuFieldLayout?.((_event, id) => setFieldLayoutId(id));
+    window.powerlib?.setFieldLayoutMenu?.(getFieldLayoutId());
+    void loadUploadedField().catch(caught => showToast(caught instanceof Error ? caught.message : "Could not load the uploaded field.", "error"));
 
     return () => {
       removeConnectionSettings?.();
@@ -371,6 +377,7 @@ function AppContent() {
       removeUpdateInstallSection?.();
       removeUpdatePowerTool?.();
       removeToggleNetworkTables?.();
+      removeFieldLayout?.();
     };
   }, []);
 
@@ -396,7 +403,7 @@ function AppContent() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const fillsWindow = activeView === "logs" || activeView === "limelights";
+  const fillsWindow = activeView === "logs" || activeView === "limelights" || activeView === "autos";
 
   return (
     <Box sx={{ minHeight: fillsWindow ? 0 : "100vh", height: fillsWindow ? "100dvh" : undefined,
@@ -417,6 +424,7 @@ function AppContent() {
                 <Tab icon={<VideocamIcon />} iconPosition="start" label="Limelights" value="limelights" sx={{ minHeight: 52 }} />
               )}
               <Tab icon={<TimelineIcon />} iconPosition="start" label="Logs" value="logs" sx={{ minHeight: 52 }} />
+              <Tab icon={<RouteIcon />} iconPosition="start" label="Autos" value="autos" sx={{ minHeight: 52 }} />
             </Tabs>
             <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexShrink: 0, whiteSpace: "nowrap" }}>
               <FormControlLabel
@@ -497,6 +505,7 @@ function AppContent() {
       </Snackbar>
 
       <Container maxWidth={false} disableGutters={activeView === "limelights"} sx={activeView === "dashboard" ? { p: "0 !important" }
+        : activeView === "autos" ? { p: 1.5, px: { xs: 1.5, sm: 1.5 }, flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }
         : fillsWindow
           ? { pt: activeView === "logs" ? 1.5 : 0.5, pb: activeView === "logs" ? 0 : 0.5,
               flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }
@@ -506,6 +515,7 @@ function AppContent() {
           {activeView === "dashboard" && <DashboardPanel subsystems={subsystemDocument.subsystems}
             tuningRequested={tuningModeEnabled}
             onOpenConfig={() => { setConfigOpen(true); void loadSubsystems(); }} />}
+          <Box sx={{ display: activeView === "autos" ? "flex" : "none", flex: 1, minHeight: 0 }}><AutosPanel /></Box>
 
           {/* Stays mounted so an open log survives switching tabs. */}
           <Box sx={{ display: activeView === "logs" ? "flex" : "none", flexDirection: "column", flex: 1, minHeight: 0 }}>
