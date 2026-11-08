@@ -12,6 +12,18 @@ const source = process.env.POWERLIB_AUTO_FIXTURE || (fs.existsSync(path.join(pro
   ? path.resolve(project, '..') : path.resolve(project, '../build/generated-robot-check'));
 fs.mkdirSync(fixture, { recursive: true });
 fs.cpSync(path.join(source, 'src/main/java'), path.join(fixture, 'src/main/java'), { recursive: true });
+const machine=path.join(fixture,'src/main/java/frc/robot/subsystems/StateMachine.java');
+let machineSource=fs.readFileSync(machine,'utf8').replace(/import frc\.robot\.subsystems\.RobotChecks;\s*/g,'');
+if(!machineSource.includes('import frc.robot.helpers.RobotChecks;')) machineSource=machineSource.replace('package frc.robot.subsystems;','package frc.robot.subsystems;\nimport frc.robot.helpers.RobotChecks;');
+fs.rmSync(path.join(fixture,'src/main/java/frc/robot/subsystems/RobotChecks.java'),{force:true});
+fs.mkdirSync(path.join(fixture,'src/main/java/frc/robot/helpers'),{recursive:true});
+fs.writeFileSync(machine,machineSource.includes('public final RobotChecks checks')?machineSource:machineSource.replace(/(class StateMachine[^{}]*\{)/,'$1\n  public final RobotChecks checks = new RobotChecks(this);\n'));
+fs.writeFileSync(path.join(fixture,'src/main/java/frc/robot/helpers/RobotChecks.java'),`package frc.robot.helpers;
+import frc.robot.subsystems.StateMachine;
+public final class RobotChecks {
+  public RobotChecks(StateMachine robot) {}
+  public boolean branchReady() { return true; }
+}`);
 fs.writeFileSync(path.join(fixture, 'build.gradle'), '// isolated autos UI check');
 fs.writeFileSync(path.join(fixture, 'gradlew.bat'), '@echo off\r\nif not exist build mkdir build\r\necho called>build\\phase3-build-called\r\necho BUILD SUCCESSFUL\r\nexit /b 0\r\n');
 process.chdir(fixture);
@@ -144,6 +156,14 @@ app.on('browser-window-created',(_event,created)=>{
       assert.deepEqual(readDoc(),beforeHelp,'Opening Help never changes auto data');
       console.log('Help menu passed: production menu/preload opens Auto Keyboard Shortcuts from Dashboard, Logs and Autos without navigating or editing drafts.');
       if(process.argv.includes('--help-only')) return;
+      if(process.argv.includes('--settings-only')) {
+        await require('./auto-settings-ui-check.cjs').checkAutoSettings({evaluate,click,wait,saved,fill,addStep,selectOption,readDoc,generatedPath,reloadApp,screenshot,saveJava});
+        return;
+      }
+      if(process.argv.includes('--phase5-only')) {
+        await require('./auto-advanced-ui-check.cjs').checkAdvancedUI({window,evaluate,click,wait,saved,fill,addStep,selectOption,readDoc,jsonPath,generatedPath,reloadApp,screenshot,saveJava});
+        return;
+      }
       if(process.argv.includes('--bumper-only')) {
         await require('./auto-bumper-ui-check.cjs').checkAutoBumper({window,evaluate,click,wait,saved,fill,addStep,readDoc,screenshot});
         return;
@@ -174,7 +194,7 @@ app.on('browser-window-created',(_event,created)=>{
       assert.ok(await evaluate(`[...document.querySelectorAll('button')].some(el=>el.textContent==='Add step') && ![...document.querySelectorAll('button')].some(el=>['Add point','Add wait','Add state'].includes(el.textContent))`),'Only Add step is shown');
       assert.equal(await evaluate(`document.body.textContent.includes('New steps go after the selected step.')`),false);
       await click('Add step');await wait(()=>evaluate(`!!document.querySelector('[role=menu]')`));
-      assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role=menu] [role=menuitem]')].map(el=>el.textContent)`),['Add point','Add wait','Execute state','Wait for state']);await screenshot('add-step-menu');
+      assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role=menu] [role=menuitem]')].map(el=>el.textContent)`),['Add point','Add wait','Add branch','Execute state','Wait for state']);await screenshot('add-step-menu');
       await evaluate(`document.querySelector('[role=menu]').dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,key:'Escape'}))`);
       await wait(()=>evaluate(`!document.querySelector('[role=menu]')`));
       await addStep('Add point');await fill('X (m)',1.5);await fill('Y (m)',2);
@@ -228,12 +248,8 @@ app.on('browser-window-created',(_event,created)=>{
       await dragNewPoint(2,5,3,{cancel:true});
       await dragNewPoint(2,5,3);
       await screenshot('drag-created-point');
-      const chosenState=await selectOption('Execute state',null);
-      await selectOption('Wait for state',chosenState);
-      assert.equal(await evaluate(`document.body.textContent.includes('Use a timeout') || [...document.querySelectorAll('input')].some(el=>el.labels?.[0]?.textContent==='Timeout (s)')`),false,'State wait has no timeout option');
-      await selectOption('Wait for state','None');
-      assert.equal(await evaluate(`[...document.querySelectorAll('input')].some(el=>el.labels?.[0]?.textContent==='Timeout (s)')`),false);
-      await selectOption('Wait for state',chosenState);
+      const chosenState=await evaluate(`window.powerlib.readAutos().then(state=>state.states.at(-1))`);
+      assert.equal(await evaluate(`[...document.querySelectorAll('[aria-label="Step settings"] label')].some(el=>['Execute state','Wait for state'].includes(el.textContent))`),false,'Point settings omit state action dropdowns');
       const dividerPosition = await evaluate(`document.querySelector('[aria-label="Step settings divider"]').getBoundingClientRect().top`);
       await evaluate(`document.querySelector('[aria-label="Step settings"]').parentElement.scrollTop=10000`);
       assert.equal(await evaluate(`document.querySelector('[aria-label="Step settings divider"]').getBoundingClientRect().top`),dividerPosition,'Divider stays fixed when settings scroll');
@@ -243,7 +259,7 @@ app.on('browser-window-created',(_event,created)=>{
       assert.equal(await evaluate(`document.querySelectorAll('[data-add-point-handle]').length`),0,'Selecting a wait step hides point creation handles');
       await saved();
       let doc=readDoc();assert.equal(doc.autos[0].steps.length,4);assert.equal(doc.autos[0].isDefault,false);assert.equal(doc.autos[0].clearRequestsAtEnd,true);
-      assert.equal(doc.autos[0].steps[2].executeState,chosenState);assert.equal(doc.autos[0].steps[2].waitForState,chosenState);
+      assert.equal(doc.autos[0].steps[2].executeState,null);assert.equal(doc.autos[0].steps[2].waitForState,null);
       assert.equal(doc.autos[0].steps[2].stateTimeoutSeconds,null);
       assert.equal(await evaluate(`document.body.textContent.includes('Requests this state and continues') || document.body.textContent.includes('New steps go after') || document.body.textContent.includes('Finishes within the distance')`),false);
       const originalStepIds=doc.autos[0].steps.map(step=>step.id);
@@ -291,7 +307,7 @@ app.on('browser-window-created',(_event,created)=>{
       await window.webContents.reload();
       await tab('Autos');await wait(()=>evaluate(`[...document.querySelectorAll('input')].find(el=>el.labels?.[0]?.textContent==='Auto name')?.value==='UI basic'`));
       assert.equal(readDoc().autos[0].steps.length,4,'Steps survive an app reload');
-      assert.equal(readDoc().autos[0].steps[2].executeState,chosenState);assert.equal(readDoc().autos[0].steps[2].waitForState,chosenState);
+      assert.equal(readDoc().autos[0].steps[2].executeState,null);assert.equal(readDoc().autos[0].steps[2].waitForState,null);
       await selectStep(1);
       assert.equal(await evaluate(`[...document.querySelectorAll('input')].find(el=>el.labels?.[0]?.textContent==='Heading (deg)').value`),'90','Heading survives reload');
       assert.equal(await evaluate(`[...document.querySelectorAll('label')].find(el=>el.textContent==='Wait for heading').querySelector('input').checked`),true);
@@ -332,7 +348,7 @@ app.on('browser-window-created',(_event,created)=>{
       await evaluate(`[...document.querySelectorAll('[role=dialog] button')].find(el=>el.textContent==='Delete').click()`);await saved();
       await saveJava();
       assert.ok(fs.readFileSync(generatedPath,'utf8').includes('No autos yet'));
-      console.log('Autos UI passed: fixed settings divider, no timeout controls, Add step menu, optional point state settings, drag creation and heading editing, Save/generation, validation, deletion, draft retention, conflicts, and newer-file protection.');
+      console.log('Autos UI passed: fixed settings divider, no timeout controls, Add step menu, standalone state actions, no point state dropdowns, drag creation and heading editing, Save/generation, validation, deletion, draft retention, conflicts, and newer-file protection.');
       console.log('Screenshots: '+fixture);
     }catch(error){await screenshot('failure').catch(()=>{});console.error(error);process.exitCode=1;}
     finally{fs.promises.rename=rename;window.destroy();app.exit(process.exitCode||0);}

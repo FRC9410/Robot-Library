@@ -35,6 +35,8 @@ public class DriveToPose extends Command {
   private Translation2d start = Translation2d.kZero;
   private Rotation2d startHeading = Rotation2d.kZero;
   private Rotation2d heldHeading = Rotation2d.kZero;
+  private boolean facingDestination;
+  private boolean holdArrivalHeading;
   private final SwerveRequest.FieldCentricFacingAngle request =
       new SwerveRequest.FieldCentricFacingAngle()
           .withForwardPerspective(ForwardPerspectiveValue.BlueAlliance)
@@ -71,6 +73,8 @@ public class DriveToPose extends Command {
   /** Keep the robot's front pointed at this field point (such as a goal) for the whole leg. */
   public DriveToPose facing(Translation2d point) {
     heading.face(point);
+    facingDestination = point.getDistance(target.getTranslation())
+        <= controller.getConstraints().endDistanceTolerance();
     return this;
   }
 
@@ -105,6 +109,7 @@ public class DriveToPose extends Command {
     start = pose.getTranslation();
     startHeading = pose.getRotation();
     heldHeading = startHeading;
+    holdArrivalHeading = false;
     heading.reset();
     subpoints.reset();
     controller.reset(fieldVelocity());
@@ -115,7 +120,7 @@ public class DriveToPose extends Command {
     Translation2d position = drivetrain.getState().Pose.getTranslation();
     double progress = DriveToPoseController.progress(start, position, target.getTranslation());
     subpoints.update(progress);
-    heldHeading = heading.target(position, progress, startHeading, target.getRotation());
+    heldHeading = commandedHeading(position, progress);
     Translation2d velocity = controller.calculate(position, target.getTranslation());
     apply(velocity.getX(), velocity.getY());
   }
@@ -126,7 +131,7 @@ public class DriveToPose extends Command {
     if (!controller.atGoal(pose.getTranslation(), fieldVelocity(), target.getTranslation())) return false;
     if (Double.isNaN(headingTolerance)) return true;
     double progress = DriveToPoseController.progress(start, pose.getTranslation(), target.getTranslation());
-    Rotation2d commandedHeading = heading.target(pose.getTranslation(), progress, startHeading, target.getRotation());
+    Rotation2d commandedHeading = commandedHeading(pose.getTranslation(), progress);
     return Math.abs(pose.getRotation().minus(commandedHeading).getRadians()) <= headingTolerance;
   }
 
@@ -145,6 +150,15 @@ public class DriveToPose extends Command {
         .withTargetDirection(heldHeading)
         .withMaxAbsRotationalRate(Double.isNaN(maxTurnRate) ? drivetrain.MAX_DRIVE_TO_POINT_ANGULAR_RATE : maxTurnRate),
         heldHeading.getDegrees());
+  }
+
+  private Rotation2d commandedHeading(Translation2d position, double progress) {
+    // Facing our destination becomes undefined on arrival. Keep the approach heading while
+    // translation settles, rather than chasing bearings that flip with tiny overshoots.
+    if (facingDestination && position.getDistance(target.getTranslation())
+        <= controller.getConstraints().endDistanceTolerance()) holdArrivalHeading = true;
+    return holdArrivalHeading ? heldHeading
+        : heading.target(position, progress, startHeading, target.getRotation());
   }
 
   private Translation2d fieldVelocity() {

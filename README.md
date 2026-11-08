@@ -68,6 +68,7 @@ src/main/java/frc/robot/constants/TunerConstants.java
 src/main/java/frc/robot/constants/VisionConstants.java
 src/main/java/frc/robot/subsystems/LED.java
 src/main/java/frc/robot/subsystems/StateMachine.java
+src/main/java/frc/robot/helpers/RobotChecks.java
 src/main/java/frc/robot/subsystems/Swerve.java
 src/main/java/frc/robot/subsystems/Vision.java
 src/main/java/frc/robot/utils/FieldUtils.java
@@ -83,14 +84,11 @@ its routines are preserved during installation and updates.
 ## Auto editor
 
 The Power Tool **Autos** tab creates routines through Add step → Add point,
-Add wait, Execute state, or Wait for state. Standalone state steps run in list order
-and select their state in the inspector. Point settings also include
-optional Execute state and Wait for state dropdowns: request the state after arrival,
-then wait for the actual selected state before continuing, without a timeout.
-Both default to None; older standalone state steps are preserved. Add the first point
+Add wait, Execute state, Wait for state, or Add branch. Standalone state steps run in list order
+and select their state in the inspector. Add the first point
 through Add step, then drag
 the green + handle on the selected point to create a new point immediately after it.
-Empty field clicks do nothing. Drag a point's center to move it, or edit its position,
+Empty field clicks clear the selection. Drag a point's center to move it, or edit its position,
 heading, and motion
 limits in the step inspector. Name and alliance share a row above the field.
 Generated routines are never defaults and always clear their owned request at the end.
@@ -105,6 +103,11 @@ editing or building alone does not regenerate autos. Rebuild and restart desktop
 simulation, or deploy to the robot, after saving. The Autos header/toolbar is removed;
 outer margins and card gaps are all 12 px. Power Tool opens at 1920 × 1200.
 
+**Config > Auto** sets the autonomous duration used by remaining-time branches in
+all routines (20 seconds by default). It shares the Autos editor's draft. **Save auto
+settings** saves that draft and updates generated Java; rebuild and restart simulation
+or deploy before testing the new duration on the robot.
+
 The first drive point seeds the starting pose in simulation only; a real robot
 keeps its measured pose. Generated commands are fresh on each run and release their
 state owner on normal completion and cancellation, leaving other owners intact.
@@ -113,8 +116,24 @@ Validation blocks generation for duplicate/reserved names, missing robot states,
 invalid waits/limits, and missing drive helpers. Names found in handwritten robot
 registration code are protected too. Reload discovers Java/source changes. Stale
 saves keep the current draft, and newer, malformed, or unsupported auto documents
-cannot be overwritten by this editor. Named points, symmetry, advanced step editing,
-replay, and analysis remain in later phases.
+cannot be overwritten by this editor. Replay and analysis remain in later phases.
+
+Robot check branches scan `src/main/java/frc/robot/helpers/RobotChecks.java`,
+which StateMachine exposes as `public final RobotChecks checks = new RobotChecks(this);`.
+Add public instance methods that return `boolean` and take no arguments to this file.
+Use its `robot` field to access the current StateMachine and its subsystems. For example:
+
+```java
+public boolean isPastFourMeters() {
+  return robot.drivetrain.getState().Pose.getX() >= 4.0;
+}
+```
+
+A generated branch calls `robot.checks.isPastFourMeters()`. Then runs when the check
+is true; Otherwise runs when it is false after any configured condition wait.
+Reload Power Tool after editing Java so the dropdown and source revision refresh.
+The installer creates `RobotChecks.java` only when missing and preserves team checks
+on subsequent installs.
 
 ## Autonomous Chooser
 

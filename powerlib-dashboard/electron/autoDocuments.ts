@@ -33,6 +33,62 @@ export function readAutoDocument(value: unknown): AutoDocument {
     if (typeof point.name !== "string" || point.name.length > 100 || /[\x00-\x1f\x7f]/.test(point.name)) throw Error("Invalid named point name.");
     if (![point.x, point.y, point.heading].every(finite)) throw Error("Named point coordinates must be finite numbers.");
   }
+  const checkSteps = (items: unknown, nested = false) => {
+    if (!Array.isArray(items)) throw Error("Every auto and branch arm must have a step list.");
+    steps += items.length;
+    if (steps > 10000) throw Error("Auto document exceeds 10000 steps.");
+    for (const item of items) {
+      const step = record(item); id(step.id);
+      switch (step.type) {
+        case "drive": {
+          if (![step.x, step.y, step.heading].every(finite)) throw Error("Drive coordinates must be finite numbers.");
+          for (const key of ["maxVelocity", "maxAcceleration", "endDistanceTolerance", "endVelocityTolerance"])
+            if (step[key] !== undefined && !finite(step[key])) throw Error("Drive limits must be finite numbers.");
+          if (step.endHeadingTolerance != null && !finite(step.endHeadingTolerance)) throw Error("Heading tolerance must be a finite number or null.");
+          for (const key of ["executeState", "waitForState"])
+            if (step[key] != null && typeof step[key] !== "string") throw Error("Point state settings must name a robot state or be null.");
+          if (step.stateTimeoutSeconds != null && !finite(step.stateTimeoutSeconds)) throw Error("Invalid legacy point state timeout.");
+          const link = (value: unknown) => { if (value != null && (typeof value !== "string" || !pointIds.has(value))) throw Error("Point links must reference an existing named point."); };
+          link(step.pointId);
+          if (step.maxTurnRate != null && !finite(step.maxTurnRate)) throw Error("Turn rate must be finite or null.");
+          if (step.subpoints !== undefined && !Array.isArray(step.subpoints)) throw Error("Invalid subpoint list.");
+          const subpoints = (step.subpoints ?? []) as unknown[];
+          if (subpoints.length > 1000) throw Error("A drive leg exceeds 1000 subpoints.");
+          for (const entry of subpoints) {
+            const subpoint = record(entry); id(subpoint.id);
+            if (!finite(subpoint.progress) || typeof subpoint.state !== "string") throw Error("Invalid subpoint position or state.");
+          }
+          if (step.turn !== undefined) {
+            const turn = record(step.turn);
+            if (turn.mode === "later") { if (!finite(turn.startProgress)) throw Error("Invalid delayed turning position."); }
+            else if (turn.mode === "face") { if (![turn.x, turn.y].every(finite)) throw Error("Invalid facing target."); link(turn.pointId); }
+            else if (turn.mode !== "now") unsupported();
+          }
+          break;
+        }
+        case "requestState":
+        case "waitForState":
+          if (typeof step.state !== "string") throw Error("A state step must name a robot state.");
+          if (step.type === "waitForState" && step.timeoutSeconds != null && !finite(step.timeoutSeconds)) throw Error("Invalid legacy wait timeout.");
+          if (step.replaySeconds !== undefined && !finite(step.replaySeconds)) throw Error("Invalid wait estimate.");
+          break;
+        case "wait":
+          if (!finite(step.seconds)) throw Error("Wait duration must be a finite number.");
+          break;
+        case "branch": {
+          if (nested) throw Error("Branches cannot contain another branch.");
+          const condition = record(step.condition);
+          if (condition.kind === "state" || condition.kind === "check") {
+            if (typeof condition[condition.kind === "state" ? "state" : "method"] !== "string" || !finite(condition.waitSeconds)) throw Error("Invalid branch condition.");
+          } else if (condition.kind === "timeLeft") { if (!finite(condition.seconds)) throw Error("Invalid remaining time condition."); }
+          else unsupported();
+          checkSteps(step.then, true); checkSteps(step.otherwise, true);
+          break;
+        }
+        default: unsupported();
+      }
+    }
+  };
   for (const entry of raw.autos) {
     const auto = record(entry); id(auto.id);
     if (typeof auto.name !== "string" || auto.name.length > 100 || /[\x00-\x1f\x7f]/.test(auto.name)) throw Error("Auto names must be single-line text up to 100 characters.");
@@ -42,37 +98,7 @@ export function readAutoDocument(value: unknown): AutoDocument {
       const symmetry = record(auto.symmetry);
       for (const key of ["flipX", "flipY"]) if (symmetry[key] !== undefined && typeof symmetry[key] !== "boolean") throw Error("Invalid symmetry setting.");
     }
-    if (!Array.isArray(auto.steps)) throw Error("Every auto must have a step list.");
-    steps += auto.steps.length;
-    if (steps > 10000) throw Error("Auto document exceeds 10000 steps.");
-    for (const item of auto.steps) {
-      const step = record(item); id(step.id);
-      switch (step.type) {
-        case "drive":
-          if (![step.x, step.y, step.heading].every(finite)) throw Error("Drive coordinates must be finite numbers.");
-          for (const key of ["maxVelocity", "maxAcceleration", "endDistanceTolerance", "endVelocityTolerance"])
-            if (step[key] !== undefined && !finite(step[key])) throw Error("Drive limits must be finite numbers.");
-          if (step.endHeadingTolerance != null && !finite(step.endHeadingTolerance)) throw Error("Heading tolerance must be a finite number or null.");
-          for (const key of ["executeState", "waitForState"])
-            if (step[key] != null && typeof step[key] !== "string") throw Error("Point state settings must name a robot state or be null.");
-          if (step.stateTimeoutSeconds != null && !finite(step.stateTimeoutSeconds)) throw Error("Point state timeout must be a finite number or null.");
-          if (step.subpoints !== undefined && !Array.isArray(step.subpoints)) throw Error("Invalid subpoint list.");
-          if (step.pointId != null && (typeof step.pointId !== "string" || !pointIds.has(step.pointId))) throw Error("Drive point links must reference an existing named point.");
-          if ((step.subpoints as unknown[] | undefined)?.length || step.maxTurnRate != null) unsupported();
-          if (step.turn !== undefined && record(step.turn).mode !== "now") unsupported();
-          break;
-        case "requestState":
-        case "waitForState":
-          if (typeof step.state !== "string") throw Error("A state step must name a robot state.");
-          if (step.type === "waitForState" && step.timeoutSeconds != null && !finite(step.timeoutSeconds)) throw Error("Wait timeout must be a finite number.");
-          if (step.replaySeconds !== undefined && !finite(step.replaySeconds)) throw Error("Invalid wait estimate.");
-          break;
-        case "wait":
-          if (!finite(step.seconds)) throw Error("Wait duration must be a finite number.");
-          break;
-        default: unsupported();
-      }
-    }
+    checkSteps(auto.steps);
   }
   return parseAutoDocument(raw);
 }

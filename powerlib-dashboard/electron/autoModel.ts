@@ -103,7 +103,7 @@ export type CameraMount = {
  * ignore don't need it, since parseAutoDocument keeps fields it doesn't know. Changes to execution
  * semantics also need a version bump so older generators cannot silently omit them.
  */
-export const autosFileVersion = 5;
+export const autosFileVersion = 6;
 
 export type AutoDocument = { version: typeof autosFileVersion; periodSeconds: number; points: NamedPoint[]; cameras: CameraMount[]; autos: AutoRoutine[] };
 export const defaultPeriodSeconds = 20;
@@ -120,7 +120,7 @@ export type AutoProject = {
   field: { length: number; width: number };
   /** String literals in RobotAutos.java, which include the names of hand-written autos. */
   handWrittenNames?: string[];
-  /** StateMachine's public boolean methods with no arguments, which branches can check; undefined when unknown. */
+  /** RobotChecks' public boolean methods with no arguments, exposed through StateMachine.checks. */
   checks?: string[];
 };
 
@@ -619,7 +619,7 @@ export function validateAutos(document: AutoDocument, project: AutoProject): Aut
         } else if (condition.kind === "check") {
           if (!condition.method) error("Choose the robot check.", step.id);
           else if (!/^[A-Za-z_$][\w$]*$/.test(condition.method) || (project.checks && !project.checks.includes(condition.method))) {
-            error(`StateMachine has no public boolean ${condition.method}() method to check.`, step.id);
+            error(`RobotChecks has no public boolean ${condition.method}() method exposed through StateMachine.checks.`, step.id);
           }
         } else if (!Number.isFinite(condition.seconds) || condition.seconds <= 0) {
           error("The time left must be a positive number of seconds.", step.id);
@@ -707,7 +707,7 @@ export function joiningRequests(steps: AutoStep[]) {
 type PointNames = Map<string, string>;
 
 function pointConstantNames(points: NamedPoint[]): PointNames {
-  const used = new Set(["OWNER"]);
+  const used = new Set(["OWNER", "AUTO_TIMER"]);
   return new Map(points.map(point => {
     let base = point.name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "POINT";
     if (/^[0-9]/.test(base)) base = `POINT_${base}`;
@@ -727,7 +727,7 @@ const javaCall = (name: string, args: string[]) => `${name}(\n    ${args.map(arg
 function conditionJava(condition: BranchCondition) {
   switch (condition.kind) {
     case "state": return `robot.getActualState() == RobotState.${condition.state}`;
-    case "check": return `robot.${condition.method}()`;
+    case "check": return `robot.checks.${condition.method}()`;
     case "timeLeft": return `secondsLeft() >= ${javaDouble(condition.seconds)}`;
   }
 }

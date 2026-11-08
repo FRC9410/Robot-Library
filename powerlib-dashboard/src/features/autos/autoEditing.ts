@@ -1,4 +1,4 @@
-import { createId, flipSteps, mapSteps, normalizeHeading, round, setNamedPoint, type AutoDocument, type AutoRoutine, type AutoStep, type DriveStep, type Symmetry } from "./autoModel";
+import { allSteps, createId, flipSteps, mapSteps, normalizeHeading, round, setNamedPoint, type AutoDocument, type AutoRoutine, type AutoStep, type DriveStep, type Symmetry } from "./autoModel";
 
 export type FieldSize = { length: number; width: number };
 /** Move selected rows to the boundary before a row, or to the end with null. */
@@ -37,9 +37,9 @@ export function editAuto(document: AutoDocument, autoId: string, update: (auto: 
   const changed = update(original);
   let next = { ...document, autos: document.autos.map(auto => auto.id === autoId ? changed : auto) };
   const updated = new Set<string>();
-  for (const step of changed.steps) {
+  for (const step of allSteps(changed.steps)) {
     if (step.type !== "drive" || !step.pointId || updated.has(step.pointId)) continue;
-    const before = original.steps.find(candidate => candidate.id === step.id);
+    const before = allSteps(original.steps).find(candidate => candidate.id === step.id);
     if (before?.type === "drive" && before.x === step.x && before.y === step.y && before.heading === step.heading) continue;
     const point = next.points.find(point => point.id === step.pointId);
     if (point) { next = setNamedPoint(next, { ...point, x: step.x, y: step.y, heading: step.heading }); updated.add(point.id); }
@@ -56,7 +56,7 @@ export function sourceStep(step: AutoStep, original: AutoStep, mirror: Symmetry 
 
 /** Translate a group without distorting its spacing at the field boundary. */
 export function translateSteps(steps: AutoStep[], ids: string[], dx: number, dy: number, field: FieldSize): AutoStep[] {
-  const drives = steps.filter((step): step is DriveStep => step.type === "drive" && ids.includes(step.id));
+  const drives = allSteps(steps).filter((step): step is DriveStep => step.type === "drive" && ids.includes(step.id));
   if (!drives.length) return steps;
   const clampDelta = (values: number[], delta: number, max: number) => {
     const low = -Math.min(...values), high = max - Math.max(...values);

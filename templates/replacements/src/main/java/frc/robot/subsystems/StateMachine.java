@@ -11,6 +11,7 @@ import frc.powerlib.subsystems.RelativePositionSubsystem;
 import frc.powerlib.subsystems.VelocitySubsystem;
 import frc.powerlib.subsystems.VelocityTorqueSubsystem;
 import frc.robot.Constants;
+import frc.robot.helpers.RobotChecks;
 import frc.robot.subsystems.states.IdleState;
 import java.util.List;
 import java.util.LinkedHashMap;
@@ -24,6 +25,8 @@ public class StateMachine extends SubsystemBase {
 
   public final Swerve drivetrain = Constants.Tuner.createDrivetrain();
   public final Vision vision = new Vision(drivetrain);
+  /** Custom conditions available to Auto Builder's Robot check branches. */
+  public final RobotChecks checks = new RobotChecks(this);
 
   // POWERLIB GENERATED SUBSYSTEMS START - DO NOT DELETE
   // POWERLIB GENERATED SUBSYSTEMS END - DO NOT DELETE

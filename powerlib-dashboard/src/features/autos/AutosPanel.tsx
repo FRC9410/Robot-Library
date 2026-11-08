@@ -4,8 +4,8 @@ import { dashboardModel } from "../dashboard/dashboardModel";
 import { useDashboardSettings } from "../dashboard/useDashboardSettings";
 import { useFieldLayout } from "../field/useFieldLayout";
 import { useNetworkTables, useTopics } from "../networktables/NetworkTablesContext";
-import { createAuto, createId, createStep, hasErrors, mirroredAuto, uniquePointName, type AutoRoutine, type AutoStep, type AutoStepType, type DriveStep } from "./autoModel";
-import { useAutoEditor } from "./useAutoEditor";
+import { allSteps, createAuto, createId, insertStepsAt, createStep, hasErrors, mirroredAuto, uniquePointName, type AutoRoutine, type AutoStep, type AutoStepType, type DriveStep } from "./autoModel";
+import type { useAutoEditor } from "./useAutoEditor";
 import { AutoRoutineList } from "./components/AutoRoutineList";
 import { AutoStepsPane } from "./components/AutoStepsPane";
 import { AutoEditorField } from "./components/AutoEditorField";
@@ -16,11 +16,10 @@ import { duplicateAuto } from "./autoEditing";
 import { DuplicateAutoDialog } from "./components/DuplicateAutoDialog";
 import { NamedPointEditor } from "./components/NamedPointEditor";
 
-export function AutosPanel() {
+export function AutosPanel({ editor }: { editor: ReturnType<typeof useAutoEditor> }) {
   const settings = useDashboardSettings();
   const layout = useFieldLayout();
   const field = layout ?? settings;
-  const editor = useAutoEditor(field);
   const [autoId, setAutoId] = useState<string | null>(null);
   const [view, setView] = useState<"routines" | "points">("routines");
   const [pointId, setPointId] = useState<string | null>(null);
@@ -38,7 +37,7 @@ export function AutosPanel() {
   const tools = useAutoTools(editor, sourceAuto, field, view === "routines");
   const auto = tools.displayed, stepId = tools.primary;
   const columns = useAutoColumns();
-  const selectedStep = auto?.steps.find(step => step.id === stepId);
+  const selectedStep = allSteps(auto?.steps ?? []).find(step => step.id === stepId);
   const deleteAuto = editor.document.autos.find(candidate => candidate.id === deleteId);
   const point = editor.document.points.find(point => point.id === pointId);
   const pointAuto: AutoRoutine = { ...pointAutoTemplate, steps: editor.document.points.map(point => ({ ...pointTemplate, ...point })) };
@@ -72,13 +71,12 @@ export function AutosPanel() {
     if (!auto || editor.readOnly) return;
     let step = createStep(type, editor.project);
     if (step.type === "drive") {
-      const previous = (point && auto.steps.find(candidate => candidate.id === afterId && candidate.type === "drive"))
-        || auto.steps.filter(candidate => candidate.type === "drive").at(-1);
+      const previous = (point && allSteps(auto.steps).find(candidate => candidate.id === afterId && candidate.type === "drive"))
+        || (tools.route?.steps ?? []).filter(candidate => candidate.type === "drive").at(-1);
       step = { ...step, ...(previous?.type === "drive" ? { heading: previous.heading } : {}),
         ...(point ?? (previous?.type === "drive" ? { x: Math.min(field.length, previous.x + 1), y: previous.y } : {})) };
     }
-    const steps = [...auto.steps]; const index = steps.findIndex(candidate => candidate.id === afterId);
-    steps.splice(index < 0 ? steps.length : index + 1, 0, step);
+    const steps = insertStepsAt(auto.steps, tools.insertionTarget(afterId), [step]);
     updateAuto({ steps }); tools.setIds([step.id]);
   }
   function create() {
@@ -120,22 +118,25 @@ export function AutosPanel() {
               <MenuItem value="Any">Any alliance</MenuItem><MenuItem value="Blue">Blue</MenuItem><MenuItem value="Red">Red</MenuItem>
             </TextField>
         </Stack>}
-        <AutoEditorField auto={view === "routines" ? auto : pointAuto} layout={layout} dimensions={settings} flip={settings.flip} pose={view === "routines" ? pose : undefined}
+        <AutoEditorField auto={view === "routines" ? tools.route : pointAuto} layout={layout} dimensions={settings} flip={settings.flip} pose={view === "routines" ? pose : undefined}
           selectedId={view === "routines" ? stepId : pointId} selectedIds={view === "routines" ? tools.ids : pointId ? [pointId] : []} disabled={editor.readOnly}
           connectPoints={view === "routines"} allowCreation={view === "routines"} pointNames={view === "points" ? Object.fromEntries(editor.document.points.map(point => [point.id, point.name])) : undefined}
           snap namedPoints={view === "routines" ? tools.namedPoints : []} onSelection={ids => { if (view === "routines") tools.setIds(ids); else setPointId(ids.at(-1) ?? null); }}
           onBegin={editor.history.beginGesture} onEnd={editor.history.endGesture}
           onAdd={(sourceId, point) => addStep("drive", point, sourceId)} onSelect={(id, mode, preserve) => { if (view === "routines") tools.select(id, mode, preserve); else setPointId(id); }} onMove={(id, position) => {
             if (view === "points") { const named = editor.document.points.find(point => point.id === id); if (named) tools.named({ ...named, ...position }); return; }
-            const step = auto?.steps.find(candidate => candidate.id === id); if (step?.type === "drive") tools.translate(position.x - step.x, position.y - step.y);
+            const step = allSteps(auto?.steps ?? []).find(candidate => candidate.id === id); if (step?.type === "drive") tools.translate(position.x - step.x, position.y - step.y);
+          }} onFace={(id, point) => {
+            const step = allSteps(auto?.steps ?? []).find(candidate => candidate.id === id);
+            if (step?.type === "drive" && step.turn.mode === "face") updateStep({ ...step, turn: { ...step.turn, ...point, pointId: null } });
           }} onHeading={(id, heading) => {
             if (view === "points") { const named = editor.document.points.find(point => point.id === id); if (named) tools.named({ ...named, heading }); return; }
-            const step = auto?.steps.find(candidate => candidate.id === id); if (step?.type === "drive") updateStep({ ...step, heading });
+            const step = allSteps(auto?.steps ?? []).find(candidate => candidate.id === id); if (step?.type === "drive") updateStep({ ...step, heading });
           }} />
       </Paper>
       {columns.splitter(1)}
       {view === "points" ? <NamedPointEditor point={point} points={editor.document.points} disabled={editor.readOnly} onChange={tools.named} footer={saveFooter} />
-      : <AutoStepsPane auto={auto} selectedId={stepId} selectedIds={tools.ids} states={editor.project.states} disabled={editor.readOnly} onSelect={tools.select}
+      : <AutoStepsPane auto={auto} selectedId={stepId} selectedIds={tools.ids} states={editor.project.states} checks={editor.project.checks ?? []} points={editor.document.points} branches={tools.branches} onShowBranch={tools.showBranch} disabled={editor.readOnly} onSelect={tools.select}
         onClear={() => tools.setIds([])}
         onUndo={editor.history.undo} onRedo={editor.history.redo} canUndo={editor.history.canUndo} canRedo={editor.history.canRedo}
         onDuplicate={tools.duplicateStep} groupInspector={<AutoGroupInspector tools={tools} />} onDrop={tools.drop}

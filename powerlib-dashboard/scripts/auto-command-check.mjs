@@ -19,15 +19,26 @@ public class Swerve extends edu.wpi.first.wpilibj2.command.SubsystemBase {
   public void resetPose(edu.wpi.first.math.geometry.Pose2d pose) { seeds++; }
 }`));
   inputs.push(await write("frc/robot/subsystems/StateMachine.java", `package frc.robot.subsystems;
+import frc.robot.helpers.RobotChecks;
 public class StateMachine extends edu.wpi.first.wpilibj2.command.SubsystemBase {
   public enum RobotState { ${states.join(", ")} }
   public final Swerve drivetrain = new Swerve();
   public final java.util.Map<Object, RobotState> requests = new java.util.IdentityHashMap<>();
   public RobotState actual;
+  public boolean ready;
+  public final RobotChecks checks = new RobotChecks(this);
+  public final java.util.List<RobotState> events = new java.util.ArrayList<>();
   public int cleanups;
-  public void requestState(RobotState state, Object owner) { requests.put(owner, state); }
+  public void requestState(RobotState state, Object owner) { requests.put(owner, state); events.add(state); }
   public void clearRequest(Object owner) { requests.remove(owner); cleanups++; }
   public RobotState getActualState() { return actual; }
+}`));
+  inputs.push(await write("frc/robot/helpers/RobotChecks.java", `package frc.robot.helpers;
+import frc.robot.subsystems.StateMachine;
+public final class RobotChecks {
+  private final StateMachine robot;
+  public RobotChecks(StateMachine robot) { this.robot = robot; }
+  public boolean branchReady() { return robot.ready; }
 }`));
   inputs.push(await write("frc/robot/commands/DriveToPose.java", `package frc.robot.commands;
 public class DriveToPose extends edu.wpi.first.wpilibj2.command.Command {
@@ -37,6 +48,9 @@ public class DriveToPose extends edu.wpi.first.wpilibj2.command.Command {
   private boolean done;
   public DriveToPose(frc.robot.subsystems.Swerve drive, edu.wpi.first.math.geometry.Pose2d pose, frc.powerlib.auto.DriveConstraints constraints) { addRequirements(drive); }
   public DriveToPose atProgress(double progress, Runnable action) { actions.add(action); return this; }
+  public DriveToPose turningAfter(double progress) { return this; }
+  public DriveToPose facing(edu.wpi.first.math.geometry.Translation2d point) { return this; }
+  public DriveToPose withMaxTurnRate(double rate) { return this; }
   public DriveToPose withHeadingTolerance(edu.wpi.first.math.geometry.Rotation2d tolerance) { return this; }
   @Override public void initialize() { done = false; }
   @Override public void execute() { if (!done && allowFinish) { actions.forEach(Runnable::run); done = true; completed++; } }
@@ -105,6 +119,40 @@ public class GeneratedAutosCheck {
       Command fourth = builder.getAutonomousCommand(); CommandScheduler.getInstance().schedule(fourth);
       for(int i=0;i<5;i++) tick(); fourth.cancel();
       check(robot.requests.isEmpty(), "Cancellation before arrival never executes point state actions");
+      for (boolean outcome : new boolean[] {true, false}) {
+        for (String name : new String[] {"P5 State", "P5 Check"}) {
+          robot.events.clear(); robot.actual = outcome ? StateMachine.RobotState.${states[0]} : null; robot.ready = outcome;
+          chooser.getEntry("selected").setString(name);
+          Command branch = builder.getAutonomousCommand(); CommandScheduler.getInstance().schedule(branch);
+          for(int i=0;i<30 && branch.isScheduled();i++) tick();
+          check(!branch.isScheduled(), "Branch finishes after choosing an arm");
+          check(robot.events.equals(java.util.List.of(outcome ? StateMachine.RobotState.${states[0]} : StateMachine.RobotState.${states[1]})), "Only the chosen branch arm executes");
+          check(robot.requests.isEmpty(), "Branch requests cleared at completion");
+        }
+      }
+      robot.actual = null; robot.events.clear(); chooser.getEntry("selected").setString("P5 State");
+      Command arriving = builder.getAutonomousCommand(); CommandScheduler.getInstance().schedule(arriving); tick();
+      robot.actual = StateMachine.RobotState.${states[0]};
+      for(int i=0;i<30 && arriving.isScheduled();i++) tick();
+      check(robot.events.equals(java.util.List.of(StateMachine.RobotState.${states[0]})), "Condition reached within its wait chooses Then");
+      robot.events.clear(); robot.actual=null;
+      Command cancelled = builder.getAutonomousCommand(); CommandScheduler.getInstance().schedule(cancelled); tick(); cancelled.cancel();
+      check(robot.events.isEmpty(), "Cancellation while waiting never executes either arm");
+      for (boolean outcome : new boolean[] {true, false}) {
+        robot.events.clear(); chooser.getEntry("selected").setString(outcome ? "P5 Time yes" : "P5 Time no");
+        Command timed = builder.getAutonomousCommand(); CommandScheduler.getInstance().schedule(timed);
+        for(int i=0;i<30 && timed.isScheduled();i++) tick();
+        check(!timed.isScheduled() && robot.events.equals(java.util.List.of(outcome ? StateMachine.RobotState.${states[0]} : StateMachine.RobotState.${states[1]})), "Remaining time branches use time since this auto started");
+      }
+      try {
+        var field = GeneratedAutos.class.getDeclaredField("AUTO_TIMER"); field.setAccessible(true);
+        var timer = (edu.wpi.first.wpilibj.Timer) field.get(null); timer.restart();
+        var left = GeneratedAutos.class.getDeclaredMethod("secondsLeft"); left.setAccessible(true);
+        check((double)left.invoke(null)==20.0, "Exactly the period is left at timer restart");
+        SimHooks.stepTiming(19.0); check((double)left.invoke(null)==1.0, "Exact remaining time boundary is inclusive");
+        SimHooks.stepTiming(.02); check((double)left.invoke(null)<1.0, "Below the boundary chooses Otherwise");
+      } catch (ReflectiveOperationException error) { throw new AssertionError(error); }
+      System.out.println("Phase 5 scheduler checks passed: both state/check arms, wait success/deadline/cancel, remaining-time boundaries and per-run timer reset.");
     } finally { SimHooks.resumeTiming(); }
     System.out.println("Generated command behavior passed: request/actual state separation, indefinite state waits, normal/cancel cleanup, fresh factories, and simulation start.");
   }

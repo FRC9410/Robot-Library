@@ -4,10 +4,12 @@ import type { GeneratedSubsystem, SubsystemDocumentState, SubsystemFormState } f
 import { createEmptySubsystemForm, subsystemToForm } from "../subsystems/subsystemUtils";
 import { ConfigSettingsView } from "./ConfigSettingsView";
 import { SubsystemWizard } from "./SubsystemWizard";
+import type { useAutoEditor } from "../autos/useAutoEditor";
 import "./config.css";
 
 type Screen = "settings" | "wizard";
-export function ConfigDialog({ document, onRefresh, onSave, onClose }: {
+export function ConfigDialog({ autoEditor, document, onRefresh, onSave, onClose }: {
+  autoEditor: ReturnType<typeof useAutoEditor>;
   document: SubsystemDocumentState;
   onRefresh: () => void;
   onSave: (subsystems: GeneratedSubsystem[]) => Promise<void>;
@@ -36,7 +38,7 @@ export function ConfigDialog({ document, onRefresh, onSave, onClose }: {
       onEntered={() => titleRef.current?.focus()}>
       <Box className="config-screen" sx={{ pointerEvents: visible ? undefined : "none" }}>
         {screen === "settings"
-          ? <ConfigSettingsView document={document} onRefresh={onRefresh} onCreate={() => startWizard()}
+          ? <ConfigSettingsView autoEditor={autoEditor} document={document} onRefresh={onRefresh} onCreate={() => startWizard()}
               onEdit={startWizard} onClose={onClose} titleId={titleId} titleRef={titleRef} />
           : <SubsystemWizard initialForm={form} subsystems={document.subsystems} onSave={onSave}
               onSavingChange={setSaving} onCancel={() => transitionTo("settings")} onClose={onClose}

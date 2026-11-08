@@ -27,7 +27,7 @@ New-Item -ItemType Directory -Path (Split-Path $generationMachine) -Force | Out-
 if ($LASTEXITCODE -ne 0) { throw 'Java state source fixture generation failed.' }
 Write-FixtureSource 'frc/robot/subsystems/StateMachine.java' ([IO.File]::ReadAllText($generationMachine))
 Write-FixtureSource 'frc/robot/subsystems/states/CheckState.java' ([IO.File]::ReadAllText((Join-Path $generationRoot 'src/main/java/frc/robot/subsystems/states/CheckState.java')))
-foreach ($path in @('frc/robot/subsystems/states/IdleState.java', 'frc/robot/commands/RequestState.java', 'frc/robot/commands/SwerveDriveCommand.java')) {
+foreach ($path in @('frc/robot/helpers/RobotChecks.java', 'frc/robot/subsystems/states/IdleState.java', 'frc/robot/commands/RequestState.java', 'frc/robot/commands/SwerveDriveCommand.java')) {
     Write-FixtureSource $path ([IO.File]::ReadAllText((Join-Path $robotTemplate $path)))
 }
 Write-FixtureSource 'frc/powerlib/statemachine/State.java' ([IO.File]::ReadAllText((Join-Path $root 'templates/powerlib/src/main/java/frc/powerlib/statemachine/State.java')))

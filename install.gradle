@@ -410,6 +410,12 @@ def templateFiles = [
         replacement: true
     ),
     new TemplateFile(
+        source: 'replacements/src/main/java/frc/robot/helpers/RobotChecks.java',
+        destination: 'src/main/java/frc/robot/helpers/RobotChecks.java',
+        replacement: true,
+        createOnly: true
+    ),
+    new TemplateFile(
         source: 'replacements/src/main/java/frc/robot/subsystems/Swerve.java',
         destination: 'src/main/java/frc/robot/subsystems/Swerve.java',
         replacement: true

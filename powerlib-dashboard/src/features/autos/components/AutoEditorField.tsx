@@ -4,23 +4,24 @@ import { Box } from "@mui/material";
 import type { FieldLayout } from "../../field/fieldLayouts";
 import { FieldView } from "../../field/components/FieldView";
 import { RobotFootprint } from "../../field/components/RobotFootprint";
-import { normalizeHeading, type AutoRoutine, type DriveStep, type NamedPoint } from "../autoModel";
+import { legEndHeading, normalizeHeading, type AutoRoutine, type DriveStep, type NamedPoint } from "../autoModel";
 import { snapHeading, snapPosition, type SnapGuide } from "../autoSnap";
 import type { AutoSelectMode } from "../autoSelection";
+import { AutoSubpointMarkers } from "./AutoSubpointMarkers";
 
 type AutoEditorFieldProps = { auto: AutoRoutine | undefined; layout: FieldLayout | null; dimensions: { length: number; width: number };
   flip: boolean; pose?: { x: number; y: number; heading: number }; selectedId: string | null; disabled: boolean;
   onAdd: (sourceId: string, point: { x: number; y: number }) => void; onSelect: (id: string, mode?: AutoSelectMode, preserveGroup?: boolean) => void; onMove: (id: string, point: { x: number; y: number }) => void;
-  onHeading: (id: string, heading: number) => void; selectedIds?: string[]; snap?: boolean; namedPoints?: NamedPoint[];
+  onFace?: (id: string, point: { x: number; y: number }) => void; onHeading: (id: string, heading: number) => void; selectedIds?: string[]; snap?: boolean; namedPoints?: NamedPoint[];
   onSelection?: (ids: string[]) => void; onBegin?: () => void; onEnd?: (cancel?: boolean) => void;
   connectPoints?: boolean; allowCreation?: boolean; pointNames?: Record<string, string> };
 
-export function AutoEditorField({ auto, layout, dimensions, flip, pose, selectedId, selectedIds = [], snap = false, namedPoints = [], onSelection, onBegin, onEnd, disabled, onAdd, onSelect, onMove, onHeading,
+export function AutoEditorField({ auto, layout, dimensions, flip, pose, selectedId, selectedIds = [], snap = false, namedPoints = [], onSelection, onBegin, onEnd, disabled, onAdd, onSelect, onMove, onHeading, onFace,
   connectPoints = true, allowCreation = true, pointNames }: AutoEditorFieldProps) {
-  const drag = useRef<{ id: string; mode: "position" | "heading" | "create"; pointerId: number;
+  const drag = useRef<{ id: string; mode: "position" | "heading" | "create" | "face"; pointerId: number;
     startX: number; startY: number; moved: boolean; toggleOnClick: boolean; collapseOnClick: boolean } | null>(null);
   const [preview, setPreview] = useState<{ sourceId: string; x: number; y: number } | null>(null);
-  const [dragMode, setDragMode] = useState<"position" | "heading" | "create" | null>(null);
+  const [dragMode, setDragMode] = useState<"position" | "heading" | "create" | "face" | null>(null);
   const [guides, setGuides] = useState<SnapGuide[]>([]);
   const boxDrag = useRef<{ start: { x: number; y: number }; pointerId: number; additive: boolean; original: string[] } | null>(null);
   const [box, setBox] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null);
@@ -30,7 +31,7 @@ export function AutoEditorField({ auto, layout, dimensions, flip, pose, selected
   const pixel = (step: { x: number; y: number }) => ({ x: step.x / field.length * width, y: height - step.y / field.width * height });
   function cancelDrag(cancel = false) { if (drag.current) onEnd?.(cancel); drag.current = null; boxDrag.current = null; setBox(null); setGuides([]); setPreview(null); setDragMode(null); }
   useEffect(() => { cancelDrag(true); }, [auto?.id, disabled, flip, field.length, field.width]);
-  function beginDrag(event: PointerEvent<SVGGElement>, id: string, mode: "position" | "heading" | "create") {
+  function beginDrag(event: PointerEvent<SVGGElement>, id: string, mode: "position" | "heading" | "create" | "face") {
     event.stopPropagation();
     if (disabled || event.button !== 0) return;
     event.preventDefault();
@@ -112,6 +113,9 @@ export function AutoEditorField({ auto, layout, dimensions, flip, pose, selected
               const heading = normalizeHeading(Math.round(Math.atan2(point.y - step.y, point.x - step.x) * 180 / Math.PI));
               onHeading(step.id, snap && !event.ctrlKey ? snapHeading(heading, points.filter(point => point.id !== step.id).map(point => ({ value: point.heading, label: "Point heading" })), 4).heading : heading);
             }
+          } else if (active.mode === "face") {
+            const point = coordinates(event.currentTarget, event.clientX, event.clientY, true);
+            if (point) onFace?.(active.id, snapped(event.currentTarget, point, active.id, event.ctrlKey));
           } else if (active.mode === "create") {
             const point = coordinates(event.currentTarget, event.clientX, event.clientY, true);
             if (point && points.some(step => step.id === active.id)) setPreview({ sourceId: active.id, ...snapped(event.currentTarget, point, active.id, event.ctrlKey, true) });
@@ -157,6 +161,18 @@ export function AutoEditorField({ auto, layout, dimensions, flip, pose, selected
             </g>
           </g>;
         })()}
+        {points.filter(step => step.id === selectedId && step.turn.mode === "face").map(step => {
+          if (step.turn.mode !== "face") return null;
+          const target = pixel(step.turn), start = pixel(step);
+          return <g key={`face-${step.id}`} data-face-target={step.id}>
+            <line x1={start.x} y1={start.y} x2={target.x} y2={target.y} stroke="#38bdf8" strokeDasharray="3 3" pointerEvents="none" />
+            <g transform={`translate(${target.x} ${target.y})`} role="button" aria-label="Facing target" style={{ cursor: "crosshair" }}
+              onPointerDown={event => beginDrag(event, step.id, "face")}>
+              <circle r="18" fill="transparent" /><circle r="9" fill="#0d1922" stroke="#38bdf8" strokeWidth="2" />
+              <path d="M -14 0 H 14 M 0 -14 V 14" stroke="#38bdf8" strokeWidth="2" pointerEvents="none" />
+            </g>
+          </g>;
+        })}
         {points.map((step, index) => {
           const p = pixel(step), selected = step.id === selectedId, marked = selected || selectedIds.includes(step.id);
           return <g key={step.id} data-auto-point={step.id} role="button" tabIndex={0} aria-label={pointNames ? `Named point ${pointNames[step.id]}` : `Drive point ${index + 1}`}
@@ -164,12 +180,12 @@ export function AutoEditorField({ auto, layout, dimensions, flip, pose, selected
             onPointerDown={event => beginDrag(event, step.id, "position")}
             onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(step.id, event.shiftKey ? "range" : event.ctrlKey || event.metaKey); } }}>
             <title>{pointNames?.[step.id] ?? (index === 0 ? "Start point 1" : `Drive point ${index + 1}`)}</title>
-            {selected && <g transform={`rotate(${-step.heading})`} data-selected-point-footprint="true">
+            {selected && <g transform={`rotate(${-legEndHeading(step)})`} data-selected-point-footprint="true">
               <RobotFootprint scale={height / field.width} />
             </g>}
             <circle r="13" fill={marked ? "#facc15" : "#1e293b"} stroke="#facc15" strokeWidth="2" />
-            <path d="M 14 0 H 27 M 21 -5 L 27 0 L 21 5" transform={`rotate(${-step.heading})`} stroke={selected ? "#fff" : "#facc15"} fill="none" strokeWidth="2" pointerEvents="none" />
-            {selected && <g transform={`rotate(${-step.heading})`}>
+            <path d="M 14 0 H 27 M 21 -5 L 27 0 L 21 5" transform={`rotate(${-legEndHeading(step)})`} stroke={selected ? "#fff" : "#facc15"} fill="none" strokeWidth="2" pointerEvents="none" />
+            {selected && step.turn.mode !== "face" && <g transform={`rotate(${-legEndHeading(step)})`}>
               <path d="M 27 0 H 48" stroke="#fff" strokeWidth="2" pointerEvents="none" />
               <g role="button" tabIndex={disabled ? -1 : 0} aria-label={`Heading for drive point ${index + 1}`} aria-disabled={disabled}
                 data-heading-handle={step.id} transform="translate(48 0)" style={{ cursor: disabled ? "default" : "crosshair" }}
@@ -186,7 +202,7 @@ export function AutoEditorField({ auto, layout, dimensions, flip, pose, selected
                 <path d="M -4 -4 L 4 0 L -4 4" fill="none" stroke="#14212c" strokeWidth="2" pointerEvents="none" />
               </g>
             </g>}
-            {allowCreation && selected && dragMode !== "heading" && <g transform={`rotate(${-step.heading}) translate(0 44)`} aria-label={`Create point from drive point ${index + 1}`}
+            {allowCreation && selected && dragMode !== "heading" && dragMode !== "face" && <g transform={`rotate(${-legEndHeading(step)}) translate(0 44)`} aria-label={`Create point from drive point ${index + 1}`}
               data-add-point-handle={step.id} style={{ cursor: disabled ? "default" : "crosshair" }}
               onPointerDown={event => beginDrag(event, step.id, "create")}>
               <title>Drag + to create a point after this one. Escape cancels.</title>
@@ -198,6 +214,7 @@ export function AutoEditorField({ auto, layout, dimensions, flip, pose, selected
               textAnchor="middle" dominantBaseline="central" transform={flip ? "rotate(180)" : undefined} pointerEvents="none">{index + 1}</text>
           </g>;
         })}
+        {connectPoints && <AutoSubpointMarkers points={points} pixel={pixel} scale={height / field.width} flip={flip} selectedIds={selectedIds} selectedId={selectedId} disabled={disabled} onSelect={onSelect} />}
       </FieldView>
     </Box>
   </Box>;

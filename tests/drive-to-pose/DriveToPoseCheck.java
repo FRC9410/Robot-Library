@@ -38,7 +38,10 @@ public final class DriveToPoseCheck {
     check(HAL.initialize(500, 0), "HAL initializes");
     actualCommandTracksWithinLimits();
     measuredVelocityAndHeadingRequests();
+    delayedTurnsAtEnteredPercentages();
     optionalHeadingCompletion();
+    facingArrivalKeepsApproachHeading();
+    branchHandoffStopsTurning();
     normalAndInterruptedSubpoints();
     schedulerCancellation();
     invalidArguments();
@@ -99,6 +102,23 @@ public final class DriveToPoseCheck {
     command.end(true); stopped(drive);
   }
 
+  private static void delayedTurnsAtEnteredPercentages() {
+    var drive = new Swerve();
+    for (double threshold : new double[] {.1, .5, .8}) {
+      var start = new Translation2d(5.8, 2.47);
+      var end = new Translation2d(2.07, 2.47);
+      var command = new DriveToPose(drive, new Pose2d(end, Rotation2d.fromDegrees(45))).turningAfter(threshold);
+      drive.getState().Pose = new Pose2d(start, Rotation2d.fromDegrees(90));
+      command.initialize(); command.execute();
+      near(request(drive).TargetDirection.getDegrees(), 90, "Delayed turn holds the start heading at leg start");
+      drive.getState().Pose = new Pose2d(start.interpolate(end, threshold - .001), Rotation2d.fromDegrees(90)); command.execute();
+      near(request(drive).TargetDirection.getDegrees(), 90, "Delayed turn holds until the entered percentage");
+      drive.getState().Pose = new Pose2d(start.interpolate(end, threshold + .001), Rotation2d.fromDegrees(90)); command.execute();
+      near(request(drive).TargetDirection.getDegrees(), 45, "Delayed turn changes heading after the entered percentage");
+      command.end(true);
+    }
+  }
+
   private static void normalAndInterruptedSubpoints() {
     var drive = new Swerve();
     List<String> events = new ArrayList<>();
@@ -157,6 +177,77 @@ public final class DriveToPoseCheck {
     check(!command.isFinished(), "Delayed turn completion evaluates the destination heading even before execute");
     drive.getState().Pose = new Pose2d(2, 0, Rotation2d.fromDegrees(90));
     check(command.isFinished(), "Delayed turn finishes aligned"); command.end(false);
+  }
+
+  private static void facingArrivalKeepsApproachHeading() {
+    var drive = new Swerve();
+    var destination = new Translation2d(7.8, 3.49);
+    var command = new DriveToPose(drive, new Pose2d(destination, Rotation2d.fromDegrees(90)))
+        .facing(destination).withHeadingTolerance(Rotation2d.fromDegrees(5));
+    drive.getState().Pose = new Pose2d(7.8, 3.0, Rotation2d.fromDegrees(90));
+    command.initialize(); command.execute();
+    near(request(drive).TargetDirection.getDegrees(), 90, "Faces destination while approaching");
+    drive.getState().Speeds = new ChassisSpeeds(.12, 0, 0);
+    for (var position : List.of(new Translation2d(7.8, 3.47), new Translation2d(7.801, 3.491),
+        new Translation2d(7.79, 3.50), new Translation2d(7.81, 3.48))) {
+      drive.getState().Pose = new Pose2d(position, Rotation2d.fromDegrees(90)); command.execute();
+      near(request(drive).TargetDirection.getDegrees(), 90, "Arrival noise cannot reverse the face-point heading");
+      check(!command.isFinished(), "Facing arrival still waits for measured translational speed");
+    }
+    drive.getState().Speeds = new ChassisSpeeds();
+    check(command.isFinished(), "Stable heading lets arrival finish without an extra turn");
+    command.end(false); stopped(drive);
+
+    drive.getState().Pose = new Pose2d(7.8, 4, Rotation2d.fromDegrees(-90));
+    command.initialize(); command.execute();
+    near(request(drive).TargetDirection.getDegrees(), -90, "A new run resets the held arrival heading");
+    command.end(true);
+
+    // A field point passed during a longer leg must still be faced from its other side.
+    var passing = new DriveToPose(drive, new Pose2d(7.8, 5, Rotation2d.fromDegrees(90))).facing(destination);
+    drive.getState().Pose = new Pose2d(7.8, 3.4, Rotation2d.fromDegrees(90));
+    passing.initialize(); passing.execute();
+    near(request(drive).TargetDirection.getDegrees(), 90, "Faces a spot before passing it");
+    drive.getState().Pose = new Pose2d(7.8, 3.6, Rotation2d.fromDegrees(90)); passing.execute();
+    near(request(drive).TargetDirection.getDegrees(), -90, "Passing a face point still updates the bearing");
+    passing.end(true);
+  }
+
+  private static void branchHandoffStopsTurning() {
+    DriverStationSim.setDsAttached(true); DriverStationSim.setEnabled(true); DriverStationSim.notifyNewData();
+    var drive = new Swerve();
+    var destination = new Translation2d(7.8, 3.49);
+    var reached = new java.util.concurrent.atomic.AtomicBoolean();
+    var release = new java.util.concurrent.atomic.AtomicBoolean();
+    var command = edu.wpi.first.wpilibj2.command.Commands.sequence(
+        new DriveToPose(drive, new Pose2d(destination, Rotation2d.fromDegrees(90))).facing(destination),
+        edu.wpi.first.wpilibj2.command.Commands.either(
+            edu.wpi.first.wpilibj2.command.Commands.waitUntil(release::get),
+            edu.wpi.first.wpilibj2.command.Commands.none(),
+            () -> { reached.set(true); return true; }));
+    drive.getState().Pose = new Pose2d(7.8, 3.0, Rotation2d.fromDegrees(90));
+    CommandScheduler.getInstance().schedule(command); CommandScheduler.getInstance().run();
+    drive.getState().Pose = new Pose2d(7.801, 3.491, Rotation2d.fromDegrees(90));
+    drive.getState().Speeds = new ChassisSpeeds();
+    CommandScheduler.getInstance().run();
+    check(reached.get(), "Arrival reaches the branch without chasing the face-point bearing");
+    for (int i = 0; i < 10; i++) { CommandScheduler.getInstance().run(); stopped(drive); }
+    release.set(true); CommandScheduler.getInstance().run();
+    check(!command.isScheduled(), "The selected branch arm completes normally");
+
+    var nextLeg = new DriveToPose(drive, new Pose2d(7.8, 5.77, Rotation2d.fromDegrees(90)));
+    var continuing = edu.wpi.first.wpilibj2.command.Commands.sequence(
+        new DriveToPose(drive, new Pose2d(destination, Rotation2d.fromDegrees(90))).facing(destination),
+        edu.wpi.first.wpilibj2.command.Commands.either(nextLeg,
+            edu.wpi.first.wpilibj2.command.Commands.none(), () -> true));
+    drive.getState().Pose = new Pose2d(7.8, 3.0, Rotation2d.fromDegrees(90));
+    CommandScheduler.getInstance().schedule(continuing); CommandScheduler.getInstance().run();
+    drive.getState().Pose = new Pose2d(7.801, 3.491, Rotation2d.fromDegrees(90));
+    CommandScheduler.getInstance().run(); CommandScheduler.getInstance().run();
+    near(request(drive).TargetDirection.getDegrees(), 90, "Then drive continues with the approach heading");
+    check(request(drive).VelocityY > 0, "Then drive continues toward its next destination");
+    continuing.cancel(); stopped(drive);
+    DriverStationSim.setEnabled(false); DriverStationSim.notifyNewData();
   }
 
   private static void schedulerCancellation() {

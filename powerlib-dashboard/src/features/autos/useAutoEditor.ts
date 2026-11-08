@@ -85,7 +85,7 @@ export function useAutoEditor(field: Dimensions) {
   }, []);
 
   const project: AutoProject = { states: files?.states ?? [], driveCommandInstalled: files?.driveCommandInstalled ?? null,
-    handWrittenNames: files?.handWrittenNames ?? [], field };
+    handWrittenNames: files?.handWrittenNames ?? [], checks: files?.checks ?? [], field };
   const issues = validateAutos(document, project);
   let code = "";
   if (!hasErrors(issues)) code = generateAutosJava(document, project);

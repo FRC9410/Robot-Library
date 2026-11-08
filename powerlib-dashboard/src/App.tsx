@@ -37,6 +37,9 @@ import { DashboardPanel } from "../dashboard";
 import { LimelightsPanel } from "./features/limelights/LimelightsPanel";
 import { LogsPanel } from "./features/logs/LogsPanel";
 import { AutosPanel } from "./features/autos/AutosPanel";
+import { useAutoEditor } from "./features/autos/useAutoEditor";
+import { useDashboardSettings } from "./features/dashboard/useDashboardSettings";
+import { useFieldLayout } from "./features/field/useFieldLayout";
 import { getFieldLayoutId, loadUploadedField, setFieldLayoutId } from "./features/field/fieldLayouts";
 import { detectLimelights } from "./features/limelights/limelightUtils";
 import type { AppView } from "./types/app";
@@ -71,6 +74,9 @@ export function App() {
 }
 
 function AppContent() {
+  const dashboardSettings = useDashboardSettings();
+  const fieldLayout = useFieldLayout();
+  const autoEditor = useAutoEditor(fieldLayout ?? dashboardSettings);
   const {
     clientRef,
     status,
@@ -482,7 +488,7 @@ function AppContent() {
         }}
       />
 
-      {configOpen && <ConfigDialog document={subsystemDocument} onRefresh={() => void loadSubsystems()}
+      {configOpen && <ConfigDialog autoEditor={autoEditor} document={subsystemDocument} onRefresh={() => void loadSubsystems()}
         onClose={() => setConfigOpen(false)} onSave={async subsystems => {
           await saveSubsystems(subsystems);
           showToast("Subsystem saved to Java. Build and deploy to apply it to the robot.", "success");
@@ -515,7 +521,7 @@ function AppContent() {
           {activeView === "dashboard" && <DashboardPanel subsystems={subsystemDocument.subsystems}
             tuningRequested={tuningModeEnabled}
             onOpenConfig={() => { setConfigOpen(true); void loadSubsystems(); }} />}
-          <Box sx={{ display: activeView === "autos" ? "flex" : "none", flex: 1, minHeight: 0 }}><AutosPanel /></Box>
+          <Box sx={{ display: activeView === "autos" ? "flex" : "none", flex: 1, minHeight: 0 }}><AutosPanel editor={autoEditor} /></Box>
 
           {/* Stays mounted so an open log survives switching tabs. */}
           <Box sx={{ display: activeView === "logs" ? "flex" : "none", flexDirection: "column", flex: 1, minHeight: 0 }}>

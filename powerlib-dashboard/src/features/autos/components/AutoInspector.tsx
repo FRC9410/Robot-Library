@@ -1,18 +1,12 @@
 import { Checkbox, FormControlLabel, MenuItem, Stack, TextField, Typography } from "@mui/material";
-import type { AutoStep } from "../autoModel";
+import type { AutoStep, NamedPoint } from "../autoModel";
 import { AutoNumberField } from "./AutoNumberField";
+import { AdvancedDriveSettings } from "./AdvancedDriveSettings";
+import { BranchConditionSettings } from "./BranchConditionSettings";
 
-type AutoInspectorProps = { step: AutoStep; states: string[]; disabled: boolean; onChange: (step: AutoStep) => void };
+type AutoInspectorProps = { step: AutoStep; states: string[]; checks: string[]; points: NamedPoint[]; disabled: boolean; onChange: (step: AutoStep) => void };
 
-function OptionalState({ label, value, states, disabled, onChange }: { label: string; value: string | null; states: string[]; disabled: boolean; onChange: (value: string | null) => void }) {
-  return <TextField select label={label} value={value ?? ""} size="small" disabled={disabled} onChange={event => onChange(event.target.value || null)}>
-    <MenuItem value="">None</MenuItem>
-    {value && !states.includes(value) && <MenuItem value={value}>{value}</MenuItem>}
-    {states.map(state => <MenuItem key={state} value={state}>{state}</MenuItem>)}
-  </TextField>;
-}
-
-export function AutoInspector({ step, states, disabled, onChange }: AutoInspectorProps) {
+export function AutoInspector({ step, states, checks, points, disabled, onChange }: AutoInspectorProps) {
   return <Stack spacing={2} aria-label="Step settings" key={step.id}>
     <Typography variant="subtitle1">Step settings</Typography>
     {step.type === "drive" && <>
@@ -21,8 +15,7 @@ export function AutoInspector({ step, states, disabled, onChange }: AutoInspecto
         <AutoNumberField label="Y (m)" value={step.y} disabled={disabled} onChange={y => onChange({ ...step, y })} />
       </Stack>
       <AutoNumberField label="Heading (deg)" value={step.heading} disabled={disabled} onChange={heading => onChange({ ...step, heading })} />
-      <OptionalState label="Execute state" value={step.executeState} states={states} disabled={disabled} onChange={executeState => onChange({ ...step, executeState })} />
-      <OptionalState label="Wait for state" value={step.waitForState} states={states} disabled={disabled} onChange={waitForState => onChange({ ...step, waitForState })} />
+      <AdvancedDriveSettings step={step} states={states} points={points} disabled={disabled} onChange={onChange} />
       <AutoNumberField label="Max velocity (m/s)" value={step.maxVelocity} disabled={disabled} min={0.001} onChange={maxVelocity => onChange({ ...step, maxVelocity })} />
       <AutoNumberField label="Max acceleration (m/s²)" value={step.maxAcceleration} disabled={disabled} min={0.001} onChange={maxAcceleration => onChange({ ...step, maxAcceleration })} />
       <AutoNumberField label="End distance tolerance (m)" value={step.endDistanceTolerance} disabled={disabled} min={0.001} onChange={endDistanceTolerance => onChange({ ...step, endDistanceTolerance })} />
@@ -49,5 +42,6 @@ export function AutoInspector({ step, states, disabled, onChange }: AutoInspecto
       </TextField>
     </>}
     {step.type === "wait" && <AutoNumberField label="Wait (s)" value={step.seconds} min={0} disabled={disabled} onChange={seconds => onChange({ ...step, seconds })} />}
+    {step.type === "branch" && <BranchConditionSettings step={step} states={states} checks={checks} disabled={disabled} onChange={onChange} />}
   </Stack>;
 }

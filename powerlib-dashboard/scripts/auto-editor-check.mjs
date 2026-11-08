@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { build } from "esbuild";
 import { checkGeneratedCommands } from "./auto-command-check.mjs";
+import { checkAdvancedAutos } from "./auto-advanced-check.mjs";
 import { checkAutoEditing } from "./auto-editing-check.mjs";
 
 const project = fileURLToPath(new URL("..", import.meta.url));
@@ -46,6 +47,21 @@ public final class HandwrittenAutos {
   }
 }
 `);
+  const machinePath = robotFile("subsystems/StateMachine.java");
+  let machineSource = await fs.readFile(machinePath, "utf8");
+  machineSource = machineSource.replace(/import frc\.robot\.subsystems\.RobotChecks;\s*/g, "");
+  if (!machineSource.includes("import frc.robot.helpers.RobotChecks;")) machineSource = machineSource.replace("package frc.robot.subsystems;", "package frc.robot.subsystems;\nimport frc.robot.helpers.RobotChecks;");
+  await fs.rm(robotFile("subsystems/RobotChecks.java"), { force: true });
+  await fs.writeFile(machinePath, machineSource.includes("public final RobotChecks checks") ? machineSource
+    : machineSource.replace(/(class StateMachine[^{}]*\{)/, "$1\n  public final RobotChecks checks = new RobotChecks(this);\n"));
+  const checksPath = robotFile("helpers/RobotChecks.java");
+  await fs.mkdir(path.dirname(checksPath), { recursive: true });
+  await fs.writeFile(checksPath, `package frc.robot.helpers;
+import frc.robot.subsystems.StateMachine;
+public final class RobotChecks {
+  public RobotChecks(StateMachine robot) {}
+  public boolean branchReady() { return true; }
+}`);
   assert.deepEqual(files.parseRobotStates('class StateMachine { enum RobotState { READY(1, 2), IDLE; RobotState(int... ignored) {} } }'), ["READY", "IDLE"]);
   const sampleHook = 'class RobotAutos { public static void register(AutoBuilder builder, StateMachine machine) { /* GeneratedAutos.register(builder, machine); */ String text="GeneratedAutos.register(builder, machine);"; } }';
   const hooked = files.addGeneratedAutosHook(sampleHook);
@@ -54,6 +70,17 @@ public final class HandwrittenAutos {
 
   let state = await files.readAutoFiles(root);
   assert.equal(state.error, null);
+  assert.deepEqual(state.checks, ["branchReady"], "Checks come from the dedicated RobotChecks bucket");
+  await fs.writeFile(checksPath, (await fs.readFile(checksPath, "utf8")).replace("branchReady", "renamedCheck"));
+  const changedChecks = await files.readAutoFiles(root);
+  assert.deepEqual(changedChecks.checks, ["renamedCheck"]);
+  assert.notEqual(changedChecks.sourceRevision, state.sourceRevision, "Check source changes invalidate the generation revision");
+  await fs.writeFile(checksPath, (await fs.readFile(checksPath, "utf8")).replace("renamedCheck", "branchReady"));
+  const connectedMachine = await fs.readFile(machinePath, "utf8");
+  await fs.writeFile(machinePath, connectedMachine.replace("public final RobotChecks checks", "private final RobotChecks checks"));
+  assert.deepEqual((await files.readAutoFiles(root)).checks, [], "Unexposed buckets cannot be selected");
+  await fs.writeFile(machinePath, connectedMachine);
+  state = await files.readAutoFiles(root);
   assert.deepEqual(state.document.autos, []);
   assert.ok(state.handWrittenNames.includes("Team route"), "Names in helper classes are protected");
   const baseline = await sourceSnapshot();
@@ -179,7 +206,8 @@ public final class HandwrittenAutos {
   state = (await files.generateAutoCode(root, state.revision, state.sourceRevision, context.field)).state;
 
   const editingDocument = await checkAutoEditing({ load, model, docs, context });
-  state = await files.saveAutoFiles(root, { ...state.document, points: editingDocument.points, autos: [...state.document.autos, ...editingDocument.autos] }, state.revision);
+  const advancedDocument = await checkAdvancedAutos({ load, model, docs, files, context });
+  state = await files.saveAutoFiles(root, { ...state.document, points: [...editingDocument.points, ...advancedDocument.points], autos: [...state.document.autos, ...editingDocument.autos, ...advancedDocument.autos] }, state.revision);
   state = (await files.generateAutoCode(root, state.revision, state.sourceRevision, context.field)).state;
   const editingJava = await fs.readFile(generatedPath, "utf8");
   await files.generateAutoCode(root, state.revision, state.sourceRevision, context.field);

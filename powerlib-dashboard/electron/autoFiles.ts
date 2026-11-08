@@ -8,6 +8,7 @@ import { closing, maskJava, splitExpressions, stripComments } from "./java-confi
 
 export const generatedAutoPath = `${robotSource}/autos/GeneratedAutos.java`;
 const robotAutosPath = `${robotSource}/autos/RobotAutos.java`;
+const robotChecksPath = `${robotSource}/helpers/RobotChecks.java`;
 const jsonRelative = "power-tool/generated/powerlib-autos.json";
 const maxBytes = 8 * 1024 * 1024;
 
@@ -42,6 +43,27 @@ export function parseRobotStates(source: string) {
     .map(range => /^\s*([A-Za-z_$][\w$]*)/.exec(mask.slice(range.start, range.end))?.[1]).filter((name): name is string => !!name);
 }
 
+/** Signatures/fields declared directly on a class, excluding method bodies and nested classes. */
+function classMembers(source: string, name: "StateMachine" | "RobotChecks") {
+  const mask = maskJava(source);
+  const declaration = new RegExp(`\\bclass\\s+${name}\\b[^{}]*\\{`).exec(mask);
+  if (!declaration) return "";
+  const opening = declaration.index + declaration[0].length - 1;
+  const end = closing(mask, opening);
+  let body = "";
+  for (let at = opening + 1; at < end; at++) {
+    if (mask[at] === "{") { at = closing(mask, at); body += ";"; }
+    else body += mask[at];
+  }
+  return body;
+}
+
+/** Only public no-argument boolean instance methods in the dedicated checks bucket. */
+export function parseRobotChecks(source: string) {
+  const body = classMembers(source, "RobotChecks");
+  return [...new Set([...body.matchAll(/(?:^|(?<=[;}]))\s*(?:@[\w.]+\s*)*public\s+(?:(?:final|synchronized)\s+)*boolean\s+([A-Za-z_$][\w$]*)\s*\(\s*\)\s*;/g)].map(match => match[1]))];
+}
+
 function strings(source: string) {
   return [...stripComments(source).matchAll(/"((?:\\.|[^"\\])*)"/g)].map(match => {
     try { return JSON.parse(`"${match[1]}"`) as string; } catch { return match[1]; }
@@ -62,6 +84,8 @@ export function addGeneratedAutosHook(source: string) {
 
 async function metadata(project: SourceProject) {
   const machine = await project.read(stateMachinePath, true);
+  const checks = await project.read(robotChecksPath, true);
+  const checksConnected = /(?:^|(?<=[;}]))\s*public\s+(?:final\s+)?(?:frc\.robot\.helpers\.)?RobotChecks\s+checks\s*[=;]/.test(classMembers(machine, "StateMachine"));
   const robotAutos = await project.read(robotAutosPath, true);
   const generatedSource = await project.read(generatedAutoPath, true);
   const drive = await project.read(`${robotSource}/commands/DriveToPose.java`, true);
@@ -76,7 +100,7 @@ async function metadata(project: SourceProject) {
   const sources = new Map(project.originals);
   for (const [relative, value] of project.edits) sources.set(relative, value);
   const sourceRevision = digest(JSON.stringify([...sources].sort(([a], [b]) => a.localeCompare(b))));
-  return { states: parseRobotStates(machine), driveCommandInstalled: !!drive && constraints,
+  return { states: parseRobotStates(machine), checks: checksConnected ? parseRobotChecks(checks) : [], driveCommandInstalled: !!drive && constraints,
     handWrittenNames: [...new Set(handWrittenNames)], sourceRevision, generatedSource,
     robotAutosInstalled: !!robotAutos, robotAutosHooked: !!robotAutos && addGeneratedAutosHook(robotAutos) === robotAutos };
 }

@@ -1,5 +1,6 @@
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from "@mui/material";
 import { AutoNumberField } from "./AutoNumberField";
+import { allSteps, mapSteps } from "../autoModel";
 import type { useAutoTools } from "../useAutoTools";
 import type { useAutoEditor } from "../useAutoEditor";
 
@@ -20,15 +21,15 @@ export function AutoEditingDialogs({ tools }: Props) {
   </Dialog>;
 }
 export function AutoGroupInspector({ tools }: { tools: Props["tools"] }) {
-  const points = tools.displayed?.steps.filter(step => step.type === "drive" && tools.ids.includes(step.id)) ?? [];
+  const points = allSteps(tools.displayed?.steps ?? []).filter(step => step.type === "drive" && tools.ids.includes(step.id));
   const first = points[0];
   return <Stack spacing={1.5} aria-label="Group settings"><Typography>{tools.ids.length} steps selected</Typography>
-    <Stack direction="row" spacing={1}><Button disabled={!points.length} onClick={() => { const first = points[0]; if (first?.type === "drive") tools.update(auto => ({ ...auto, steps: auto.steps.map(step => step.type === "drive" && tools.ids.includes(step.id) ? { ...step, x: first.x } : step) })); }}>Align X</Button>
-      <Button disabled={!points.length} onClick={() => { const first = points[0]; if (first?.type === "drive") tools.update(auto => ({ ...auto, steps: auto.steps.map(step => step.type === "drive" && tools.ids.includes(step.id) ? { ...step, y: first.y } : step) })); }}>Align Y</Button></Stack>
+    <Stack direction="row" spacing={1}><Button disabled={!points.length} onClick={() => { const first = points[0]; if (first?.type === "drive") tools.update(auto => ({ ...auto, steps: mapSteps(auto.steps, step => step.type === "drive" && tools.ids.includes(step.id) ? { ...step, x: first.x } : step) })); }}>Align X</Button>
+      <Button disabled={!points.length} onClick={() => { const first = points[0]; if (first?.type === "drive") tools.update(auto => ({ ...auto, steps: mapSteps(auto.steps, step => step.type === "drive" && tools.ids.includes(step.id) ? { ...step, y: first.y } : step) })); }}>Align Y</Button></Stack>
     <Button disabled={!points.length} onClick={() => tools.rotate(15)}>Rotate headings +15°</Button>
     {first?.type === "drive" && <>{(["maxVelocity", "maxAcceleration", "endDistanceTolerance", "endVelocityTolerance"] as const).map((key, index) =>
       <AutoNumberField key={key} label={["Group max velocity (m/s)", "Group max acceleration (m/s²)", "Group distance tolerance (m)", "Group velocity tolerance (m/s)"][index]}
-        value={first[key]} min={.001} onChange={value => tools.update(auto => ({ ...auto, steps: auto.steps.map(step => step.type === "drive" && tools.ids.includes(step.id) ? { ...step, [key]: value } : step) }))} />)}</>}
+        value={first[key]} min={.001} onChange={value => tools.update(auto => ({ ...auto, steps: mapSteps(auto.steps, step => step.type === "drive" && tools.ids.includes(step.id) ? { ...step, [key]: value } : step) }))} />)}</>}
     <Button onClick={tools.actions.duplicate}>Duplicate selected</Button>
   </Stack>;
 }
