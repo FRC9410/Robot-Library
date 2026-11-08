@@ -1,5 +1,7 @@
 # Generic dashboard
 
+For everyday use, see [Power Tool](../docs/power-tool.md). This guide covers dashboard source customization and robot integration.
+
 The Dashboard tab renders `dashboard/index.tsx` from the Power Tool source tree,
 initially an export of the generic view. Customize it in a source checkout and
 rebuild the release package to include your components and assets. See

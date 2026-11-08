@@ -1,5 +1,7 @@
 # Power Tool
 
+User guides: [Power Tool](../docs/power-tool.md), [Auto Builder](../docs/auto-builder.md), and [Log Viewer](../docs/log-viewer.md). This file contains the more detailed Power Tool source and UI reference.
+
 ## Shared field layouts
 
 Choose **View → Field Layout** or **File → Settings → Field → Field layout** to select the

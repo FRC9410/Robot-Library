@@ -1,5 +1,7 @@
 # Library validation and review
 
+[Project README](../README.md) · [Development and releases](../docs/development.md)
+
 For the Windows ZIP distribution, build with `./build-project-zip.ps1 -SkipInstall`, then run:
 
 ```powershell
