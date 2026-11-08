@@ -156,6 +156,10 @@ app.on('browser-window-created',(_event,created)=>{
       assert.deepEqual(readDoc(),beforeHelp,'Opening Help never changes auto data');
       console.log('Help menu passed: production menu/preload opens Auto Keyboard Shortcuts from Dashboard, Logs and Autos without navigating or editing drafts.');
       if(process.argv.includes('--help-only')) return;
+      if(process.argv.includes('--menu-only')) {
+        await require('./file-menu-ui-check.cjs').checkFileMenu({evaluate,wait,readDoc,fixture,screenshot});
+        return;
+      }
       if(process.argv.includes('--settings-only')) {
         await require('./auto-settings-ui-check.cjs').checkAutoSettings({evaluate,click,wait,saved,fill,addStep,selectOption,readDoc,generatedPath,reloadApp,screenshot,saveJava});
         return;

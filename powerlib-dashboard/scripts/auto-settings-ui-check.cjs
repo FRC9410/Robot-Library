@@ -1,15 +1,16 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const {Menu} = require('electron');
 
 exports.checkAutoSettings = async ({evaluate,click,wait,saved,fill,addStep,selectOption,readDoc,generatedPath,reloadApp,screenshot,saveJava}) => {
   const tab=label=>evaluate(`[...document.querySelectorAll('[role=tab]')].find(el=>el.textContent===${JSON.stringify(label)}).click()`);
   const open=async()=>{
-    await tab('Dashboard'); await evaluate(`document.querySelector('[aria-label="Open Config"]').click()`);
-    await wait(()=>evaluate(`!!document.querySelector('[aria-label="Configuration categories"]')`));
-    await evaluate(`[...document.querySelectorAll('[aria-label="Configuration categories"] .MuiListItemButton-root')].find(el=>el.textContent==='Auto').click()`);
+    await tab('Dashboard'); Menu.getApplicationMenu().getMenuItemById('powerlib-file-settings').click();
+    await wait(()=>evaluate(`!!document.querySelector('[aria-label="Settings categories"]')`));
+    await evaluate(`[...document.querySelectorAll('[aria-label="Settings categories"] .MuiListItemButton-root')].find(el=>el.textContent==='Auto').click()`);
     await wait(()=>evaluate(`!!document.querySelector('[aria-label="Auto configuration"] input')`));
   };
-  const close=async()=>{await evaluate(`document.querySelector('[aria-label="Close Config"]').click()`);await wait(()=>evaluate(`!document.querySelector('[aria-label="Auto configuration"]')`));};
+  const close=async()=>{await evaluate(`document.querySelector('[aria-label="Close Settings"]').click()`);await wait(()=>evaluate(`!document.querySelector('[aria-label="Auto configuration"]')`));};
   await click('New auto'); await fill('Auto name','Shared settings draft');
   await addStep('Add point'); await addStep('Add branch'); await selectOption('Branch condition','Time remaining'); await saved(); await saveJava();
   // Make a fresh authoring edit and go straight to Config before its autosave delay.

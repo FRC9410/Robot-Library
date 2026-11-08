@@ -90,7 +90,7 @@ export function SubsystemWizard({ initialForm, subsystems, onSave, onCancel, onS
   }
   return <>
     <Box className="config-header config-wizard-header">
-      <IconButton aria-label="Back to Config" disabled={saving} onClick={onCancel}><ArrowBackIcon /></IconButton>
+      <IconButton aria-label="Back to Settings" disabled={saving} onClick={onCancel}><ArrowBackIcon /></IconButton>
       <Typography id={titleId} component="h2" variant="h6" ref={titleRef} tabIndex={-1}>
         {form.mode === "create" ? "Add Subsystem" : "Edit Subsystem"}
       </Typography>

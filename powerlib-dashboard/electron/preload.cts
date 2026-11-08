@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld("powerlib", {
   saveSubsystems: (subsystems: unknown[], swerve?: unknown, revision?: string, deleted?: string[]) =>
     ipcRenderer.invoke("powerlib:save-subsystems", subsystems, swerve, revision, deleted),
   updateSubsystemCode: () => ipcRenderer.invoke("powerlib:update-subsystem-code"),
+  runRobotAction: (action: string) => ipcRenderer.invoke("powerlib:run-robot-action", action),
   updateInstallSection: (section: string) => ipcRenderer.invoke("powerlib:update-install-section", section),
   updatePowerTool: () => ipcRenderer.invoke("powerlib:update-power-tool"),
   openLog: () => ipcRenderer.invoke("powerlib:open-log"),
@@ -47,6 +48,21 @@ contextBridge.exposeInMainWorld("powerlib", {
   onMenuConnectionSettings: (callback: () => void) => {
     ipcRenderer.on("powerlib:menu-connection-settings", callback);
     return () => ipcRenderer.removeListener("powerlib:menu-connection-settings", callback);
+  },
+  onMenuSettings: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("powerlib:menu-settings", listener);
+    return () => ipcRenderer.removeListener("powerlib:menu-settings", listener);
+  },
+  onMenuRobotAction: (callback: (action: "build" | "deploy" | "sim-ds" | "sim-no-ds") => void) => {
+    const listener = (_event: unknown, action: "build" | "deploy" | "sim-ds" | "sim-no-ds") => callback(action);
+    ipcRenderer.on("powerlib:menu-robot-action", listener);
+    return () => ipcRenderer.removeListener("powerlib:menu-robot-action", listener);
+  },
+  onRobotActionError: (callback: (message: string) => void) => {
+    const listener = (_event: unknown, message: string) => callback(message);
+    ipcRenderer.on("powerlib:robot-action-error", listener);
+    return () => ipcRenderer.removeListener("powerlib:robot-action-error", listener);
   },
   onMenuToggleNetworkTables: (callback: () => void) => {
     ipcRenderer.on("powerlib:menu-toggle-network-tables", callback);

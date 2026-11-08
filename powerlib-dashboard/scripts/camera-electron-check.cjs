@@ -68,12 +68,12 @@ app.whenReady().then(async () => {
     const root = createRoot(document.getElementById("root"));
     function DashboardFixture() {
       const { setTopics } = useNetworkTables();
-      const [open, setOpen] = React.useState(false);
+      const [open, setOpen] = React.useState(false); window.openFixtureSettings=()=>setOpen(true);
       React.useEffect(() => { setTopics([
         { name: "/CameraPublisher/wide/streams", type: "string[]", value: [${JSON.stringify(origin + "/wide")}] },
         { name: "/CameraPublisher/portrait/streams", type: "string[]", value: [${JSON.stringify(origin + "/portrait")}] }
       ]); }, [setTopics]);
-      return React.createElement(React.Fragment, null, React.createElement(DashboardPanel, { onOpenConfig: () => setOpen(true) }),
+      return React.createElement(React.Fragment, null, React.createElement(DashboardPanel, {}),
         open && React.createElement(ConfigDialog, { document: { loading: false, exists: true, path: "fixture", subsystems: [
           { id: "intake", name: "Intake", type: "velocity", motors: [{ role: "leader", id: 10, motorType: "X60" }] }
         ], error: null },
@@ -134,19 +134,19 @@ app.whenReady().then(async () => {
   await waitFor("document.querySelector('.dashboard-stage canvas')?.width === 180 && document.querySelector('.dashboard-stage canvas')?.height === 320", "Selected portrait image must preserve its native aspect ratio");
   assert.equal(requests.get("/wide"), 1, "Selecting a camera must share its thumbnail stream");
   assert.equal(requests.get("/portrait"), 1, "Switching cameras must retain the existing streams");
-  await window.webContents.executeJavaScript("document.querySelector('button[aria-label=\"Show field view\"]').click(); document.querySelector('.dashboard-topline button[aria-label=\"Open Config\"]').click()");
-  await waitFor("document.querySelector('[role=\"dialog\"] h2')?.textContent === 'Config'", "Config title must be renamed");
+  await window.webContents.executeJavaScript("document.querySelector('button[aria-label=\"Show field view\"]').click(); window.openFixtureSettings()");
+  await waitFor("document.querySelector('[role=\"dialog\"] h2')?.textContent === 'Settings'", "Config title must be renamed");
   await window.webContents.executeJavaScript("[...document.querySelectorAll('[role=\"dialog\"] button')].find(button => button.textContent === 'Add Subsystem').click()");
   await waitFor("document.querySelector('[role=\"dialog\"] h2')?.textContent === 'Add Subsystem'", "Add wizard must own its header");
   assert.equal(await window.webContents.executeJavaScript("getComputedStyle(document.querySelector('[role=\"dialog\"] h2')).textAlign"), "center", "Wizard header stays centered");
   assert.equal(await window.webContents.executeJavaScript("document.querySelectorAll('[role=\"dialog\"] h2').length"), 1, "Only the active view header is rendered");
-  await window.webContents.executeJavaScript("document.querySelector('button[aria-label=\"Back to Config\"]').click()");
-  await waitFor("document.querySelector('[role=\"dialog\"] h2')?.textContent === 'Config'", "Back must restore the settings header");
+  await window.webContents.executeJavaScript("document.querySelector('button[aria-label=\"Back to Settings\"]').click()");
+  await waitFor("document.querySelector('[role=\"dialog\"] h2')?.textContent === 'Settings'", "Back must restore the settings header");
   await window.webContents.executeJavaScript("document.querySelector('button[aria-label=\"Edit Intake\"]').click()");
   await waitFor("document.querySelector('[role=\"dialog\"] h2')?.textContent === 'Edit Subsystem'", "Edit wizard must own its header");
   assert.equal(await window.webContents.executeJavaScript("[...document.querySelectorAll('[role=\"dialog\"] input')].some(input => input.value === 'Intake')"), true, "Edit values remain prefilled");
-  await window.webContents.executeJavaScript("document.querySelector('button[aria-label=\"Back to Config\"]').click()");
-  await waitFor("document.querySelector('[role=\"dialog\"] h2')?.textContent === 'Config'", "Edit back must restore the settings screen");
+  await window.webContents.executeJavaScript("document.querySelector('button[aria-label=\"Back to Settings\"]').click()");
+  await waitFor("document.querySelector('[role=\"dialog\"] h2')?.textContent === 'Settings'", "Edit back must restore the settings screen");
   await window.webContents.executeJavaScript("[...document.querySelectorAll('nav button, nav [role=\"button\"]')].find(button => button.textContent === 'Field').click()");
   await waitFor("document.querySelector('input[type=\"number\"]')", "Field category must show dimension inputs");
   await window.webContents.executeJavaScript(`{
@@ -160,9 +160,9 @@ app.whenReady().then(async () => {
   await sleep(100);
   await window.webContents.executeJavaScript("document.querySelector('form').requestSubmit()");
   await waitFor("document.querySelector('.dashboard-stage svg')?.getAttribute('viewBox') === '-12 -12 984 504' && document.querySelector('.dashboard-field-preview')?.style.aspectRatio === '18 / 9'", "Saving dimensions must refresh both field views immediately");
-  await window.webContents.executeJavaScript("document.querySelector('button[aria-label=\"Close Config\"]').click()");
+  await window.webContents.executeJavaScript("document.querySelector('button[aria-label=\"Close Settings\"]').click()");
   await waitFor("!document.querySelector('[role=\"dialog\"]')", "Config must close");
-  await window.webContents.executeJavaScript("document.querySelector('.dashboard-topline button[aria-label=\"Open Config\"]').click()");
+  await window.webContents.executeJavaScript("window.openFixtureSettings()");
   await waitFor("document.querySelector('[role=\"dialog\"]')", "Config must reopen");
   await window.webContents.executeJavaScript("[...document.querySelectorAll('nav button, nav [role=\"button\"]')].find(button => button.textContent === 'Field').click()");
   await waitFor("[...document.querySelectorAll('input')].some(input => input.value === '18') && [...document.querySelectorAll('input')].some(input => input.value === '9')", "Field dimensions must persist across opening Config");

@@ -62,6 +62,10 @@ declare global {
         stdout: string;
         stderr: string;
       }>;
+      runRobotAction: (action: import("../../electron/robotActions").RobotAction) => Promise<import("../../electron/robotActions").RobotActionResult>;
+      onMenuSettings: (callback: () => void) => () => void;
+      onMenuRobotAction: (callback: (action: import("../../electron/robotActions").RobotAction) => void) => () => void;
+      onRobotActionError: (callback: (message: string) => void) => () => void;
       updateInstallSection: (section: string) => Promise<{
         stdout: string;
         stderr: string;

@@ -30,12 +30,12 @@ export function ConfigSettingsView({ autoEditor, document, onRefresh, onCreate, 
   return <>
     <Box className="config-header">
       <SettingsOutlinedIcon color="primary" />
-      <Typography id={titleId} component="h2" variant="h6" ref={titleRef} tabIndex={-1}>Config</Typography>
-      <IconButton aria-label="Close Config" onClick={onClose}><CloseIcon /></IconButton>
+      <Typography id={titleId} component="h2" variant="h6" ref={titleRef} tabIndex={-1}>Settings</Typography>
+      <IconButton aria-label="Close Settings" onClick={onClose}><CloseIcon /></IconButton>
     </Box>
     <Box className="config-settings">
-      <Box component="nav" aria-label="Configuration categories" className="config-nav">
-        <Typography variant="overline" color="text.secondary">Configuration</Typography>
+      <Box component="nav" aria-label="Settings categories" className="config-nav">
+        <Typography variant="overline" color="text.secondary">Settings</Typography>
         <List>
           <ListItemButton selected={category === "subsystems"} aria-current={category === "subsystems" ? "page" : undefined} onClick={() => setCategory("subsystems")}><ListItemIcon><LayersOutlinedIcon /></ListItemIcon><ListItemText primary="Subsystems" /></ListItemButton>
           <ListItemButton selected={category === "states"} aria-current={category === "states" ? "page" : undefined} onClick={() => setCategory("states")}><ListItemIcon><ListAltIcon /></ListItemIcon><ListItemText primary="States" /></ListItemButton>

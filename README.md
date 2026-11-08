@@ -103,7 +103,7 @@ editing or building alone does not regenerate autos. Rebuild and restart desktop
 simulation, or deploy to the robot, after saving. The Autos header/toolbar is removed;
 outer margins and card gaps are all 12 px. Power Tool opens at 1920 × 1200.
 
-**Config > Auto** sets the autonomous duration used by remaining-time branches in
+**File > Settings > Auto** sets the autonomous duration used by remaining-time branches in
 all routines (20 seconds by default). It shares the Autos editor's draft. **Save auto
 settings** saves that draft and updates generated Java; rebuild and restart simulation
 or deploy before testing the new duration on the robot.
@@ -582,13 +582,15 @@ vendordeps/Phoenix5-replay-<latest>.json
 ## Power Tool
 
 Define controller button commands directly in `RobotContainer.configureBindings()`.
-Power Tool saves configuration directly into robot Java source. Config saves patch the affected declarations and registrations immediately; File > Build Robot compiles the current source. Deploy remains separate. There is no JSON-to-code generation step.
+Power Tool saves configuration directly into robot Java source. File > Settings saves patch the affected declarations and registrations immediately; File > Build Robot compiles the current source. There is no JSON-to-code generation step.
+
+File > Build and Deploy builds first, then deploys using the robot project’s Gradle configuration. Sim with DS and Sim without DS both rebuild before launching the simulation GUI. Sim with DS connects to an already-running FRC Driver Station; Sim without DS uses the simulation GUI’s Driver Station controls. Close the running simulation before launching another. Simulation output is written to `build/power-tool/simulation.log`.
 
 Dashboard mechanism cards open their tunables when Tuning is enabled and acknowledged. Apply changes the running robot through NetworkTables. Save Tuned Values reviews live differences and writes selected mechanism, sensor, drivetrain, localization and custom defaults together in one Java transaction. Rebuild and deploy to use saved defaults at startup.
 
 Velocity and velocity-torque mechanisms support an optional positive, finite stator current limit. A blank value preserves Phoenix defaults. Signed feedback ratios and optional feedforward/default-position values remain supported. Source edits preserve existing annotations, modifiers, comments, custom methods and handler bodies. Unsupported expressions are read-only and require editing in Java. If source changes while a form is open, refresh before saving; the draft is retained.
 
-Config manages subsystem structure, state names and camera configuration. Stable subsystem IDs live in Java comments; changing the display name preserves the source class. Idle is implicit, hidden from the state list and always last in the enum and handler registry. Existing state bodies and handler priority are preserved. Confirmed deletion removes the state immediately, including edited Java, unless other source still references it. Manual Java additions appear when configuration refreshes.
+File > Settings manages subsystem structure, state names and camera configuration. Stable subsystem IDs live in Java comments; changing the display name preserves the source class. Idle is implicit, hidden from the state list and always last in the enum and handler registry. Existing state bodies and handler priority are preserved. Confirmed deletion removes the state immediately, including edited Java, unless other source still references it. Manual Java additions appear when configuration refreshes.
 
 Constants groups are discovered from the robot constants directory, including team-specific classes. Custom numeric constants are registered under `/PowerLib/Subsystems/<Name>/Variables/Custom/<ConstantName>`. Existing fields retain their tuning annotations; newly added numeric custom constants become tunable. GeneratedTunableConstants and TunerConstants are excluded from the constants editor.
 

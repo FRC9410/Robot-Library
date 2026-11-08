@@ -22,6 +22,7 @@ import type { GeneratedSubsystem } from "./java-config/configTypes.js";
 import { readUploadedField, removeUploadedField, saveUploadedField } from "./uploadedFieldFiles.js";
 import { validateUploadedField } from "./uploadedField.js";
 import { generateAutoCode, readAutoFiles, saveAutoFiles } from "./autoFiles.js";
+import { runRobotAction } from "./robotActions.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,6 +44,7 @@ function createAppMenu(window: BrowserWindow) {
       id: "powerlib-menu-file",
       label: "File",
       submenu: [
+        { id: "powerlib-file-settings", label: "Settings", click: () => window.webContents.send("powerlib:menu-settings") },
         {
           label: "Connection Settings",
           click: () => window.webContents.send("powerlib:menu-connection-settings")
@@ -52,19 +54,9 @@ function createAppMenu(window: BrowserWindow) {
           label: "Build Robot",
           click: () => window.webContents.send("powerlib:menu-update-subsystem-code")
         },
-        { type: "separator" },
-        {
-          label: "Update PowerLib Library Files",
-          click: () => window.webContents.send("powerlib:menu-update-install-section", "lib")
-        },
-        {
-          label: "Update Vendor Dependencies",
-          click: () => window.webContents.send("powerlib:menu-update-install-section", "vendordeps")
-        },
-        {
-          label: "Update Power Tool",
-          click: () => window.webContents.send("powerlib:menu-update-power-tool")
-        },
+        { label: "Build and Deploy", click: () => window.webContents.send("powerlib:menu-robot-action", "deploy") },
+        { label: "Sim with DS", click: () => window.webContents.send("powerlib:menu-robot-action", "sim-ds") },
+        { label: "Sim without DS", click: () => window.webContents.send("powerlib:menu-robot-action", "sim-no-ds") },
         { type: "separator" },
         process.platform === "darwin" ? { role: "close" } : { role: "quit" }
       ]
@@ -250,11 +242,10 @@ ipcMain.handle("powerlib:save-constants", async (_event, id, source, constants) 
 
 // Compatibility IPC name; this builds existing Java and never regenerates source from JSON.
 ipcMain.handle("powerlib:update-subsystem-code", async () => {
-  const robotRoot=getDetectedRobotRoot();
-  const command=process.platform==='win32'?'powershell.exe':'./gradlew';
-  const arguments_=process.platform==='win32'?['-NoProfile','-Command',"& './gradlew.bat' --no-daemon --console=plain build"]:['--no-daemon','--console=plain','build'];
-  return execFileAsync(command,arguments_,{cwd:robotRoot,windowsHide:true,maxBuffer:1024*1024*4});
+  return runRobotAction(getDetectedRobotRoot(), "build");
 });
+ipcMain.handle("powerlib:run-robot-action", (event, action: unknown) => runRobotAction(getDetectedRobotRoot(), action,
+  message => { if (!event.sender.isDestroyed()) event.sender.send("powerlib:robot-action-error", message); }));
 
 ipcMain.handle("powerlib:update-install-section", async (_event, section: string) => {
   const robotRoot = getDetectedRobotRoot();

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import TuneIcon from "@mui/icons-material/Tune";
 import { FormControl, InputLabel, MenuItem, Select } from "@mui/material";
 import { SubsystemTuningDialog } from "./SubsystemTuningDialog";
@@ -63,11 +62,10 @@ function CameraStream({ camera, override, images, onFailed }: {
 
 export type DashboardPanelData = { topics: NtTopicSnapshot[]; dashboard: ReturnType<typeof dashboardModel>; now: number };
 
-export function DashboardPanel({ subsystems = [], renderTopCards, renderSidebar, onOpenConfig, tuningRequested = false }: {
+export function DashboardPanel({ subsystems = [], renderTopCards, renderSidebar, tuningRequested = false }: {
   subsystems?: GeneratedSubsystem[];
   renderTopCards?: (data: DashboardPanelData) => ReactNode;
   renderSidebar?: (data: DashboardPanelData) => ReactNode;
-  onOpenConfig?: () => void;
   tuningRequested?: boolean;
 }) {
   const { status, clientRef, connectionSettings } = useNetworkTables();
@@ -163,9 +161,6 @@ export function DashboardPanel({ subsystems = [], renderTopCards, renderSidebar,
         <div className="dashboard-state-row"><span>REQUESTED STATE</span><b title={requestedState}>{requestedState?.replaceAll("_", " ") || "UNKNOWN"}</b></div>
         <div className="dashboard-state-row"><span>ACTUAL STATE</span><b title={actualState}>{actualState?.replaceAll("_", " ") || "UNKNOWN"}</b></div>
       </section>
-      {onOpenConfig && <button type="button" className="dashboard-config" aria-label="Open Config" onClick={onOpenConfig}>
-        <SettingsOutlinedIcon /><span>Config</span>
-      </button>}
     </div>
     <div className="dashboard-main">
       <div className={`dashboard-rail ${cameras.length ? "" : "without-cameras"}`}>

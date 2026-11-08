@@ -86,13 +86,13 @@ const screenshot = async name => {
   fs.writeFileSync(path.join(fixture,name+'.png'),(await window.webContents.capturePage()).toPNG());
 };
 const openFieldConfig = async()=>{
-  await tab('Dashboard');await evaluate(`document.querySelector('[aria-label="Open Config"]').click()`);
+  await tab('Dashboard');Menu.getApplicationMenu().getMenuItemById('powerlib-file-settings').click();
   await wait(()=>evaluate(`!![...document.querySelectorAll('nav button,nav [role=button]')].find(el=>el.textContent==='Field')`));
   await evaluate(`[...document.querySelectorAll('nav button,nav [role=button]')].find(el=>el.textContent==='Field').click()`);
   await wait(()=>evaluate(`!!document.querySelector('[aria-label="Upload field image"]')`));
 };
 const closeConfig = async()=>{
-  await evaluate(`document.querySelector('[aria-label="Close Config"]').click()`);
+  await evaluate(`document.querySelector('[aria-label="Close Settings"]').click()`);
   await wait(()=>evaluate(`!document.querySelector('[role=dialog]')`));
 };
 const fillUpload = async(label,length,width)=>{
@@ -134,7 +134,7 @@ app.on('browser-window-created', (_event, created)=>{
       await window.webContents.reload();await wait(()=>fieldState(dashboard));
       assert.equal((await fieldState(dashboard)).id,'2025-reefscape','Layout survives reload');
       await wait(()=>Menu.getApplicationMenu().getMenuItemById('field-layout:2025-reefscape').checked);
-      await evaluate(`document.querySelector('[aria-label="Open Config"]').click()`);
+      Menu.getApplicationMenu().getMenuItemById('powerlib-file-settings').click();
       await wait(()=>evaluate(`!![...document.querySelectorAll('nav button,nav [role=button]')].find(el=>el.textContent==='Field')`));
       await evaluate(`[...document.querySelectorAll('nav button,nav [role=button]')].find(el=>el.textContent==='Field').click()`);
       await wait(()=>evaluate(`!!document.querySelector('form input[type=number]')`));
@@ -146,7 +146,7 @@ app.on('browser-window-created', (_event, created)=>{
       await wait(async()=> (await fieldState(dashboard))?.id==='2026-rebuilt-simplified');
       await wait(()=>Menu.getApplicationMenu().getMenuItemById('field-layout:2026-rebuilt-simplified').checked);
       await choose('2025-reefscape');
-      await evaluate(`document.querySelector('[aria-label="Close Config"]').click()`);
+      await evaluate(`document.querySelector('[aria-label="Close Settings"]').click()`);
       await wait(()=>evaluate(`!document.querySelector('[role=dialog]')`));
       await tab('Logs');await evaluate('window.fieldTest.dropLog()');await wait(()=>fieldState(logs));
       assert.deepEqual(await fieldState(logs),{id:'2025-reefscape',length:17.548,width:8.052});

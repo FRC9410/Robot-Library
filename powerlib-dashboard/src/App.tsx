@@ -45,6 +45,7 @@ import { detectLimelights } from "./features/limelights/limelightUtils";
 import type { AppView } from "./types/app";
 import { TuningModeSync } from "./networktables/TuningModeSync";
 import { tuningUpdateIntervalMs } from "./networktables/telemetryTiming";
+import type { RobotAction } from "../electron/robotActions";
 
 type ToastState = {
   open: boolean;
@@ -102,9 +103,8 @@ function AppContent() {
     message: "",
     severity: "info"
   });
-  const [subsystemUpdatingCode, setSubsystemUpdatingCode] = useState(false);
-  const [installSectionUpdating, setInstallSectionUpdating] = useState<string | null>(null);
-  const [powerToolUpdating, setPowerToolUpdating] = useState(false);
+  const [robotAction, setRobotAction] = useState<RobotAction | null>(null);
+  const robotActionBusy = useRef(false);
   const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
   const [networkTablesOpen, setNetworkTablesOpen] = useState(false);
@@ -118,9 +118,7 @@ function AppContent() {
   }
   const latestTopicsRef = useRef(topics);
   latestTopicsRef.current = topics;
-  const updateSubsystemCodeRef = useRef<() => Promise<void>>(async () => {});
-  const updateInstallSectionRef = useRef<(section: string) => Promise<void>>(async () => {});
-  const updatePowerToolRef = useRef<() => Promise<void>>(async () => {});
+  const robotActionRef = useRef<(action: RobotAction) => Promise<void>>(async () => {});
   const autoConnectPausedRef = useRef<boolean | null>(null);
   if (autoConnectPausedRef.current === null) autoConnectPausedRef.current = readAutoConnectPaused();
   const connectionStatusRef = useRef(status);
@@ -186,88 +184,18 @@ function AppContent() {
 
   useSourceInventoryRefresh(loadSubsystems);
 
-  async function updateSubsystemCode() {
-    if (subsystemUpdatingCode) {
-      return;
-    }
-
-    setSubsystemUpdatingCode(true);
-    setSubsystemDocument((current) => ({ ...current, error: null }));
-
+  async function runRobotAction(action: RobotAction) {
+    if (robotActionBusy.current) return;
+    robotActionBusy.current = true; setRobotAction(action);
     try {
-      if (!window.powerlib?.updateSubsystemCode) {
-        throw new Error("PowerLib update bridge is not available.");
-      }
-
-      const result = await window.powerlib.updateSubsystemCode();
+      if (!window.powerlib?.runRobotAction) throw Error("Robot build bridge is not available.");
+      const result = await window.powerlib.runRobotAction(action);
       const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
-      showToast(output ? summarizeUpdateOutput(output) : "Robot build completed.", "success");
+      showToast(result.started ? "Simulation launched." : action === "deploy" ? "Robot built and deployed."
+        : output ? summarizeUpdateOutput(output) : "Robot build completed.", "success");
       await loadSubsystems();
-    } catch (caught) {
-      showToast(caught instanceof Error ? caught.message : "Could not build robot code.", "error");
-    } finally {
-      setSubsystemUpdatingCode(false);
-    }
-  }
-
-  async function updatePowerTool() {
-    if (powerToolUpdating) {
-      return;
-    }
-
-    setPowerToolUpdating(true);
-
-    try {
-      if (!window.powerlib?.updatePowerTool) {
-        throw new Error("Power Tool updater is not available.");
-      }
-
-      await window.powerlib.updatePowerTool();
-      showToast("Started Power Tool update. The app will restart when it finishes.", "info");
-    } catch (caught) {
-      setPowerToolUpdating(false);
-      showToast(caught instanceof Error ? caught.message : "Could not start Power Tool update.", "error");
-    }
-  }
-
-  const installSectionLabels: Record<string, string> = {
-    lib: "PowerLib library files",
-    vendordeps: "vendor dependencies"
-  };
-
-  const installSectionSuccessMessages: Record<string, string> = {
-    lib: "Updated PowerLib library files.",
-    vendordeps: "Updated vendor dependencies."
-  };
-
-  const installSectionFailureMessages: Record<string, string> = {
-    lib: "Could not update PowerLib library files.",
-    vendordeps: "Could not update vendor dependencies."
-  };
-
-  async function updateInstallSection(section: string) {
-    if (installSectionUpdating) {
-      return;
-    }
-
-    const label = installSectionLabels[section] ?? section;
-    setInstallSectionUpdating(label);
-
-    try {
-      if (!window.powerlib?.updateInstallSection) {
-        throw new Error("PowerLib installer bridge is not available.");
-      }
-
-      await window.powerlib.updateInstallSection(section);
-      showToast(installSectionSuccessMessages[section] ?? `Updated ${label}.`, "success");
-      if (section === "lib") {
-        await loadSubsystems();
-      }
-    } catch (caught) {
-      showToast(caught instanceof Error ? caught.message : installSectionFailureMessages[section] ?? `Could not update ${label}.`, "error");
-    } finally {
-      setInstallSectionUpdating(null);
-    }
+    } catch (caught) { showToast(caught instanceof Error ? caught.message : "Robot action failed.", "error"); }
+    finally { robotActionBusy.current = false; setRobotAction(null); }
   }
 
   function setAutoConnectPaused(paused: boolean) {
@@ -353,23 +281,16 @@ function AppContent() {
     setDesiredTuningMode(enabled);
   }
 
-  updateSubsystemCodeRef.current = updateSubsystemCode;
-  updateInstallSectionRef.current = updateInstallSection;
-  updatePowerToolRef.current = updatePowerTool;
+  robotActionRef.current = runRobotAction;
 
   useEffect(() => {
     const removeConnectionSettings = window.powerlib?.onMenuConnectionSettings?.(() => {
       setConnectionSettingsOpen(true);
     });
-    const removeUpdateSubsystemCode = window.powerlib?.onMenuUpdateSubsystemCode?.(() => {
-      void updateSubsystemCodeRef.current();
-    });
-    const removeUpdateInstallSection = window.powerlib?.onMenuUpdateInstallSection?.((_event, section) => {
-      void updateInstallSectionRef.current(section);
-    });
-    const removeUpdatePowerTool = window.powerlib?.onMenuUpdatePowerTool?.(() => {
-      void updatePowerToolRef.current();
-    });
+    const removeSettings = window.powerlib?.onMenuSettings?.(() => { setConfigOpen(true); void loadSubsystems(); });
+    const removeBuild = window.powerlib?.onMenuUpdateSubsystemCode?.(() => { void robotActionRef.current("build"); });
+    const removeRobotAction = window.powerlib?.onMenuRobotAction?.(action => { void robotActionRef.current(action); });
+    const removeActionError = window.powerlib?.onRobotActionError?.(message => showToast(message, "error"));
     const removeToggleNetworkTables = window.powerlib?.onMenuToggleNetworkTables?.(() => {
       setNetworkTablesOpen(current => !current);
     });
@@ -379,9 +300,7 @@ function AppContent() {
 
     return () => {
       removeConnectionSettings?.();
-      removeUpdateSubsystemCode?.();
-      removeUpdateInstallSection?.();
-      removeUpdatePowerTool?.();
+      removeSettings?.(); removeBuild?.(); removeRobotAction?.(); removeActionError?.();
       removeToggleNetworkTables?.();
       removeFieldLayout?.();
     };
@@ -468,15 +387,9 @@ function AppContent() {
         </Container>
       </AppBar>
 
-      <UpdateCodeDialog
-        open={subsystemUpdatingCode || Boolean(installSectionUpdating)}
-        title={installSectionUpdating ? "Updating PowerLib" : "Building Robot"}
-        message={
-          installSectionUpdating
-            ? `Please wait, updating ${installSectionUpdating}.`
-            : "Please wait, robot code is building."
-        }
-      />
+      <UpdateCodeDialog open={robotAction !== null}
+        title={robotAction === "deploy" ? "Building and Deploying Robot" : robotAction === "build" ? "Building Robot" : "Building and Launching Simulation"}
+        message={robotAction === "build" ? "Please wait, robot code is building." : robotAction === "deploy" ? "Building and deploying robot code…" : "Building robot code and preparing simulation…"} />
 
       <ConnectionSettingsDialog
         open={connectionSettingsOpen}
@@ -519,8 +432,7 @@ function AppContent() {
         {telemetryError && <Alert severity="warning" sx={{ m: 1 }}>{telemetryError}</Alert>}
         <Stack spacing={2} useFlexGap={activeView === "limelights"} sx={fillsWindow ? { flex: 1, minHeight: 0 } : undefined}>
           {activeView === "dashboard" && <DashboardPanel subsystems={subsystemDocument.subsystems}
-            tuningRequested={tuningModeEnabled}
-            onOpenConfig={() => { setConfigOpen(true); void loadSubsystems(); }} />}
+            tuningRequested={tuningModeEnabled} /> }
           <Box sx={{ display: activeView === "autos" ? "flex" : "none", flex: 1, minHeight: 0 }}><AutosPanel editor={autoEditor} /></Box>
 
           {/* Stays mounted so an open log survives switching tabs. */}

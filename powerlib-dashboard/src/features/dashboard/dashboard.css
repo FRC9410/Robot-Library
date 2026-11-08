@@ -1,10 +1,6 @@
 .dashboard-dashboard-viewport { --dashboard-header-height: 112px; height: calc(100dvh - var(--dashboard-header-height)); min-height: 0; container-type: size; }
 .dashboard-dashboard { height: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; padding: 10px 18px 8px; overflow: hidden; color: #edf3fb; font-family: Inter, "Segoe UI", sans-serif; }
 .dashboard-topline { display: flex; align-items: stretch; gap: 8px; flex: 0 0 88px; min-width: 0; min-height: 0; }
-.dashboard-config { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; flex: 0 0 auto; margin-left: auto; padding-inline: 14px; border: 1px solid #405166; border-radius: 8px; background: #18212c; color: #edf3fb; font: inherit; font-size: 12px; cursor: pointer; }
-.dashboard-config svg { font-size: 28px; }
-.dashboard-config:hover { border-color: #facc15; color: #facc15; }
-.dashboard-config:focus-visible { outline: 2px solid #facc15; outline-offset: 2px; }
 .dashboard-top-metric, .dashboard-robot-mode { box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 10px 18px; border: 1px solid #303b46; border-radius: 8px; background: #18212c; min-width: 0; overflow: hidden; }
 .dashboard-top-metric { flex: 0 0 160px; }
 .dashboard-top-metric.dashboard-battery { flex: 0 0 150px; }
