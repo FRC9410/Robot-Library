@@ -24,6 +24,8 @@ public class VelocitySubsystemIOReal implements VelocitySubsystemIO {
     inputs.positionRotations = motor.getPosition().getValueAsDouble();
     inputs.velocityRotationsPerSecond = motor.getVelocity().getValueAsDouble();
     inputs.velocitySetpoint = subsystem.getVelocitySetpoint();
+    inputs.appliedVoltage = motor.getMotorVoltage().getValueAsDouble();
+    inputs.torqueCurrentAmps = motor.getTorqueCurrent().getValueAsDouble();
   }
 
   @Override

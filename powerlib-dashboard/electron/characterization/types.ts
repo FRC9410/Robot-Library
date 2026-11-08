@@ -1,0 +1,18 @@
+export const phases = ["quasistatic-forward", "quasistatic-reverse", "dynamic-forward", "dynamic-reverse"] as const;
+export type Phase = typeof phases[number];
+export type Target = { id: string; group: string; name: string; kind: "velocity" | "velocityTorque" | "drive" | "steer"; motors: string[] };
+export type Settings = { duration: number; ramp: number; step: number; settle: number; medianWindow: number };
+export type ControlMode = "simulation" | "driver-station";
+export type RobotStatus = { version: number; id: string; target: string; phase: string; state: string; error: string; file: string;
+  simulation: boolean; enabled: boolean; test: boolean; fms: boolean; estop: boolean;
+  controlMode?: ControlMode; dsAttached?: boolean; commandScheduled?: boolean; commandStarted?: boolean; commandEnded?: boolean; lastControl?: string; heartbeatAge?: number };
+export type Diagnostic = { at: string; elapsedMs: number; stage: string; event: string; message: string;
+  testId: string; targetId: string; phase: string; connected: boolean; host: string; statusAgeMs: number; robot: RobotStatus | null };
+export type Sample = { time: number; voltage: number; position: number; velocity: number; current: number };
+export type Gain = { name: string; kS: number; kV: number; kA: number; outputUnit: "V" | "A"; velocityUnit: "rotations/s";
+  accelerationUnit: "rotations/s²"; rSquared: number; rmse: number; samples: number; warnings: string[] };
+export type TestRecord = { id: string; target: Target; phase: Phase; file: string; localFile: string; csvFiles: string[]; samples: Sample[][] };
+export type Result = { target: Target; gains: Gain[]; voltageGains?: Gain[]; error?: string };
+export type Report = { formatVersion: 1; id: string; path: string; startedAt: string; completedAt?: string; outcome: "running" | "complete" | "cancelled" | "failed";
+  simulation: boolean; controlMode: ControlMode; host: string; settings: Settings; targets: Target[]; tests: TestRecord[]; results: Result[]; error?: string; diagnostics: Diagnostic[]; storageWarning?: string;
+  analysis: { model: string; implementation: string; source: string }; };

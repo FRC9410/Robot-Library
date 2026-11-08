@@ -49,6 +49,7 @@ preserved = {name: (fixture / name).read_bytes() for name in preserved_names}
 with zipfile.ZipFile(args.zip) as archive:
     names = archive.namelist()
     assert '.gitignore' in names and 'Power Tool.cmd' in names
+    assert 'power-tool/launch.ps1' in names, 'ZIP omitted the privilege-aware startup helper'
     assert 'power-tool/app/Power Tool.exe' in names and 'power-tool/app/resources/app.asar' in names
     assert not any(name in names for name in preserved_names), 'ZIP would overwrite project-owned settings or entry points'
     assert not any(name.startswith(('build/', '.git/', 'power-tool/generated/')) for name in names)

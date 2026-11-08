@@ -19,6 +19,8 @@ Download the Windows project ZIP attached to a release from [GitHub Releases](ht
 3. Double-click **Power Tool.cmd**. Power Tool is prebuilt and runs without Node or npm.
 4. Configure the robot through **File > Settings**, then build, simulate or deploy from File.
 
+Open Driver Station first when you need automatic characterization. If it is running as administrator, **Power Tool.cmd** automatically requests matching access through Windows' UAC prompt. Otherwise Power Tool starts normally. You can also run `"Power Tool.cmd" -Administrator` to request administrator access explicitly.
+
 The ZIP contains PowerLib Java source, generic robot starter files, pinned vendor dependency JSONs, skills, and the standalone Windows x64 application in `power-tool/app/`. Its `.gitignore` excludes the entire prebuilt application while leaving robot source and auto authoring files available to commit. The project keeps its original Gradle files, WPILib preferences, team number, `Main.java` and `Robot.java`. The first robot build may download vendor libraries.
 
 This is a starter overlay for a **clean project**. Extracting it replaces matching starter files directly. For an existing robot, review the release notes and preserve your project changes before applying files.

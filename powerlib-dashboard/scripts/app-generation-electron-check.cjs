@@ -153,12 +153,9 @@ function checkGenerated(document) {
   assert.match(stateMachine,/List\.of\(\s*new frc\.robot\.subsystems\.states\.ReadyState\(\),\s*new frc\.robot\.subsystems\.states\.HomingState\(\),\s*new IdleState\(\)\)/,'All state handlers checked, Idle last');
   numberConstant(source('constants/AuditGlobalConstants.java'),'CUSTOM_GAIN',3.75);assert.ok(source('constants/GeneratedTunableConstants.java').includes('AuditGlobalConstants.class'));
   for(const call of ['driveTelemetry.publish();','SubsystemTelemetry.publish();','TunableConstants.sync();'])assert.ok(source('subsystems/PowerDashboard.java').includes(call),`Dashboard missing ${call}`);
-  for(const name of ['AuditVelocity','AuditTorque']){
-    assert.ok(fs.existsSync(path.join(fixture,'src/main/java/frc/robot/characterization',name+'Characterization.java')),`Missing ${name} characterization class`);
-    const dashboard=source('subsystems/PowerDashboard.java');
-    assert.ok(dashboard.includes('new frc.robot.characterization.'+name+'Characterization(stateMachine.'),`Missing ${name} characterization instance`);
-    for(const command of ['Quasistatic Forward','Quasistatic Reverse','Dynamic Forward','Dynamic Reverse'])assert.ok(dashboard.includes('registerCharacterizationCommand("'+name+'", "'+command+'"'),`Missing ${name} ${command} registration`);
-  }
+  const dashboard=source('subsystems/PowerDashboard.java');
+  for(const id of ['auditvelocity','audittorque']) assert.ok(dashboard.includes('characterizationManager.registerVelocity("'+id+'"'),`Missing combined characterization registration for ${id}`);
+  assert.ok(dashboard.includes('characterizationManager.registerSwerve("drivetrain"'));
   return inventory;
 }
 

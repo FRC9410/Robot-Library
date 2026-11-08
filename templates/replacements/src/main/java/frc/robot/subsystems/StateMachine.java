@@ -70,6 +70,7 @@ public class StateMachine extends SubsystemBase {
   }
 
   public void execute() {
+    if (frc.powerlib.characterization.CharacterizationManager.isActive()) return;
     for (State<RobotState, StateMachine> state : states) state.prepare(this);
     selectState();
     activeState.execute(wantedState, this);
