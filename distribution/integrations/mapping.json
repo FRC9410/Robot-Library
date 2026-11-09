@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "integrations": {
+    "mcp-wpilib": {
+      "name": "WPILib MCP Servers",
+      "repository": "https://github.com/j0n5m1th/mcp-wpilib-nt4.git",
+      "revision": "447129cbe49cad11076876f295a579d43cb9310d",
+      "definition": "wpilib.json",
+      "installationDirectory": "mcp-wpilib"
+    }
+  }
+}

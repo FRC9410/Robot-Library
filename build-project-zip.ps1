@@ -51,6 +51,7 @@ try {
         Copy-Item -LiteralPath $item.FullName -Destination $stage -Recurse -Force
     }
     Copy-Item -LiteralPath (Join-Path $repoRoot 'skills') -Destination $stage -Recurse
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'distribution/integrations') -Destination $stage -Recurse
     [IO.File]::WriteAllText((Join-Path $tool 'release.txt'),
         "PowerLib 2026 / Windows x64`r`nBuilt: $([DateTime]::UtcNow.ToString('u'))`r`n$($versions -join "`r`n")`r`n")
     New-Item -ItemType Directory -Path (Split-Path -Parent $archive) -Force | Out-Null

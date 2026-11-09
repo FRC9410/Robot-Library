@@ -18,7 +18,7 @@ The viewer supports **`.wpilog`** and CTRE **`.hoot`** files.
 2. Choose a saved run. Use **Open another file** to browse to a file outside the selected folder.
 3. Use the folder bar's **Change** control to select a different log library folder.
 
-The default folder is **Documents → Power Tool → Logs**. The library remembers a chosen folder on this computer. Its **Matches**, **Practice** and **All** filters and search control narrow the list; select **All** if a practice or simulation run is missing from Matches. Use the refresh button to look for new files.
+The default library is `logs/` in the robot project root. The release ZIP includes this folder and its README. Power Tool remembers a folder selected with **Change**. Use **Matches**, **Practice**, **All**, or search to narrow the list. Select **All** if a practice or simulation run is missing from Matches. Use the refresh button to look for new files.
 
 Power Tool converts `.hoot` files with a compatible CTRE Owlet before viewing them. It looks for Owlet in project tool folders, AdvantageScope's Owlet cache and PATH. A compatible converter can be placed in `power-tool/tools/`. `.wpilog` files do not require Owlet. When opening a `.hoot`, files from the same session in that directory are grouped so data from multiple CAN buses can be read together.
 

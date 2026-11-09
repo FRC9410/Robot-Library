@@ -7,7 +7,7 @@ import {
   typeStringSchema
 } from "ntcore-ts-client";
 import type { NetworkTablesTypes } from "ntcore-ts-client";
-import { z } from "zod";
+import { z } from "zod/v3";
 import { telemetryUpdateIntervalMs, tuningUpdateIntervalMs } from "./telemetryTiming";
 
 export type NtPrimitive = string | number | boolean;
