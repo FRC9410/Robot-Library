@@ -16,7 +16,7 @@ Build both release ZIPs from the repository root on Windows:
 
 Attach `Robot-Library-2026-Windows-x64.zip` and `Power-Tool-Windows-x64.zip` from `build/distributions/` to the GitHub Release. Use the full project ZIP for new robots and the app-only ZIP for Power Tool updates. [Release commands](docs/development.md#build-the-distribution)
 
-`build-dashboard.ps1` packages Power Tool under `PowerTool-local/win-unpacked/`. `release.ps1` uses that single build for both ZIPs. The full ZIP also copies `templates/powerlib/`, `templates/replacements/`, the pinned files in `templates/vendordeps/`, `skills/`, `distribution/project-overlay/`, and `distribution/integrations/`. Reinstall npm dependencies when their manifests change.
+`build-dashboard.ps1` packages Power Tool under `PowerTool-local/win-unpacked/`. `release.ps1` uses that single build for both ZIPs. The full ZIP also copies `templates/powerlib/`, `templates/replacements/`, the pinned files in `templates/vendordeps/`, `.agents/skills/` (copied into the project at both `.agents/skills/` and `.claude/skills/`), `distribution/project-overlay/`, and `distribution/integrations/`. Reinstall npm dependencies when their manifests change.
 
 `-PowerToolDirectory` reuses an already packaged application; use this only when its build is current. The ZIP has no enclosing directory and includes `.gitignore`, which excludes the full prebuilt `power-tool/app/` tree while preserving robot source and auto definitions for Git. The receiver keeps their Gradle wrapper, build configuration, team preferences, `Main.java` and `Robot.java`.
 

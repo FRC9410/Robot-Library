@@ -27,7 +27,11 @@ MapleSim arena physics runs from `Robot.simulationPeriodic()` at 20 ms.
 
 ```java
 private void startSimThread() {
+    // Set this before the Notifier fires. Left at 0.0, the first tick's deltaTime equals the
+    // robot's whole uptime.
     m_lastSimTime = Utils.getCurrentTimeSeconds();
+
+    // 3 parameters only. The CTRE base class handles motor and encoder sim itself.
 
     mapleSimSwerveDrivetrain =
         new MapleSimSwerveDrivetrain(
@@ -38,6 +42,8 @@ private void startSimThread() {
 
     SimManager.initialize();
 
+    // This Notifier only runs CTRE motor sim. Don't add a second Notifier, and don't call
+    // SimulatedArena here.
     if (m_simNotifier != null) {
       m_simNotifier.close();
     }

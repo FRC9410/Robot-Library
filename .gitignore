@@ -56,5 +56,10 @@ power-tool/
 *.powerlib.bak
 *.powerlib.bak.*
 
-#claude
-.claude
+# Agents: share .claude/skills and settings.json; keep personal files local
+CLAUDE.local.md
+*.local.*
+
+# Worktrees
+.worktrees/
+.claude/worktrees/

@@ -50,7 +50,12 @@ try {
     foreach ($item in Get-ChildItem -LiteralPath (Join-Path $repoRoot 'distribution/project-overlay') -Force) {
         Copy-Item -LiteralPath $item.FullName -Destination $stage -Recurse -Force
     }
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'skills') -Destination $stage -Recurse
+    # Skills ship as real copies at both paths: Codex reads .agents/skills, Claude Code .claude/skills.
+    foreach ($agentDir in @('.agents', '.claude')) {
+        $destination = Join-Path $stage $agentDir
+        New-Item -ItemType Directory -Path $destination -Force | Out-Null
+        Copy-Item -LiteralPath (Join-Path $repoRoot '.agents/skills') -Destination $destination -Recurse
+    }
     Copy-Item -LiteralPath (Join-Path $repoRoot 'distribution/integrations') -Destination $stage -Recurse
     [IO.File]::WriteAllText((Join-Path $tool 'release.txt'),
         "PowerLib 2026 / Windows x64`r`nBuilt: $([DateTime]::UtcNow.ToString('u'))`r`n$($versions -join "`r`n")`r`n")

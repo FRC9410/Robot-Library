@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f*)",
+      "Bash(git -C * push --force*)",
+      "Bash(git -C * push -f*)",
+      "Bash(git -C * push * --force*)",
+      "Bash(git -C * push * -f*)",
+      "Bash(rm -rf *)"
+    ],
+    "allow": [
+      "Bash(npm run build)",
+      "Bash(npm run check:*)",
+      "Bash(node powerlib-dashboard/scripts/*-check.mjs*)",
+      "Bash(node scripts/*-check.mjs*)",
+      "Bash(python tests/project-zip-check.py*)",
+      "Bash(pwsh ./tests/*-check*.ps1*)",
+      "Bash(pwsh ./tests/run-library-checks.ps1*)"
+    ]
+  }
+}

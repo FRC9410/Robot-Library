@@ -22,7 +22,7 @@ Download the Windows project ZIP attached to a release from [GitHub Releases](ht
 
 For characterization on Windows, open **Logs → Characterize Robot** and choose **Restart as administrator** if prompted. You can also start Power Tool with `"Power Tool.cmd" -Administrator` from Command Prompt. [Characterization setup](characterization.md#before-starting)
 
-The ZIP contains PowerLib Java source, generic robot starter files, pinned vendor dependency JSONs, skills, and the standalone Windows x64 application in `power-tool/app/`. Its `.gitignore` excludes the entire prebuilt application while leaving robot source and auto authoring files available to commit. The project keeps its original Gradle files, WPILib preferences, team number, `Main.java` and `Robot.java`. The first robot build may download vendor libraries.
+The ZIP contains PowerLib Java source, generic robot starter files, pinned vendor dependency JSONs, agent skills for Claude Code and Codex, and the standalone Windows x64 application in `power-tool/app/`. Its `.gitignore` excludes the entire prebuilt application while leaving robot source and auto authoring files available to commit. The project keeps its original Gradle files, WPILib preferences, team number, `Main.java` and `Robot.java`. The first robot build may download vendor libraries.
 
 This is a starter overlay for a **clean project**. Extracting it replaces matching starter files directly. For an existing robot, review the release notes and preserve your project changes before applying files.
 
