@@ -12,6 +12,8 @@ import {
   ReadResourceRequestSchema, ReadResourceResultSchema
 } from "@modelcontextprotocol/sdk/types.js";
 import type { ServerStatus } from "./catalog.js";
+import { nt4BridgeReply, privateNt4Tool, wpilibNt4Key } from "./nt4Bridge.js";
+import type { Nt4BridgeRequest } from "./nt4Bridge.js";
 
 function proxyFor(client: Client) {
   const upstream = client.getServerCapabilities();
@@ -24,8 +26,14 @@ function proxyFor(client: Client) {
     }
   });
   if (upstream?.tools) {
-    server.setRequestHandler(ListToolsRequestSchema, (request, { signal }) => client.request(request, ListToolsResultSchema, { signal }));
-    server.setRequestHandler(CallToolRequestSchema, (request, { signal }) => client.request(request, CallToolResultSchema, { signal, timeout: 300_000 }));
+    server.setRequestHandler(ListToolsRequestSchema, async (request, { signal }) => {
+      const result = await client.request(request, ListToolsResultSchema, { signal });
+      return { ...result, tools: result.tools.filter(tool => tool.name !== privateNt4Tool) };
+    });
+    server.setRequestHandler(CallToolRequestSchema, (request, { signal }) => {
+      if (request.params.name === privateNt4Tool) return { isError: true, content: [{ type: "text", text: "Unknown tool." }] };
+      return client.request(request, CallToolResultSchema, { signal, timeout: 300_000 });
+    });
   }
   if (upstream?.resources) {
     server.setRequestHandler(ListResourcesRequestSchema, (request, { signal }) => client.request(request, ListResourcesResultSchema, { signal }));
@@ -62,6 +70,19 @@ export class McpHost {
 
   status(key: string): ServerStatus {
     return this.servers.get(key)?.status ?? { state: "stopped" };
+  }
+
+  async dashboardNt4(request: Nt4BridgeRequest) {
+    const running = this.servers.get(wpilibNt4Key);
+    if (running?.status.state !== "running") return { ready: false };
+    const timeout = request.action === "read" ? 500 : 225;
+    const result = await running.client.request({ method: "tools/call", params: { name: privateNt4Tool, arguments: { request } } },
+      CallToolResultSchema, { timeout });
+    if (result.isError) {
+      const message = result.content.find(item => item.type === "text");
+      throw new Error(message?.text ?? "The WPILib connection could not complete the request.");
+    }
+    return nt4BridgeReply.parse(result.structuredContent);
   }
 
   start(key: string, options: StdioServerParameters) {

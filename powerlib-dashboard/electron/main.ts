@@ -207,9 +207,11 @@ let integrationManager: IntegrationManager | undefined;
 function integrations() {
   const catalog = app.isPackaged ? path.join(process.resourcesPath, "integrations-catalog")
     : path.resolve(__dirname, "../../distribution/integrations");
-  return integrationManager ??= new IntegrationManager(getDetectedRobotRoot(), catalog);
+  const runtime = app.isPackaged ? path.join(process.resourcesPath, "integrations-runtime") : path.resolve(__dirname, "../integrations-runtime");
+  return integrationManager ??= new IntegrationManager(getDetectedRobotRoot(), catalog, path.join(runtime, "wpilib-nt4.py"));
 }
 
+ipcMain.handle("powerlib:dashboard-nt4", (_event, request: unknown) => integrations().dashboardNt4(request));
 ipcMain.handle("powerlib:list-integrations", () => integrations().list());
 ipcMain.handle("powerlib:install-integration", (_event, id: unknown) => integrations().install(id));
 ipcMain.handle("powerlib:enable-integration-server", (_event, id: unknown, server: unknown, enabled: unknown) =>
@@ -427,6 +429,7 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
+      backgroundThrottling: false,
       nodeIntegration: false
     }
   });

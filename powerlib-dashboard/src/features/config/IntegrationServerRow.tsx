@@ -9,7 +9,7 @@ export type IntegrationServerRowProps = {
 };
 
 export function IntegrationServerRow({ server, disabled, onEnable, onCopy }: IntegrationServerRowProps) {
-  const status = { stopped: server.enabled ? "Starts next launch" : "Off", starting: "Starting…", running: "Running", error: "Could not start" }[server.state];
+  const status = { stopped: server.enabled ? "Stopped" : "Off", starting: "Starting…", running: "Running", error: "Could not start" }[server.state];
   return <Box>
     <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
       <FormControlLabel control={<Checkbox checked={server.enabled} disabled={disabled} onChange={(_, checked) => onEnable(checked)} />}

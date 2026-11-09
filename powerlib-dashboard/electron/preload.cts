@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld("powerlib", {
   openLogFiles: (filePaths: string[]) => ipcRenderer.invoke("powerlib:open-log-files", filePaths),
   defaultLogsFolder: () => ipcRenderer.invoke("powerlib:default-logs-folder"),
   listIntegrations: () => ipcRenderer.invoke("powerlib:list-integrations"),
+  dashboardNt4: (request: unknown) => ipcRenderer.invoke("powerlib:dashboard-nt4", request),
   installIntegration: (id: string) => ipcRenderer.invoke("powerlib:install-integration", id),
   uninstallIntegration: (id: string) => ipcRenderer.invoke("powerlib:uninstall-integration", id),
   enableIntegrationServer: (id: string, server: string, enabled: boolean) => ipcRenderer.invoke("powerlib:enable-integration-server", id, server, enabled),

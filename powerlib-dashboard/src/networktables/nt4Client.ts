@@ -9,6 +9,7 @@ import {
 import type { NetworkTablesTypes } from "ntcore-ts-client";
 import { z } from "zod/v3";
 import { telemetryUpdateIntervalMs, tuningUpdateIntervalMs } from "./telemetryTiming";
+import { CameraTopicDiscovery } from "./CameraTopicDiscovery";
 
 export type NtPrimitive = string | number | boolean;
 export type NtValue = NetworkTablesTypes | null;
@@ -277,15 +278,14 @@ export class PowerLibNt4Client {
   }
 
   /** Discover custom-named cameras through announcements without subscribing to all values. */
-  watchCameraAnnouncements(onValue: (snapshot: NtTopicSnapshot) => void) {
+  watchCameraAnnouncements(onValue: (snapshot: NtTopicSnapshot) => void, updateIntervalMs = telemetryUpdateIntervalMs) {
     if (!this.nt) throw new Error("NetworkTables is not connected.");
     const nt = this.nt;
     const socket = nt.client.messenger.socket;
     const metadata = this.prefixTopics.get("/") ?? nt.client.getPrefixTopicFromName("/") ?? nt.createPrefixTopic("/");
     this.prefixTopics.set("/", metadata);
     metadata.subscribe(() => {}, { topicsonly: true });
-    const keys = new Map<string, Set<string>>();
-    const watched = new Set<string>();
+    const discovery = new CameraTopicDiscovery();
     let attached: WebSocket | null = null;
     const receive = (event: MessageEvent) => {
       if (typeof event.data !== "string") return;
@@ -294,15 +294,8 @@ export class PowerLibNt4Client {
         if (!Array.isArray(messages)) return;
         for (const message of messages) {
           if (message?.method !== "announce" || typeof message.params?.name !== "string") continue;
-          const [, table, key] = message.params.name.split("/");
-          if (!table || !key || table.startsWith("limelight")) continue;
-          const known = keys.get(table) ?? new Set<string>();
-          if (["tv", "tx", "ty", "ta", "getpipe", "pipeline", "botpose", "json"].includes(key)) known.add(key);
-          keys.set(table, known);
-          if (known.size >= 3 && !watched.has(table)) {
-            watched.add(table);
-            this.watchPrefix(`/${table}/`, onValue);
-          }
+          const prefix = discovery.observe(message.params.name);
+          if (prefix) this.watchPrefix(prefix, onValue, updateIntervalMs);
         }
       } catch { /* Malformed metadata cannot affect live telemetry. */ }
     };

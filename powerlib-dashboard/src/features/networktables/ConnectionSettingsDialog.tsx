@@ -13,6 +13,8 @@ import {
   TextField
 } from "@mui/material";
 import type { ConnectionSettings } from "./NetworkTablesContext";
+import { nt4Intervals, validNt4Interval } from "../../networktables/telemetryTiming";
+import type { Nt4Timing } from "../../networktables/telemetryTiming";
 
 type TargetPreset = {
   id: string;
@@ -30,6 +32,11 @@ const targetPresets: TargetPreset[] = [
   { id: "custom", label: "Custom", host: "", port: 5810 }
 ];
 
+const intervalFields = [
+  { name: "updateIntervalMs", label: "Live data update interval (ms)", description: "Dashboard refresh and NT4 telemetry." },
+  { name: "heartbeatIntervalMs", label: "WPILib heartbeat interval (ms)", description: "How often Power Tool checks the WPILib connection." }
+] as const satisfies ReadonlyArray<{ name: keyof Nt4Timing; label: string; description: string }>;
+
 type ConnectionSettingsDialogProps = {
   open: boolean;
   settings: ConnectionSettings;
@@ -39,6 +46,7 @@ type ConnectionSettingsDialogProps = {
 
 export function ConnectionSettingsDialog({ open, settings, onClose, onSave }: ConnectionSettingsDialogProps) {
   const [draft, setDraft] = useState(settings);
+  const intervalsValid = intervalFields.every(({ name }) => validNt4Interval(name, draft[name]));
 
   useEffect(() => {
     if (open) {
@@ -49,11 +57,12 @@ export function ConnectionSettingsDialog({ open, settings, onClose, onSave }: Co
   function setPreset(id: string) {
     const preset = targetPresets.find((item) => item.id === id);
     if (preset && preset.id !== "custom") {
-      setDraft({
+      setDraft((current) => ({
+        ...current,
         targetId: preset.id,
         host: preset.host,
         port: preset.port
-      });
+      }));
       return;
     }
 
@@ -89,12 +98,21 @@ export function ConnectionSettingsDialog({ open, settings, onClose, onSave }: Co
             value={draft.port}
             onChange={(event) => setDraft((current) => ({ ...current, port: Number(event.target.value) }))}
           />
+          {intervalFields.map(({ name, label, description }) => {
+            const { defaultValue, min, max } = nt4Intervals[name];
+            const valid = validNt4Interval(name, draft[name]);
+            return <TextField key={name} label={label} size="small" type="number" value={draft[name] || ""} error={!valid}
+              helperText={valid ? `${description} Default ${defaultValue} ms.` : `Enter a whole number from ${min} to ${max} ms.`}
+              slotProps={{ htmlInput: { min, max, step: 1 } }}
+              onChange={(event) => setDraft((current) => ({ ...current, [name]: Number(event.target.value) }))} />;
+          })}
         </Stack>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
         <Button
           variant="contained"
+          disabled={!intervalsValid}
           onClick={() => {
             onSave(draft);
             onClose();

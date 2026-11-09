@@ -6,6 +6,7 @@ import { defaultValues, isMissing, launchOptions, readCatalog, validateInputs, v
 import type { Integration, IntegrationView, InputValues } from "./catalog.js";
 import { installIntegration, isInstalled, migrateLegacyInstallation } from "./install.js";
 import { McpHost } from "./mcpHost.js";
+import { nt4BridgeRequest, wpilibNt4Key } from "./nt4Bridge.js";
 
 const settingsSchema = z.object({
   enabled: z.record(z.string(), z.array(z.string())).default({}),
@@ -25,7 +26,7 @@ export class IntegrationManager {
   private readonly shutdown = new AbortController();
   private host?: McpHost;
 
-  constructor(private readonly root: string, bundledCatalog: string) {
+  constructor(private readonly root: string, bundledCatalog: string, private readonly wpilibBridgeScript?: string) {
     this.directory = path.join(root, "integrations");
     this.settingsFile = path.join(this.directory, "settings.json");
     this.loaded = this.load(bundledCatalog);
@@ -93,12 +94,15 @@ export class IntegrationManager {
 
   private async start(integration: Integration, serverId: string) {
     const key = `${integration.config.id}/${serverId}`;
+    const state = this.host?.status(key).state;
+    if (state === "starting" || state === "running") return;
     this.errors.delete(key);
     try {
       const server = integration.config.servers[serverId];
       const values = this.values(integration);
       validateInputs(integration, values);
       const options = launchOptions(integration, server, values, this.root);
+      if (key === wpilibNt4Key && this.wpilibBridgeScript) options.args.splice(-1, 1, "python", this.wpilibBridgeScript);
       for (const [name, value] of Object.entries(options.env)) {
         if (name === "WPILOG_DIR" || name === "JFR_DIR") await fs.mkdir(value, { recursive: true });
       }
@@ -120,6 +124,15 @@ export class IntegrationManager {
         }
       }
     });
+  }
+
+  async dashboardNt4(input: unknown) {
+    const request = nt4BridgeRequest.parse(input);
+    await this.loaded;
+    if (request.action !== "release" && !this.settings.enabled["mcp-wpilib"]?.includes("wpilib-nt4")) {
+      return { ready: false };
+    }
+    return this.host?.dashboardNt4(request) ?? { ready: false };
   }
 
   async list(): Promise<IntegrationView[]> {
@@ -191,7 +204,11 @@ export class IntegrationManager {
         if (enabled) selected.add(server); else selected.delete(server);
       }
       await this.save({ ...this.settings, enabled: { ...this.settings.enabled, [integration.config.id]: [...selected] } });
-      if (!enabled) await this.stopServers(integration.config.id, serverIds);
+      if (enabled) {
+        for (const server of serverIds) await this.start(integration, server);
+      } else {
+        await this.stopServers(integration.config.id, serverIds);
+      }
     });
   }
 

@@ -47,6 +47,11 @@
       {
         "from": "../distribution/integrations",
         "to": "integrations-catalog"
+      },
+      {
+        "from": "integrations-runtime",
+        "to": "integrations-runtime",
+        "filter": ["*.py"]
       }
     ],
     "win": {

@@ -10,6 +10,7 @@ import type { UploadedField } from "../../electron/uploadedField";
 import type { AutoFilesState } from "../../electron/autoFiles";
 import type { AutoDocument } from "../../electron/autoModel";
 import type { IntegrationView, InputValues } from "../../electron/integrations/catalog";
+import type { Nt4BridgeReply, Nt4BridgeRequest } from "../../electron/integrations/nt4Bridge";
 export {};
 
 export type OpenedLog = {
@@ -70,6 +71,7 @@ declare global {
       /** Documents\Power Tool\Logs, used until a folder is chosen. */
       defaultLogsFolder: () => Promise<string>;
       listIntegrations: () => Promise<IntegrationView[]>;
+      dashboardNt4: (request: Nt4BridgeRequest) => Promise<Nt4BridgeReply>;
       installIntegration: (id: string) => Promise<void>;
       uninstallIntegration: (id: string) => Promise<void>;
       enableIntegrationServer: (id: string, server: string, enabled: boolean) => Promise<void>;

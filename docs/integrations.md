@@ -2,11 +2,13 @@
 
 **File → Settings → Integrations** lists the optional packages available to this robot project. **Install** downloads the complete source tree at the catalog's pinned commit using Git and its existing credentials. Keep Git and `uv` on PATH. `uv` prepares the Python environment and locked dependencies on the first start.
 
-After installation, use the package checkbox to select or clear all servers. Expand the package to choose individual servers or edit their settings. Power Tool starts checked servers only at launch, using the saved inputs for this robot project. Unchecking a running server stops it. **Copy MCP URL** gives you a local Streamable HTTP endpoint for a running server. Add it to your MCP client as an HTTP server. The URL includes a private access token and stays the same across launches of this project.
+After installation, use the package checkbox to select or clear all servers. Expand the package to choose individual servers or edit their settings. Checking a server starts it immediately using the saved inputs for this robot project. Power Tool also starts all checked servers when it opens. Unchecking a running server stops it. **Copy MCP URL** gives you a local Streamable HTTP endpoint for a running server. Add it to your MCP client as an HTTP server. The URL includes a private access token and stays the same across launches of this project.
 
 Power Tool loads the project catalog at launch, falling back to the bundled catalog for older projects. The mapping supplies the package entries. Each definition supplies the server rows, field labels, input types, defaults, and launch settings. [mapping.json](../distribution/integrations/mapping.json) · [wpilib.json](../distribution/integrations/wpilib.json)
 
 **Uninstall** stops the package's servers and moves its installed folder to the trash. The catalog and saved inputs stay available for a later install. Reinstalled servers start unchecked.
+
+When **Live Robot Data** is selected and connected to the same host and port as Power Tool, the app shares its WPILib NetworkTables connection and shows **MCP** in the connection badge. Power Tool checks the connection every 250 ms by default and falls back to its built-in client if the shared connection becomes unavailable. In **File → Connection Settings**, set the WPILib heartbeat and the live data update interval. The live data interval defaults to 100 ms and applies with either client. The MCP server's public write settings still govern tools called by assistants.
 
 ## Release layout
 

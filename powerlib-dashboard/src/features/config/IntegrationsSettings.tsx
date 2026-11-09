@@ -58,7 +58,7 @@ export function IntegrationsSettings() {
         onUninstall={() => void run(() => api!.uninstallIntegration(integration.id))}
         onEnable={(server, enabled) => void run(() => api!.enableIntegrationServer(integration.id, server, enabled))}
         onEnableAll={enabled => void run(() => api!.enableAllIntegrationServers(integration.id, enabled))}
-        onSave={values => run(() => api!.saveIntegrationInputs(integration.id, values), "Settings saved for the next launch.")}
+        onSave={values => run(() => api!.saveIntegrationInputs(integration.id, values), "Settings saved. They apply the next time each server starts.")}
         onCopy={url => void run(() => navigator.clipboard.writeText(url), "MCP URL copied.")} />)}
     </Stack></Box>
   </Box>;

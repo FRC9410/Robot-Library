@@ -1,19 +1,21 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { NtTopicSnapshot, PowerLibNt4Client } from "../../networktables/nt4Client";
+import type { NtTopicSnapshot } from "../../networktables/nt4Client";
+import { PreferredNt4Client } from "../../networktables/PreferredNt4Client";
 import type { ConnectionState } from "../../types/app";
 import { TopicSnapshotBuffer } from "../../networktables/TopicSnapshotBuffer";
-import { telemetryUpdateIntervalMs, tuningUpdateIntervalMs } from "../../networktables/telemetryTiming";
+import { defaultNt4Timing, tuningUpdateIntervalMs, validNt4Interval } from "../../networktables/telemetryTiming";
+import type { Nt4Timing } from "../../networktables/telemetryTiming";
 import { TopicViews, type TopicView } from "../../networktables/TopicViews";
 import { useTuningPersistence, type TuningRecovery } from "../../networktables/useTuningPersistence";
 
-export type ConnectionSettings = {
+export type ConnectionSettings = Nt4Timing & {
   targetId: string;
   host: string;
   port: number;
 };
 
 type NetworkTablesContextValue = {
-  clientRef: React.MutableRefObject<PowerLibNt4Client>;
+  clientRef: React.MutableRefObject<PreferredNt4Client>;
   status: ConnectionState;
   setStatus: (status: ConnectionState) => void;
   connectionSettings: ConnectionSettings;
@@ -31,7 +33,8 @@ const settingsStorageKey = "powerlib.connectionSettings";
 const defaultConnectionSettings: ConnectionSettings = {
   targetId: "sim-localhost",
   host: "localhost",
-  port: 5810
+  port: 5810,
+  ...defaultNt4Timing
 };
 
 function readSavedConnectionSettings() {
@@ -45,7 +48,9 @@ function readSavedConnectionSettings() {
     return {
       targetId: parsed.targetId || defaultConnectionSettings.targetId,
       host: parsed.host || defaultConnectionSettings.host,
-      port: Number.isFinite(Number(parsed.port)) ? Number(parsed.port) : defaultConnectionSettings.port
+      port: Number.isFinite(Number(parsed.port)) ? Number(parsed.port) : defaultConnectionSettings.port,
+      updateIntervalMs: validNt4Interval("updateIntervalMs", parsed.updateIntervalMs) ? parsed.updateIntervalMs : defaultNt4Timing.updateIntervalMs,
+      heartbeatIntervalMs: validNt4Interval("heartbeatIntervalMs", parsed.heartbeatIntervalMs) ? parsed.heartbeatIntervalMs : defaultNt4Timing.heartbeatIntervalMs
     };
   } catch {
     return defaultConnectionSettings;
@@ -53,7 +58,7 @@ function readSavedConnectionSettings() {
 }
 
 export function NetworkTablesProvider({ children }: { children: ReactNode }) {
-  const clientRef = useRef(new PowerLibNt4Client());
+  const clientRef = useRef(new PreferredNt4Client());
   const [status, setStatus] = useState<ConnectionState>("idle");
   const [connectionSettingsState, setConnectionSettingsState] = useState<ConnectionSettings>(readSavedConnectionSettings);
   const topicViews = useRef(new TopicViews());
@@ -92,14 +97,14 @@ export function NetworkTablesProvider({ children }: { children: ReactNode }) {
       setTelemetryError(topicBuffer.current.telemetryError);
       if (next !== null) topicViews.current.replace(next, false);
       const now = performance.now();
-      // Share the 100 ms timer without skipping a tuning refresh due to submillisecond jitter.
+      // Keep tuning renders throttled when live telemetry refreshes faster.
       if (now + 1 >= nextTuningRefresh) {
         nextTuningRefresh = now + tuningUpdateIntervalMs;
         topicViews.current.refreshTuning();
       }
-    }, telemetryUpdateIntervalMs);
+    }, connectionSettingsState.updateIntervalMs);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [connectionSettingsState.updateIntervalMs]);
 
   return (
     <NetworkTablesContext.Provider
