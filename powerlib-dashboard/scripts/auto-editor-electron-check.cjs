@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { buildSync } = require('esbuild');
+const platform = require('./platform.cjs');
 process.on('uncaughtException', error => { console.error(error); app.exit(1); });
 const project = path.resolve(process.argv[2] || path.join(__dirname, '..'));
 const fixture = path.join(project, '../build/dashboard-checks/autos-' + Date.now());
@@ -25,7 +26,10 @@ public final class RobotChecks {
   public boolean branchReady() { return true; }
 }`);
 fs.writeFileSync(path.join(fixture, 'build.gradle'), '// isolated autos UI check');
-fs.writeFileSync(path.join(fixture, 'gradlew.bat'), '@echo off\r\nif not exist build mkdir build\r\necho called>build\\phase3-build-called\r\necho BUILD SUCCESSFUL\r\nexit /b 0\r\n');
+platform.writeFakeGradlew(fixture, {
+  bat: '@echo off\r\nif not exist build mkdir build\r\necho called>build\\phase3-build-called\r\necho BUILD SUCCESSFUL\r\nexit /b 0\r\n',
+  sh: '#!/bin/sh\nmkdir -p build\necho called > build/phase3-build-called\necho BUILD SUCCESSFUL\n'
+});
 process.chdir(fixture);
 app.setPath('userData', path.join(fixture, 'profile'));
 const ui = path.join(fixture, 'ui'); fs.mkdirSync(ui);

@@ -1,11 +1,11 @@
-param([string]$WpilibRoot = "$env:PUBLIC/wpilib/2026", [string]$GradleExecutable = '')
+param([string]$WpilibRoot = '', [string]$GradleExecutable = '')
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'platform.ps1')
+if (-not $WpilibRoot) { $WpilibRoot = Get-DefaultWpilibRoot }
+Assert-WpilibJdk $WpilibRoot
 $root = Split-Path $PSScriptRoot -Parent
-if (-not $GradleExecutable) {
-    $GradleExecutable = Get-ChildItem "$env:USERPROFILE/.gradle/permwrapper/dists/gradle-8.11-bin" -Recurse -Filter 'gradle.bat' |
-        Select-Object -First 1 -ExpandProperty FullName
-}
-if (-not (Test-Path -LiteralPath $GradleExecutable)) { throw 'Supply -GradleExecutable for Gradle 8.11.' }
+if (-not $GradleExecutable) { $GradleExecutable = Find-Gradle811 }
+if (-not $GradleExecutable -or -not (Test-Path -LiteralPath $GradleExecutable)) { throw 'Supply -GradleExecutable for Gradle 8.11.' }
 $fixture = [IO.Path]::GetFullPath((Join-Path $root 'build/generated-robot-check'))
 if (-not $fixture.StartsWith([IO.Path]::GetFullPath($root) + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'Fixture directory escaped the workspace.'

@@ -1,0 +1,17 @@
+# Windows and macOS developers share this repo. Store text as LF and check it out
+# with each file type's native line ending where a tool needs one.
+* text=auto eol=lf
+
+# Windows batch files need CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.jar binary
+*.zip binary

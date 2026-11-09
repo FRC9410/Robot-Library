@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import platform from "./platform.cjs";
 
 /** Run the emitted Java with real WPILib scheduling and only hardware-owning robot classes replaced. */
 export async function checkGeneratedCommands({ fixture, root, classes, jars, javaHome, states, autoName, native }) {
@@ -161,9 +162,9 @@ public class GeneratedAutosCheck {
   const args = path.join(directory, "javac.args");
   await fs.writeFile(args, ["-encoding", "UTF-8", "-cp", classpath, "-d", output, ...inputs]
     .map(value => JSON.stringify(value.replaceAll("\\", "/"))).join("\n"));
-  const compile = spawnSync(path.join(javaHome, "bin", "javac.exe"), [`@${args}`], { encoding: "utf8" });
+  const compile = spawnSync(platform.jdkTool(javaHome, "javac"), [`@${args}`], { encoding: "utf8" });
   assert.equal(compile.status, 0, compile.stderr || compile.error?.message);
-  const run = spawnSync(path.join(javaHome, "bin", "java.exe"), [`-Djava.library.path=${native}`, "-cp",
+  const run = spawnSync(platform.jdkTool(javaHome, "java"), [`-Djava.library.path=${native}`, "-cp",
     [output, classes, ...jars].join(path.delimiter), "frc.robot.autos.GeneratedAutosCheck"], { encoding: "utf8", timeout: 20000 });
   assert.equal(run.status, 0, run.stdout + run.stderr + (run.error?.message ?? ""));
   process.stdout.write(run.stdout);

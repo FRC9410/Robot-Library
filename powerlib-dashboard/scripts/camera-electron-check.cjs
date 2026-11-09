@@ -1,4 +1,4 @@
-// Run with node_modules/electron/dist/electron.exe scripts/camera-electron-check.cjs.
+// Run from powerlib-dashboard/ with: npx electron scripts/camera-electron-check.cjs
 // Uses local mock cameras; no robot or installed application is touched.
 const { app, BrowserWindow, nativeImage } = require("electron");
 const assert = require("node:assert/strict");

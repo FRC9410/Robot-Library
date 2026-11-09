@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { build } from "esbuild";
+import platform from "./platform.cjs";
 
 const project = fileURLToPath(new URL("..", import.meta.url));
 const fixture = await fs.mkdtemp(path.join(os.tmpdir(), "power-tool-actions-"));
@@ -14,7 +15,10 @@ const module = path.join(fixture, "actions.mjs");
 await build({ entryPoints: [path.join(project, "electron/robotActions.ts")], bundle: true, platform: "node", format: "esm", outfile: module });
 const { runRobotAction, simulationLaunch, robotEnvironment } = await import(pathToFileURL(module).href);
 await fs.writeFile(path.join(root, "build.gradle"), 'plugins { id "edu.wpi.first.GradleRIO" version "2026.2.1" }');
-await fs.writeFile(path.join(root, "gradlew.bat"), '@echo off\r\necho %*>>build\\calls.txt\r\necho %JAVA_HOME%>build\\java-home.txt\r\nif exist fail-build exit /b 7\r\necho BUILD SUCCESSFUL\r\nexit /b 0\r\n');
+platform.writeFakeGradlew(root, {
+  bat: '@echo off\r\necho %*>>build\\calls.txt\r\necho %JAVA_HOME%>build\\java-home.txt\r\nif exist fail-build exit /b 7\r\necho BUILD SUCCESSFUL\r\nexit /b 0\r\n',
+  sh: '#!/bin/sh\necho "$*" >> build/calls.txt\necho "$JAVA_HOME" > build/java-home.txt\nif [ -e fail-build ]; then exit 7; fi\necho BUILD SUCCESSFUL\n'
+});
 const calls = async () => (await fs.readFile(path.join(root, "build/calls.txt"), "utf8")).trim().split(/\r?\n/);
 const clear = () => fs.writeFile(path.join(root, "build/calls.txt"), "");
 await runRobotAction(root, "build"); assert.deepEqual(await calls(), ["--no-daemon --console=plain build"]);
@@ -41,9 +45,9 @@ await fs.writeFile(source, `public class ActionFixture { public static void main
   java.nio.file.Files.writeString(java.nio.file.Path.of("build/simulation-env.txt"), System.getenv("HALSIM_EXTENSIONS"));
   Thread.sleep(1800);
 } }`);
-const compiled = spawnSync(path.join(javaHome, "bin/javac.exe"), ["-d", fixture, source], { encoding: "utf8" });
+const compiled = spawnSync(platform.jdkTool(javaHome, "javac"), ["-d", fixture, source], { encoding: "utf8" });
 assert.equal(compiled.status, 0, compiled.stderr);
-const jar = spawnSync(path.join(javaHome, "bin/jar.exe"), ["--create", "--file", path.join(root, "build/libs/robot.jar"), "-C", fixture, "ActionFixture.class"], { encoding: "utf8" });
+const jar = spawnSync(platform.jdkTool(javaHome, "jar"), ["--create", "--file", path.join(root, "build/libs/robot.jar"), "-C", fixture, "ActionFixture.class"], { encoding: "utf8" });
 assert.equal(jar.status, 0, jar.stderr);
 assert.ok((await simulationLaunch(root, true, env)).env.HALSIM_EXTENSIONS.includes("halsim_ds_socket"));
 assert.ok(!(await simulationLaunch(root, false, env)).env.HALSIM_EXTENSIONS.includes("halsim_ds_socket"), "Without DS overrides a project's DS-enabled default");

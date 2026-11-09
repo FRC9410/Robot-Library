@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const {Menu} = require('electron');
+const platform = require('./platform.cjs');
 
 exports.checkFileMenu = async ({evaluate,wait,readDoc,fixture,screenshot}) => {
   const file=Menu.getApplicationMenu().getMenuItemById('powerlib-menu-file').submenu;
@@ -21,7 +22,10 @@ exports.checkFileMenu = async ({evaluate,wait,readDoc,fixture,screenshot}) => {
   }
   assert.deepEqual(readDoc(),before,'Opening Settings from the menu preserves drafts');
   const trace=path.join(fixture,'build/menu-actions.txt');
-  fs.writeFileSync(path.join(fixture,'gradlew.bat'),'@echo off\r\nif not exist build mkdir build\r\necho %*>>build\\menu-actions.txt\r\necho BUILD SUCCESSFUL\r\nexit /b 0\r\n');
+  platform.writeFakeGradlew(fixture,{
+    bat:'@echo off\r\nif not exist build mkdir build\r\necho %*>>build\\menu-actions.txt\r\necho BUILD SUCCESSFUL\r\nexit /b 0\r\n',
+    sh:'#!/bin/sh\nmkdir -p build\necho "$*" >> build/menu-actions.txt\necho BUILD SUCCESSFUL\n'
+  });
   file.items.find(item=>item.label==='Build Robot').click();
   await wait(()=>fs.existsSync(trace)&&fs.readFileSync(trace,'utf8').includes(' build'));
   await wait(()=>evaluate(`!document.querySelector('[role=dialog]')`));
