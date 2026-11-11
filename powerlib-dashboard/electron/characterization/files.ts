@@ -5,6 +5,7 @@ import { parseWpilog } from "../logs/wpilog.js";
 import { downloadRobotLogs, isRobotLogPath } from "../robotLogs.js";
 import { analyzeTarget } from "./analysis.js";
 import { replaceReport } from "./reportStorage.js";
+import { resolveTargetLimits, validPositionTest, validSettings } from "./limits.js";
 import { phases, type Report, type Settings, type Target, type TestRecord, type Sample, type Phase, type Diagnostic, type ControlMode } from "./types.js";
 const sessions=new Map<string,{root:string;report:Report}>();
 const idPattern=/^[a-zA-Z0-9-]{1,90}$/;
@@ -29,17 +30,33 @@ async function persist(report:Report){
   }
 }
 export function session(id:string){const entry=sessions.get(id);if(!entry)throw Error("Unknown characterization session.");return entry;}
-export async function startCharacterization(root:string, data:{simulation:boolean;controlMode?:ControlMode;host:string;settings:Settings;targets:Target[]}) {
+export function canControlCharacterizationDriver(report: Report): boolean {
+  if (report.targets.some(target => target.kind === "position")) return false;
+  if (!report.manualControl) return true;
+  const drive = report.targets.filter(target => target.kind === "drive");
+  return drive.length > 0 && report.targets.some(target => target.kind === "steer")
+    && drive.every(target => phases.every(phase => report.tests.some(test => test.target.id === target.id && test.phase === phase)));
+}
+export async function startCharacterization(root:string, data:{simulation:boolean;controlMode?:ControlMode;manualControl?:boolean;host:string;settings:Settings;targets:Target[]}) {
   if(!data||typeof data.simulation!=="boolean"||!data.host||!Array.isArray(data.targets)||!data.targets.length)throw Error("Select at least one subsystem.");
-  const {duration,ramp,step,settle,medianWindow}=data.settings;
   const controlMode=data.controlMode??(data.simulation?"simulation":"driver-station");
   if(!["simulation","driver-station"].includes(controlMode)||(!data.simulation&&controlMode!=="driver-station"))throw Error("Invalid enable/disable control mode.");
-  if(![duration,ramp,step,settle,medianWindow].every(Number.isFinite)||duration<.5||duration>10||ramp<.1||ramp>2||step<.1||step>6||settle<.2||settle>10||![1,3,5,7,9].includes(medianWindow))throw Error("Invalid test settings.");
-  for(const target of data.targets)if(!idPattern.test(target.id)||!idPattern.test(target.group)||!target.name||!["velocity","velocityTorque","drive","steer"].includes(target.kind)||!Array.isArray(target.motors)||!target.motors.length)throw Error("Invalid characterization target.");
+  for(const target of data.targets)if(!idPattern.test(target.id)||!idPattern.test(target.group)||!target.name||!["velocity","velocityTorque","drive","steer","position"].includes(target.kind)||!Array.isArray(target.motors)||!target.motors.length)throw Error("Invalid characterization target.");
+  const position = data.targets.some(target => target.kind === "position");
+  if (position && (data.targets.length !== 1 || data.manualControl !== true || !validPositionTest(data.settings?.positionTest)))
+    throw Error("Position SysId requires one mechanism, manual control and a valid travel window.");
+  if(data.manualControl!==undefined&&(typeof data.manualControl!=="boolean"||data.manualControl&&data.targets.some(target=>target.kind!=="drive"&&target.kind!=="steer"&&target.kind!=="position")))
+    throw Error("Manual control requires drivetrain or position targets.");
+  if(!validSettings(data.settings,data.targets.flatMap(target=>[target.id,target.group])))throw Error("Invalid test settings.");
   const id=randomUUID(),folder=path.join(root,"power-tool/characterization",new Date().toISOString().replace(/[:.]/g,"-")+"-"+id);
   await fs.mkdir(folder,{recursive:true});
   const report:Report={formatVersion:1,id,path:path.join(folder,"characterization.json"),startedAt:new Date().toISOString(),outcome:"running",...data,controlMode,tests:[],results:[],diagnostics:[],
-    analysis:{model:"acceleration = alpha*velocity + beta*input + gamma*sign(velocity)",implementation:"SysId simple-motor acceleration OLS, centered median filter and three-point derivative; fixed whole-test window",source:"https://github.com/wpilibsuite/allwpilib/blob/v2026.2.1/sysid/src/main/native/cpp/analysis/FeedforwardAnalysis.cpp"}};
+    analysis: position ? {
+      model: data.settings.positionTest!.model === "arm" ? "arm cosine gravity" : "elevator constant gravity",
+      implementation: "Acceleration OLS with gravity, centered median filter and three-point derivative",
+      source: "https://docs.wpilib.org/en/stable/docs/software/advanced-controls/system-identification/introduction.html",
+      excitation: "voltage"
+    } : {model:"acceleration = alpha*velocity + beta*input + gamma*sign(velocity)",implementation:"SysId simple-motor acceleration OLS, centered median filter and three-point derivative; fixed whole-test window",source:"https://github.com/wpilibsuite/allwpilib/blob/v2026.2.1/sysid/src/main/native/cpp/analysis/FeedforwardAnalysis.cpp",excitation:"voltage"}};
   sessions.set(id,{root,report});await persist(report);return report;
 }
 export async function recordCharacterizationDiagnostic(id:string,entry:Omit<Diagnostic,"at">){
@@ -83,13 +100,13 @@ export async function collectCharacterization(id:string, test:{id:string;targetI
     samples.push(rows);const csv=path.join(folder,test.id+`-motor-${i}.csv`);csvFiles.push(csv);
     await fs.writeFile(csv,"time_s,voltage_V,position_rot,velocity_rot_per_s,torque_current_A\n"+rows.map(row=>[row.time,row.voltage,row.position,row.velocity,row.current].join(",")).join("\n"));
   }
-  const record:TestRecord={...test,target,localFile,csvFiles,samples};report.tests.push(record);await persist(report);return record;
+  const record:TestRecord={...test,target,localFile,csvFiles,samples,limits:resolveTargetLimits(report.settings,target)};report.tests.push(record);await persist(report);return record;
 }
 export async function finishCharacterization(id:string,outcome:Report["outcome"],error?:string) {
   const {report}=session(id);
   if(!["complete","cancelled","failed"].includes(outcome))throw Error("Invalid session outcome.");
   report.outcome=outcome;report.completedAt=new Date().toISOString();report.error=error;
-  report.results=report.targets.map(target=>analyzeTarget(target,report.tests,report.settings.medianWindow));
+  report.results=report.targets.map(target=>analyzeTarget(target,report.tests,report.settings.medianWindow,report.settings.positionTest));
   if(outcome==="complete"&&report.results.some(result=>result.error))report.outcome="failed";
   await persist(report);
   return report;

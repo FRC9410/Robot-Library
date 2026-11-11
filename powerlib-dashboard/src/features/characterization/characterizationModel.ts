@@ -24,6 +24,6 @@ export function readCharacterizationCatalog(value: unknown): Target[] {
   if (!Array.isArray(data)) return [];
   return data.filter((target): target is Target => target &&
     [target.id, target.group, target.name].every(item => typeof item === "string" && item.length > 0) &&
-    ["velocity", "velocityTorque", "drive", "steer"].includes(target.kind) &&
+    ["velocity", "velocityTorque", "drive", "steer", "position"].includes(target.kind) &&
     Array.isArray(target.motors) && target.motors.length > 0 && target.motors.every((name: unknown) => typeof name === "string"));
 }

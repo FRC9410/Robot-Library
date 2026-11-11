@@ -21,7 +21,7 @@ import { readUploadedField, removeUploadedField, saveUploadedField } from "./upl
 import { validateUploadedField } from "./uploadedField.js";
 import { generateAutoCode, readAutoFiles, saveAutoFiles } from "./autoFiles.js";
 import { runRobotAction } from "./robotActions.js";
-import { startCharacterization, collectCharacterization, recordCharacterizationDiagnostic, finishCharacterization, session as characterizationSession } from "./characterization/files.js";
+import { startCharacterization, collectCharacterization, recordCharacterizationDiagnostic, finishCharacterization, canControlCharacterizationDriver, session as characterizationSession } from "./characterization/files.js";
 import { controlDriverStation } from "./characterization/driverStation.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -247,7 +247,8 @@ ipcMain.handle("powerlib:characterization-diagnostic", (_event, id, entry) => re
 ipcMain.handle("powerlib:characterization-finish", (_event, id, outcome, error) => finishCharacterization(id, outcome, error));
 ipcMain.handle("powerlib:characterization-driver", async (_event, id, action) => {
   const { report } = characterizationSession(id);
-  if (report.controlMode !== "driver-station" || report.outcome !== "running" || !["check", "enable", "disable"].includes(action)) throw Error("Invalid Driver Station control request.");
+  if (report.controlMode !== "driver-station" || report.outcome !== "running" || !["check", "enable", "disable"].includes(action)
+    || !canControlCharacterizationDriver(report)) throw Error("Invalid Driver Station control request.");
   await controlDriverStation(action);
 });
 

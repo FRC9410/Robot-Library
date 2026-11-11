@@ -54,6 +54,9 @@ export async function writeCharacterization(project: SourceProject) {
   }
   for (const record of records.filter(record => !record.data.sourceError)) {
     const stop = ["velocity", "velocityTorque"].includes(record.data.type!) ? "stopVelocity" : record.data.type === "absolutePosition" ? "stopPosition" : "stopAll";
+    if (record.data.type === "absolutePosition" || record.data.type === "relativePosition") {
+      lines.push(`    characterizationManager.registerPositionCrawl(${JSON.stringify(record.data.id)}, ${JSON.stringify(record.data.name)}, stateMachine.${record.field});`);
+    }
     lines.push(`    characterizationManager.registerNeutral(stateMachine.${record.field}, stateMachine.${record.field}::${stop});`);
   }
   const machineFile = `${robotSource}/subsystems/StateMachine.java`;

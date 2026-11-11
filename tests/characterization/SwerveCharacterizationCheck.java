@@ -38,17 +38,25 @@ public final class SwerveCharacterizationCheck {
     List<Object> tests=new ArrayList<>();long sequence=0;
     for(String kind:List.of("drive","steer"))for(String phase:List.of("quasistatic-forward","quasistatic-reverse","dynamic-forward","dynamic-reverse")){
       String id=UUID.randomUUID().toString();
-      table.getEntry("request").setString(json.writeValueAsString(Map.of("id",id,"target","drivetrain-"+kind,"phase",phase,"duration",.7,"ramp",1,"step",4)));
+      boolean manual=kind.equals("drive");
+      table.getEntry("request").setString(json.writeValueAsString(Map.of("id",id,"target","drivetrain-"+kind,"phase",phase,"duration",.7,"ramp",1,"step",4,"manualControl",manual)));
       for(int i=0;i<5;i++){table.getEntry("heartbeat").setDouble(++sequence);tick(drivetrain);}
       assertEquals("prepared",json.readTree(table.getEntry("status").getString("{}")).path("state").asText());
       table.getEntry("simulationControl").setString(id+"|enable|go");
+      if(manual){
+        for(int i=0;i<5;i++){table.getEntry("heartbeat").setDouble(++sequence);tick(drivetrain);}
+        assertFalse("NetworkTables must not enable a manual drive test",DriverStation.isEnabled());
+        DriverStationSim.setEnabled(true);
+      }
       double maximumVoltage=0,maximumVelocity=0;
       for(int i=0;i<100;i++){
         table.getEntry("heartbeat").setDouble(++sequence);tick(drivetrain);
         for(var module:drivetrain.getModules()){
           var motor=kind.equals("drive")?module.getDriveMotor():module.getSteerMotor();
-          maximumVoltage=Math.max(maximumVoltage,Math.abs(motor.getMotorVoltage().getValueAsDouble()));
+          double voltage=Math.abs(motor.getMotorVoltage().getValueAsDouble());
+          maximumVoltage=Math.max(maximumVoltage,voltage);
           maximumVelocity=Math.max(maximumVelocity,Math.abs(motor.getVelocity().getValueAsDouble()));
+          if(!manual&&voltage>.05)assertEquals("Steering must not power the drive motor",0,module.getDriveMotor().getMotorVoltage().getValueAsDouble(),.02);
         }
         var status=json.readTree(table.getEntry("status").getString("{}"));
         if(status.path("state").asText().equals("complete")){
@@ -59,6 +67,11 @@ public final class SwerveCharacterizationCheck {
       assertTrue(kind+" "+phase+" velocity",maximumVelocity>.001);
       assertEquals("complete",json.readTree(table.getEntry("status").getString("{}")).path("state").asText());
       table.getEntry("simulationControl").setString(id+"|disable|end");
+      if(manual){
+        for(int i=0;i<5;i++){table.getEntry("heartbeat").setDouble(++sequence);tick(drivetrain);}
+        assertTrue("The operator must disable between drive steps",DriverStation.isEnabled());
+        DriverStationSim.setEnabled(false);
+      }
       for(int i=0;i<15;i++){table.getEntry("heartbeat").setDouble(++sequence);tick(drivetrain);}
       assertFalse(DriverStation.isEnabled());assertFalse(CharacterizationManager.isActive());
       for(var module:drivetrain.getModules()){
@@ -66,8 +79,22 @@ public final class SwerveCharacterizationCheck {
         assertEquals(0,module.getSteerMotor().getMotorVoltage().getValueAsDouble(),.02);
       }
     }
+    String cancelled=UUID.randomUUID().toString();
+    table.getEntry("request").setString(json.writeValueAsString(Map.of("id",cancelled,"target","drivetrain-drive",
+        "phase","dynamic-forward","duration",3,"ramp",1,"step",4,"manualControl",true)));
+    for(int i=0;i<5;i++){table.getEntry("heartbeat").setDouble(++sequence);tick(drivetrain);}
+    DriverStationSim.setEnabled(true);
+    for(int i=0;i<8;i++){table.getEntry("heartbeat").setDouble(++sequence);tick(drivetrain);}
+    table.getEntry("request").setString(json.writeValueAsString(Map.of("id",cancelled,"cancel",true)));
+    for(int i=0;i<8;i++){table.getEntry("heartbeat").setDouble(++sequence);tick(drivetrain);}
+    assertEquals("cancelled",json.readTree(table.getEntry("status").getString("{}")).path("state").asText());
+    assertTrue("Cancel must leave enable state under operator control",DriverStation.isEnabled());
+    for(var module:drivetrain.getModules())assertEquals(0,module.getDriveMotor().getMotorVoltage().getValueAsDouble(),.02);
+    DriverStationSim.setEnabled(false);
+    for(int i=0;i<8;i++){table.getEntry("heartbeat").setDouble(++sequence);tick(drivetrain);}
+    assertFalse(CharacterizationManager.isActive());
     Files.writeString(Path.of("swerve-run-data.json"),json.writeValueAsString(tests));
-    drivetrain.close();System.out.println("CTRE drivetrain characterization passed: drive + steer, four profiles each, real motor voltage/velocity, disabled gaps and four-module WPILOGs.");System.exit(0);
+    drivetrain.close();System.out.println("CTRE drivetrain characterization passed: four manual drive profiles, four automatic steering profiles, neutral cancellation and four-module WPILOGs.");System.exit(0);
   }
   private static boolean wasEnabled;
   private static void tick(SwerveDrivetrain<?,?,?> drivetrain) throws Exception {

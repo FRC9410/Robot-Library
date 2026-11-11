@@ -1,23 +1,78 @@
-import { Alert, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, LinearProgress, Stack, Typography } from "@mui/material";
+import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress, Stack, Typography } from "@mui/material";
 import type { GeneratedSubsystem } from "../subsystems/types";
 import { useCharacterization } from "./useCharacterization";
-import { CharacterizationSettings } from "./CharacterizationSettings";
+import { CharacterizationSetup } from "./CharacterizationSetup";
 import { CharacterizationResults } from "./CharacterizationResults";
-type CharacterizationDialogProps={open:boolean;onClose:()=>void;subsystems:GeneratedSubsystem[]};
-export function CharacterizationDialog({open,onClose,subsystems}:CharacterizationDialogProps){
-  const run=useCharacterization(subsystems);
-  const valid=Number.isFinite(run.settings.duration+run.settings.ramp+run.settings.step+run.settings.settle)&&run.settings.duration>=.5&&run.settings.duration<=10&&run.settings.ramp>=.1&&run.settings.ramp<=2&&run.settings.step>=.1&&run.settings.step<=6&&run.settings.settle>=.2&&run.settings.settle<=10&&[1,3,5,7,9].includes(run.settings.medianWindow);
-  function close(){if(!run.busy){run.reset();onClose();}}
-  return <Dialog open={open} onClose={close} maxWidth="md" fullWidth><DialogTitle>Characterize Subsystems</DialogTitle><DialogContent dividers><Stack spacing={2}>
-    <Typography>Select subsystems to run slow forward/reverse and voltage-step forward/reverse tests. Drivetrain runs both drive and steering motors.</Typography>
-    <Stack>{run.options.map(option=><FormControlLabel key={option.id} control={<Checkbox disabled={run.busy} checked={run.picked.includes(option.id)} onChange={event=>run.setPicked(event.target.checked?[...run.picked,option.id]:run.picked.filter(id=>id!==option.id))}/>} label={`${option.name} (${option.kind})`}/>)}</Stack>
-    <CharacterizationSettings value={run.settings} disabled={run.busy} onChange={run.setSettings}/>
-    <Alert severity="warning">The robot will move. On hardware or in Sim with DS, open FRC Driver Station on this Windows computer, select Test mode and start disabled. Clear mechanism travel and allow drivetrain movement. Disabling during a test or E-stopping in Driver Station cancels the sequence.</Alert>
-    {run.robot&&<Typography variant="body2">Enable/disable control: {run.controlMode==="driver-station"?`FRC Driver Station${run.robot.simulation?" (simulation)":""}`:run.controlMode==="simulation"?"Internal simulation":"Unavailable — rebuild and restart simulation with current PowerLib."}</Typography>}
-    <FormControlLabel control={<Checkbox checked={run.ready} disabled={run.busy} onChange={event=>run.setReady(event.target.checked)}/>} label="The robot and test area are ready for automatic enable/disable and characterization."/>
-    {(!run.connected||!run.supported)&&<Alert severity="info">Connect to a robot or simulation built with current PowerLib characterization support.</Alert>}
-    {run.controlMode==="driver-station"&&run.robot&&(!run.robot.test||run.robot.enabled)&&<Alert severity="info">Set the FRC Driver Station to Test mode and Disabled before starting.</Alert>}
-    {run.error&&<Alert severity="error">{run.error}</Alert>}{run.busy&&<LinearProgress/>}{run.progress&&<Typography role="status">{run.progress}</Typography>}
-    {run.report&&<CharacterizationResults report={run.report}/>}
-  </Stack></DialogContent><DialogActions>{run.busy?<Button color="error" onClick={run.stop}>Stop characterization</Button>:<><Button onClick={close}>Close</Button><Button variant="contained" onClick={()=>void run.start()} disabled={!run.ready||!run.picked.length||!run.connected||!run.supported||!valid||!run.robot||!run.controlMode||run.robot.enabled||run.robot.fms||run.robot.estop||(run.controlMode==="driver-station"&&!run.robot.test)}>Start characterization</Button></>}</DialogActions></Dialog>;
+import { CharacterizationManualStep } from "./CharacterizationManualStep";
+import { validSettings } from "../../../electron/characterization/limits";
+
+type CharacterizationDialogProps = { open: boolean; onClose: () => void; subsystems: GeneratedSubsystem[] };
+
+export function CharacterizationDialog({ open, onClose, subsystems }: CharacterizationDialogProps) {
+  const run = useCharacterization(subsystems);
+  const drivetrain = run.subsystemType === "drivetrain";
+  const station = run.controlMode === "simulation" ? "the WPILib Simulation GUI" : "FRC Driver Station";
+  const { error } = run;
+  const valid = validSettings(run.settings, run.picked);
+  const robotReady = run.connected && run.robot && run.controlMode && !run.robot.enabled && !run.robot.fms && !run.robot.estop
+    && (run.controlMode !== "driver-station" || run.robot.test);
+  const canStart = robotReady && run.ready && run.picked.length > 0 && run.supported && valid;
+  const canArm = run.subsystemType === "positionCrawl" ? robotReady && run.robot?.positionSysId === true : canStart;
+  const control = run.controlMode === "driver-station" ? `FRC Driver Station${run.robot?.simulation ? " (simulation)" : ""}`
+    : run.controlMode === "simulation" ? "Internal simulation" : "Unavailable";
+  const errorNotice = error && (
+    <Alert severity="error" action={<Button color="inherit" size="small" onClick={() => void navigator.clipboard.writeText(error)}>Copy details</Button>}>
+      <Typography variant="body2" title={error} sx={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 3, overflow: "hidden", overflowWrap: "anywhere" }}>
+        {error}
+      </Typography>
+    </Alert>
+  );
+
+  function close() {
+    if (run.busy) return;
+    run.reset();
+    onClose();
+  }
+
+  return (
+    <Dialog open={open} onClose={close} maxWidth="lg" fullWidth aria-labelledby="characterization-title"
+      slotProps={{ paper: { sx: { m: 2, width: "calc(100% - 32px)", maxHeight: "calc(100% - 32px)" } } }}>
+      <DialogTitle id="characterization-title" sx={{ py: 1.5 }}>Characterize Robot</DialogTitle>
+      <DialogContent dividers sx={{ py: 1.5, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        <Stack spacing={1.5} sx={{ minHeight: 0 }}>
+          {run.busy && run.manualStep ? <CharacterizationManualStep step={run.manualStep} station={station} /> : run.busy ? (
+            <Stack spacing={2} sx={{ py: 2 }}>
+              <Typography variant="h6">Characterization running</Typography>
+              <Typography variant="body2">Enable/disable control: {control}</Typography>
+              <LinearProgress aria-label="Characterization progress" />
+              <Typography role="status">{run.progress || "Preparing characterization…"}</Typography>
+            </Stack>
+          ) : run.report ? (
+            <>
+              <Typography variant="h6" role="status">{run.progress}</Typography>
+              <CharacterizationResults report={run.report} />
+            </>
+          ) : (
+            <CharacterizationSetup run={run} control={drivetrain ? "Drive manual · Steering automatic" : control} errorNotice={errorNotice} drivetrain={drivetrain} />
+          )}
+          {(run.report || run.busy) && errorNotice}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        {run.busy ? (
+          <>
+            <Button color="error" variant="outlined" onClick={run.stop}>Stop characterization</Button>
+            {run.manualStep?.state === "arm" && <Button variant="contained" onClick={run.arm} disabled={!canArm}>Arm test</Button>}
+          </>
+        ) : (
+          <>
+            <Button onClick={close}>Close</Button>
+            {run.report
+              ? <Button variant="contained" onClick={run.prepareNextRun}>Run again</Button>
+              : run.subsystemType !== "positionCrawl" && <Button variant="contained" onClick={() => void run.start()} disabled={!canStart}>{run.manualDrive ? "Start walkthrough" : "Start characterization"}</Button>}
+          </>
+        )}
+      </DialogActions>
+    </Dialog>
+  );
 }
