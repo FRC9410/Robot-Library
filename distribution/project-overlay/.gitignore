@@ -2,6 +2,11 @@
 /power-tool/app/
 node_modules/
 
+# Local integration files. Keep the shared catalog and server definitions.
+/integrations/*
+!/integrations/mapping.json
+!/integrations/wpilib.json
+
 # WPILib / Gradle output. Keep the project's Gradle wrapper in version control.
 .gradle/
 /build/
@@ -15,7 +20,6 @@ node_modules/
 *.so
 *.dylib
 *.zip
-*.log
 hs_err_pid*
 .classpath
 .project
@@ -39,11 +43,27 @@ gradle-app.setting
 Thumbs.db
 Desktop.ini
 
-# Local simulation state and recordings.
+# Log files in any folder.
+*.log
+*.wpilog
+*.wpilog.part
+*.hoot
+*.hoot.part
+*.rlog
+*.dslog
+*.dsevents
+*.jfr
+
+# Keep the release README and ignore everything else in local log folders.
+logs/
+!/logs/
+/logs/*
+!/logs/README.md
+
+# Local simulation state.
 networktables.json
 simgui.json
 *-window.json
-logs/
 ctre_sim/
 /.cache/
 compile_commands.json

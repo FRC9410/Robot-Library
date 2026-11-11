@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { isTuningSessionValue, type TuningConnection, type TuningSessionFile } from "../../electron/tuningSession";
-import type { PowerLibNt4Client } from "./nt4Client";
+import type { PreferredNt4Client } from "./PreferredNt4Client";
 export type TuningRecovery = TuningSessionFile & { error: string | null };
 const empty: TuningRecovery = { values: [], path: "", error: null };
-export function useTuningPersistence(client: PowerLibNt4Client, connection: TuningConnection) {
+export function useTuningPersistence(client: Pick<PreferredNt4Client, "onPublished">, connection: TuningConnection) {
   const { targetId, host, port } = connection;
   const scope = JSON.stringify([targetId, host.trim().toLowerCase(), port]);
   const [cached, setCached] = useState({ scope, recovery: empty });

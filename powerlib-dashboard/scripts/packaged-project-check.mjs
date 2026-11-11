@@ -63,10 +63,17 @@ try {
   assert.ok(inventory.path.toLowerCase().startsWith(fixture.toLowerCase()),inventory.path);
   const autos=await evaluate('window.powerlib.readAutos()');
   assert.ok(autos.path.toLowerCase().startsWith(fixture.toLowerCase()),autos.path);
+  const integrations=await evaluate('window.powerlib.listIntegrations()');
+  assert.equal(integrations.length,1);
+  assert.equal(integrations[0].servers.length,5);
+  assert.ok(!integrations[0].installed && integrations[0].servers.every(server=>!server.enabled && server.state==='stopped'));
   const logs=await evaluate('window.powerlib.listRobotLogs()');
   assert.ok(logs.files.some(file=>file.name==='package-smoke.wpilog'),'Packaged SSH2 portable fallback lists robot logs');
-  const downloaded=await evaluate(`window.powerlib.downloadRobotLogs([{remotePath:'/U/logs/package-smoke.wpilog',localFolder:'smoke'}],${JSON.stringify(path.join(fixture,'build/downloaded-logs'))})`);
+  const defaultLogsFolder=await evaluate('window.powerlib.defaultLogsFolder()');
+  assert.equal(defaultLogsFolder,path.join(fixture,'logs'));
+  const downloaded=await evaluate(`window.powerlib.downloadRobotLogs([{remotePath:'/U/logs/package-smoke.wpilog',localFolder:'smoke'}],${JSON.stringify(defaultLogsFolder)})`);
   assert.equal(downloaded.length,1);
+  assert.equal(downloaded[0].path,path.join(defaultLogsFolder,'smoke','package-smoke.wpilog'));
   assert.equal(await fs.readFile(downloaded[0].path,'utf8'),'packaged SFTP smoke fixture');
   await command('Page.captureScreenshot',{format:'png'}).then(result=>fs.writeFile(path.join(fixture,'build/packaged-app.png'),Buffer.from(result.data,'base64')));
   await command('Page.close');
