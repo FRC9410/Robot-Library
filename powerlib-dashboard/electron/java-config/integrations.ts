@@ -35,20 +35,38 @@ export async function writeTunableRegistry(project: SourceProject) {
 
 export async function writeCharacterization(project: SourceProject) {
   const records = await subsystemRecords(project);
-  const lines: string[] = [];
+  const lines = ['    characterizationManager.registerSwerve("drivetrain", "Drivetrain", stateMachine.drivetrain, stateMachine.drivetrain);'];
   for (const record of records.filter(record => !record.data.sourceError && ["velocity", "velocityTorque"].includes(record.data.type!))) {
     const relative = `${robotSource}/characterization/${record.className}Characterization.java`;
-    if (!await project.read(relative, true)) {
-      const source = characterizationTemplate.replaceAll('$($Metadata.PascalName)', record.className)
-        .replace('$SubsystemIdMarkerPrefix$($Metadata.Id)', `// POWERLIB SUBSYSTEM ID: ${record.data.id}`)
-        .replace('$GeneratedFileMarker', '// POWERLIB CHARACTERIZATION STARTER - custom code is preserved.');
-      await project.set(relative, source + "\n");
-    }
-    const name = `${record.field}Characterization`;
-    lines.push(`    var ${name} = new frc.robot.characterization.${record.className}Characterization(stateMachine.${record.field});`);
-    for (const [label, method] of [["Quasistatic Forward", "quasistaticForward"], ["Quasistatic Reverse", "quasistaticReverse"], ["Dynamic Forward", "dynamicForward"], ["Dynamic Reverse", "dynamicReverse"]]) {
-      lines.push(`    registerCharacterizationCommand(${JSON.stringify(record.data.name)}, "${label}", ${name}.${method}());`);
-    }
+    const old = await project.read(relative, true);
+    const stock = characterizationTemplate.replaceAll('$($Metadata.PascalName)', record.className)
+      .replace('$SubsystemIdMarkerPrefix$($Metadata.Id)', `// POWERLIB SUBSYSTEM ID: ${record.data.id}`)
+      .replace('$GeneratedFileMarker', '// POWERLIB CHARACTERIZATION STARTER - custom code is preserved.');
+    if (old && old.replaceAll("\r", "").trim() === stock.replaceAll("\r", "").trim()) await project.set(relative, null);
+    lines.push(`    characterizationManager.registerVelocity(${JSON.stringify(record.data.id)}, ${JSON.stringify(record.data.name)}, stateMachine.${record.field});`);
   }
-  await project.set(dashboardPath, markerBlock(await project.read(dashboardPath), "CHARACTERIZATION", lines.join("\n")));
+  let source = await project.read(dashboardPath);
+  if (!source.includes("CharacterizationManager characterizationManager")) {
+    const declaration = /class\s+PowerDashboard[^{}]*\{/g.exec(maskJava(source));
+    if (!declaration) throw Error("PowerDashboard class declaration is missing.");
+    const at = declaration.index + declaration[0].length;
+    source = source.slice(0, at) + "\n  private final frc.powerlib.characterization.CharacterizationManager characterizationManager = new frc.powerlib.characterization.CharacterizationManager();\n" + source.slice(at);
+  }
+  for (const record of records.filter(record => !record.data.sourceError)) {
+    const stop = ["velocity", "velocityTorque"].includes(record.data.type!) ? "stopVelocity" : record.data.type === "absolutePosition" ? "stopPosition" : "stopAll";
+    if (record.data.type === "absolutePosition" || record.data.type === "relativePosition") {
+      lines.push(`    characterizationManager.registerPositionCrawl(${JSON.stringify(record.data.id)}, ${JSON.stringify(record.data.name)}, stateMachine.${record.field});`);
+    }
+    lines.push(`    characterizationManager.registerNeutral(stateMachine.${record.field}, stateMachine.${record.field}::${stop});`);
+  }
+  const machineFile = `${robotSource}/subsystems/StateMachine.java`;
+  let machine = await project.read(machineFile);
+  if (!machine.includes("CharacterizationManager.isActive()")) {
+    const method = /public\s+void\s+execute\s*\(\s*\)\s*\{/.exec(maskJava(machine));
+    if (!method) throw Error("StateMachine.execute() is required for characterization isolation.");
+    const at = method.index + method[0].length;
+    machine = machine.slice(0, at) + "\n    if (frc.powerlib.characterization.CharacterizationManager.isActive()) return;" + machine.slice(at);
+    await project.set(machineFile, machine);
+  }
+  await project.set(dashboardPath, markerBlock(source, "CHARACTERIZATION", lines.join("\n")));
 }

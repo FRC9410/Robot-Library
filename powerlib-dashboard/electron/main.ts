@@ -21,6 +21,8 @@ import { readUploadedField, removeUploadedField, saveUploadedField } from "./upl
 import { validateUploadedField } from "./uploadedField.js";
 import { generateAutoCode, readAutoFiles, saveAutoFiles } from "./autoFiles.js";
 import { runRobotAction } from "./robotActions.js";
+import { startCharacterization, collectCharacterization, recordCharacterizationDiagnostic, finishCharacterization, canControlCharacterizationDriver, session as characterizationSession } from "./characterization/files.js";
+import { controlDriverStation } from "./characterization/driverStation.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -239,6 +241,17 @@ ipcMain.handle("powerlib:save-constants", async (_event, id, source, constants) 
 ipcMain.handle("powerlib:run-robot-action", (event, action: unknown) => runRobotAction(getDetectedRobotRoot(), action,
   message => { if (!event.sender.isDestroyed()) event.sender.send("powerlib:robot-action-error", message); }));
 
+ipcMain.handle("powerlib:characterization-start", (_event, data) => startCharacterization(getDetectedRobotRoot(), data));
+ipcMain.handle("powerlib:characterization-collect", (_event, id, test) => collectCharacterization(id, test));
+ipcMain.handle("powerlib:characterization-diagnostic", (_event, id, entry) => recordCharacterizationDiagnostic(id, entry));
+ipcMain.handle("powerlib:characterization-finish", (_event, id, outcome, error) => finishCharacterization(id, outcome, error));
+ipcMain.handle("powerlib:characterization-driver", async (_event, id, action) => {
+  const { report } = characterizationSession(id);
+  if (report.controlMode !== "driver-station" || report.outcome !== "running" || !["check", "enable", "disable"].includes(action)
+    || !canControlCharacterizationDriver(report)) throw Error("Invalid Driver Station control request.");
+  await controlDriverStation(action);
+});
+
 /** Folders that may hold CTRE's Owlet; AdvantageScope keeps every version it has downloaded. */
 function owletDirectories() {
   return Array.from(new Set([
@@ -397,6 +410,7 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
+      backgroundThrottling: false,
       nodeIntegration: false
     }
   });

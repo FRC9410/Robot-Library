@@ -2,6 +2,11 @@ import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 contextBridge.exposeInMainWorld("powerlib", {
   platform: process.platform,
+  startCharacterization: (data: unknown) => ipcRenderer.invoke("powerlib:characterization-start", data),
+  collectCharacterization: (id: string, test: unknown) => ipcRenderer.invoke("powerlib:characterization-collect", id, test),
+  recordCharacterizationDiagnostic: (id: string, entry: unknown) => ipcRenderer.invoke("powerlib:characterization-diagnostic", id, entry),
+  finishCharacterization: (id: string, outcome: string, error?: string) => ipcRenderer.invoke("powerlib:characterization-finish", id, outcome, error),
+  controlCharacterizationDriverStation: (id: string, action: string) => ipcRenderer.invoke("powerlib:characterization-driver", id, action),
   showAppMenu: (menuId: string, position: { x: number; y: number }) => ipcRenderer.invoke("powerlib:show-app-menu", menuId, position),
   readConstants: () => ipcRenderer.invoke("powerlib:read-constants"),
   readAutos: () => ipcRenderer.invoke("powerlib:read-autos"),

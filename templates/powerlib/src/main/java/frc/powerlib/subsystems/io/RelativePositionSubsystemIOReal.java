@@ -22,6 +22,7 @@ public class RelativePositionSubsystemIOReal implements RelativePositionSubsyste
     }
 
     inputs.position = motor.getPosition().getValueAsDouble();
+    inputs.velocityRotationsPerSecond = motor.getVelocity().getValueAsDouble();
   }
 
   @Override

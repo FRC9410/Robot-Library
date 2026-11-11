@@ -73,8 +73,8 @@ function connect({ host, port }: RobotAddress, login: { username: string; passwo
 }
 
 /** Logs in to the robot with the first default login that works. */
-async function openSession() {
-  const address = await findAddress(1500);
+async function openSession(host?: string) {
+  const address = host ? { host: host.split(":")[0], port: Number(host.split(":")[1]) || 22 } : await findAddress(1500);
   if (!address) throw new Error("Can't reach the robot. Turn it on and connect to its radio or USB.");
   let lastError: unknown;
   for (const login of logins) {
@@ -169,8 +169,8 @@ export type RobotDownload = { remotePath: string; localFolder: string };
  * at the same size. Reports progress in bytes. Returns the local files as the logs list sees them.
  */
 export async function downloadRobotLogs(downloads: RobotDownload[], localRoot: string,
-  onProgress: (progress: { done: number; total: number; file: string }) => void) {
-  const session = await openSession();
+  onProgress: (progress: { done: number; total: number; file: string }) => void, host?: string) {
+  const session = await openSession(host);
   try {
     const sizes = await Promise.all(downloads.map((item) => new Promise<number>((resolve) =>
       session.sftp.stat(item.remotePath, (error, stats) => resolve(error ? 0 : stats.size)))));

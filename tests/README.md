@@ -44,10 +44,28 @@ publications in memory without connecting to a robot.
 Additional standalone checks from the repository root:
 
 ```powershell
+./tests/power-tool-launcher-check.ps1
+./tests/characterization-check.ps1
+node powerlib-dashboard/scripts/characterization-check.mjs
+powerlib-dashboard/node_modules/electron/dist/electron.exe powerlib-dashboard/scripts/characterization-ui-check.cjs
 node powerlib-dashboard/scripts/robot-actions-check.mjs
 powerlib-dashboard/node_modules/electron/dist/electron.exe powerlib-dashboard/scripts/camera-electron-check.cjs
 powerlib-dashboard/node_modules/electron/dist/electron.exe powerlib-dashboard/scripts/vision-config-electron-check.cjs
 ```
+
+The launcher check intercepts all application launches and UAC requests. It verifies normal launch, elevation when Driver Station is elevated, inherited administrator access, explicit `-Administrator`, project paths containing spaces, canceled UAC without an unelevated fallback, and the distribution overlay's helper placement. Its live Driver Station privilege check is read-only.
+
+The characterization checks run real WPILib SysId profiles against a known motor model and CTRE's drivetrain simulator, including all four drive and steering motors. They cover the stock `testInit()` cancellation transition, disabled gaps, manual disable, communication lease expiry, FMS rejection and neutral cleanup. The analysis check converts their actual WPILOGs to CSV, recovers known kS/kV/kA, analyzes all eight drivetrain motors, checks current-based gain units and saves complete/failed/cancelled JSON reports. A local fake SFTP robot verifies hardware log collection. The hidden desktop check exercises the production Logs modal, preload and IPC with simulated telemetry. It verifies unchecked selections, eligibility, sequence completion, displayed results, cancellation and reset on reopen. No physical Driver Station keys or robot motor commands are sent by these checks.
+
+Timeout fixtures also withhold preparation, completion and disable acknowledgements. They verify the error names the exact test and expected response, captures the last robot status, records cleanup, and persists the diagnostic timeline even when no test log was collected. The desktop check reproduces a stalled test and verifies both its visible error and the saved diagnostic details.
+
+Control-mode checks cover physical DS control, simulation with DS control, and internal simulation control. They assert DS-controlled runs never publish internal enable/disable, simulate incoming external DS state for all four SysId profiles, verify competing internal requests are ignored, and keep simulation logs local regardless of the enable source. These checks use mocked DS commands and simulated DS state; they do not press enable in a real Driver Station.
+
+Driver Station failure checks cover PowerShell 5 shortcut argument types, native rejection of an invalid target window before input, concise plain/CLIXML errors, oversized diagnostic retention, stopping outputs before shortcut cleanup, and fresh disabled acknowledgement after a shortcut failure. The desktop fixture injects real-shaped process failures through production IPC to verify focus errors remain readable and administrator mismatch is rejected before a test is prepared. The live permission preflight sends no keys.
+
+Native window-selection checks prioritize NI's visible LabVIEW FRC Driver Station control panel over its separate `DriverStation` wrapper, recognize versioned panel titles, and exclude Context Help windows. A live focus-only preflight can verify the resolved panel without calling the keyboard-input method.
+
+Chord tests use fake send/pause callbacks to verify physical scan codes, a 200 ms down/hold/up sequence, reverse key release and release after failure, without delivering actual input. Storage tests inject transient and persistent Windows rename locks, verify bounded retry, durable diagnostic journals and recovery JSON. The desktop check completes a run while the primary JSON is persistently locked and verifies the recovery warning and saved journal.
 
 The robot-action check uses a disposable fake Gradle project to verify build-before-deploy/simulation, failure handling and Driver Station mode selection. The Electron checks exercise camera behavior and vision settings with isolated fixtures.
 
