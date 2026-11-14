@@ -39,6 +39,18 @@ import java.util.function.DoubleSupplier;
 public final class LimelightVision implements AutoCloseable {
   public record ImuStatus(String cameraName, String state, double cameraYawDegrees, double headingErrorDegrees) {}
 
+  /** Per-tag camera distance limits for qualifying a frame at each tag count. */
+  public record TagDistanceLimits(double oneTagMeters, double twoTagMeters, double threeTagMeters) {
+    public TagDistanceLimits {
+      if (!Double.isFinite(threeTagMeters) || !(oneTagMeters > 0)
+          || !(oneTagMeters <= twoTagMeters && twoTagMeters <= threeTagMeters)) {
+        throw new IllegalArgumentException("Tag distance limits must be finite, positive and ascending");
+      }
+    }
+  }
+
+  private record TagGroup(int count, double averageDistanceMeters) {}
+
   private static final double IGNORED_AXIS_STD_DEV = 99999999.0;
   private static final double MIN_POSITION_STD_DEV = 0.001;
   private static final double SINGLE_TAG_MAX_AMBIGUITY = .05;
@@ -193,6 +205,8 @@ public final class LimelightVision implements AutoCloseable {
   private double maxTargetDistanceMeters;
   private double maxHeadingTagDistanceMeters;
   private double singleTagHeadingMaxDistanceMeters;
+  private TagDistanceLimits tagDistanceLimits;
+  private TagDistanceLimits enabledHeadingTagDistanceLimits;
   private Boolean throttled;
   private boolean closed;
   private final List<HeadingMeasurement> headingMeasurements = new ArrayList<>();
@@ -277,13 +291,22 @@ public final class LimelightVision implements AutoCloseable {
   /** A trusted orientation requires an established field heading and healthy drivetrain feedback. */
   public Optional<Measurement> update(double yawDegrees, double pitchDegrees, double rollDegrees,
       double yawRateDegreesPerSecond, boolean allowSingleTagHeading, boolean trustedOrientation) {
+    return update(yawDegrees, pitchDegrees, rollDegrees, yawRateDegreesPerSecond,
+        allowSingleTagHeading, trustedOrientation, false);
+  }
+
+  /** Disabled heading uses the shared distance tiers and is exempt from the enabled yaw-rate limit. */
+  public Optional<Measurement> update(double yawDegrees, double pitchDegrees, double rollDegrees,
+      double yawRateDegreesPerSecond, boolean allowSingleTagHeading, boolean trustedOrientation, boolean disabled) {
     ensureOpen();
     headingMeasurements.clear();
     positionMeasurements.clear();
     boolean validOrientation = Double.isFinite(yawDegrees) && Double.isFinite(pitchDegrees)
         && Double.isFinite(rollDegrees);
-    boolean canUseHeading = validOrientation && Double.isFinite(yawRateDegreesPerSecond)
-        && Math.abs(yawRateDegreesPerSecond) <= headingConfig.maxYawRateDegreesPerSecond();
+    boolean canUseHeading = validOrientation && (disabled || (Double.isFinite(yawRateDegreesPerSecond)
+        && Math.abs(yawRateDegreesPerSecond) <= headingConfig.maxYawRateDegreesPerSecond()));
+    TagDistanceLimits headingLimits = disabled || enabledHeadingTagDistanceLimits == null
+        ? tagDistanceLimits : enabledHeadingTagDistanceLimits;
     if (validOrientation) {
       orientation[0] = yawDegrees;
       orientation[1] = Double.isFinite(yawRateDegreesPerSecond) ? yawRateDegreesPerSecond : 0;
@@ -297,28 +320,33 @@ public final class LimelightVision implements AutoCloseable {
     boolean canSeedImu = trustedOrientation && validOrientation && Double.isFinite(yawRateDegreesPerSecond);
     for (Camera camera : cameras) {
       if (camera.imuSync != null) camera.imuSync.update(now, yawDegrees, yawRateDegreesPerSecond, canSeedImu);
+    }
+    // Send the whole group's orientation and mode updates before processing incoming poses.
+    if (!cameras.isEmpty()) nt.flush();
+
+    for (Camera camera : cameras) {
       TimestampedDoubleArray frame = camera.pose.getAtomic();
+      TimestampedDoubleArray headingFrame = camera.headingPose.getAtomic();
+      double frameReadTime = clockSeconds.getAsDouble();
       if (frame.timestamp > camera.lastSeenTimestamp) {
         // Consume skipped/rejected frames too; never replay them after enabling or slowing down.
         camera.lastSeenTimestamp = frame.timestamp;
         if (validOrientation) {
-          var candidate = parseMeasurement(camera.name, frame, now);
+          var candidate = parseMeasurement(camera.name, frame, frameReadTime);
           if (candidate != null && (camera.imuSync == null
               || camera.imuSync.acceptsPosition(candidate.timestampSeconds()))) positionMeasurements.add(candidate);
         }
       }
-      TimestampedDoubleArray headingFrame = camera.headingPose.getAtomic();
       if (headingFrame.timestamp > camera.lastHeadingTimestamp) {
         camera.lastHeadingTimestamp = headingFrame.timestamp;
         if (canUseHeading) {
-          var candidate = parseHeadingMeasurement(camera.name, headingFrame, now, allowSingleTagHeading);
+          var candidate = parseHeadingMeasurement(camera.name, headingFrame, frameReadTime, allowSingleTagHeading, headingLimits);
           if (candidate != null) {
             headingMeasurements.add(candidate);
           }
         }
       }
     }
-    if (!cameras.isEmpty()) nt.flush();
     // Stable sorting keeps configured camera order as the final tie-breaker.
     positionMeasurements.sort(POSITION_QUALITY);
     headingMeasurements.sort(HEADING_QUALITY);
@@ -344,8 +372,8 @@ public final class LimelightVision implements AutoCloseable {
   }
 
   private HeadingMeasurement parseHeadingMeasurement(String name, TimestampedDoubleArray frame,
-      double now, boolean allowSingleTagHeading) {
-    Measurement measurement = parseMeasurement(name, frame, now, false);
+      double now, boolean allowSingleTagHeading, TagDistanceLimits limits) {
+    Measurement measurement = parseMeasurement(name, frame, now, false, limits);
     if (measurement == null || (!allowSingleTagHeading && measurement.tagCount() < 2)
         || frame.value[8] < 0 || (measurement.tagCount() >= 2 && frame.value[8] == 0)
         || measurement.averageTagDistanceMeters() > maxHeadingTagDistanceMeters
@@ -354,11 +382,12 @@ public final class LimelightVision implements AutoCloseable {
     double maxDistance = measurement.tagCount() == 1
         ? Math.min(maxHeadingTagDistanceMeters, singleTagHeadingMaxDistanceMeters)
         : maxHeadingTagDistanceMeters;
+    if (measurement.tagCount() == 1 && limits != null) maxDistance = Math.min(maxDistance, limits.oneTagMeters());
     double maxAmbiguity = 0;
     for (int i = 11; i < values.length; i += 7) {
       double id = values[i], ambiguity = values[i + 6];
       if (id <= 0 || id != Math.rint(id) || values[i + 4] < 0
-          || values[i + 4] > maxDistance
+          || (limits == null && values[i + 4] > maxDistance)
           || ambiguity < 0 || ambiguity > headingConfig.maxTagAmbiguity()) return null;
       maxAmbiguity = Math.max(maxAmbiguity, ambiguity);
       for (int previous = 11; previous < i; previous += 7) if (values[previous] == id) return null;
@@ -370,10 +399,11 @@ public final class LimelightVision implements AutoCloseable {
   }
 
   private Measurement parseMeasurement(String name, TimestampedDoubleArray frame, double now) {
-    return parseMeasurement(name, frame, now, true);
+    return parseMeasurement(name, frame, now, true, tagDistanceLimits);
   }
 
-  private Measurement parseMeasurement(String name, TimestampedDoubleArray frame, double now, boolean position) {
+  private Measurement parseMeasurement(String name, TimestampedDoubleArray frame, double now, boolean position,
+      TagDistanceLimits limits) {
     double[] values = frame.value;
     if (values.length < 11 || (values.length - 11) % 7 != 0) {
       return null;
@@ -387,8 +417,7 @@ public final class LimelightVision implements AutoCloseable {
     // Header[10] is average tag area as a percentage of the image.
     int count = (values.length - 11) / 7;
     if (count == 0 || values[7] != count || values[6] < 0.0
-        || values[9] < 0.0 || (position && values[9] >= maxTargetDistanceMeters)
-        || (position && values[10] < targetAreaThreshold)) {
+        || values[9] < 0.0 || (position && values[10] < targetAreaThreshold)) {
       return null;
     }
     double timestamp = frame.timestamp / 1000000.0 - values[6] / 1000.0;
@@ -396,14 +425,57 @@ public final class LimelightVision implements AutoCloseable {
     if (!Double.isFinite(age) || age < 0.0 || age > config.maxMeasurementAgeSeconds()) {
       return null;
     }
+    double averageDistance = values[9];
+    if (limits != null) {
+      TagGroup group = qualifyingTags(values, position, limits);
+      if (group == null) return null;
+      count = group.count();
+      averageDistance = group.averageDistanceMeters();
+    } else if (position && averageDistance >= maxTargetDistanceMeters) {
+      return null;
+    }
     double stdDev = Math.max(MIN_POSITION_STD_DEV,
-        config.basePositionStdDev() * values[9] * values[9] / count * measurementStdDevScale);
+        config.basePositionStdDev() * averageDistance * averageDistance / count * measurementStdDevScale);
     if (!Double.isFinite(stdDev)) {
       return null;
     }
     return new Measurement(name,
         new Pose2d(values[0], values[1], Rotation2d.fromDegrees(values[5])),
-        timestamp, count, values[9], stdDev, values[2]);
+        timestamp, count, averageDistance, stdDev, values[2]);
+  }
+
+  private TagGroup qualifyingTags(double[] values, boolean position, TagDistanceLimits limits) {
+    double maxDistance = position ? maxTargetDistanceMeters : maxHeadingTagDistanceMeters;
+    double threeLimit = Math.min(limits.threeTagMeters(), maxDistance);
+    double twoLimit = Math.min(limits.twoTagMeters(), maxDistance);
+    double oneLimit = Math.min(limits.oneTagMeters(), maxDistance);
+    if (!position) oneLimit = Math.min(oneLimit, singleTagHeadingMaxDistanceMeters);
+    int threeCount = 0, twoCount = 0, oneCount = 0;
+    double threeDistance = 0, twoDistance = 0, oneDistance = 0;
+    var seenIds = new HashSet<Double>();
+    for (int i = 11; i < values.length; i += 7) {
+      double id = values[i], distance = values[i + 4];
+      if (id <= 0 || id != Math.rint(id) || distance < 0 || !seenIds.add(id)) return null;
+      if (distance <= threeLimit) { threeCount++; threeDistance += distance; }
+      if (distance <= twoLimit) { twoCount++; twoDistance += distance; }
+      if (distance <= oneLimit) { oneCount++; oneDistance += distance; }
+    }
+    // The Limelight pose remains the original solve. Only qualification and weighting use this group.
+    if (threeCount >= 3) return new TagGroup(threeCount, threeDistance / threeCount);
+    if (twoCount >= 2) return new TagGroup(twoCount, twoDistance / twoCount);
+    return oneCount == 1 ? new TagGroup(1, oneDistance) : null;
+  }
+
+  /** Qualify the reported pose by the largest group of tags within the configured distances. */
+  public void setTagDistanceLimits(TagDistanceLimits limits) {
+    ensureOpen();
+    tagDistanceLimits = Objects.requireNonNull(limits);
+  }
+
+  /** Override only the MegaTag1 heading tiers while enabled. */
+  public void setEnabledHeadingTagDistanceLimits(TagDistanceLimits limits) {
+    ensureOpen();
+    enabledHeadingTagDistanceLimits = Objects.requireNonNull(limits);
   }
 
   private void syncTunableValues(double now) {

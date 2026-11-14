@@ -25,8 +25,14 @@ public class LimelightVisionTest {
   private static final class Fixture implements AutoCloseable {
     final NetworkTableInstance nt = NetworkTableInstance.create();
     double now = 10;
-    final LimelightVision reader = new LimelightVision(nt, LimelightVisionConfig.DEFAULT,
-        LimelightHeadingConfig.DEFAULT, () -> now, "first", "second");
+    final LimelightVision reader;
+
+    Fixture() { this(LimelightHeadingConfig.DEFAULT); }
+
+    Fixture(LimelightHeadingConfig headingConfig) {
+      reader = new LimelightVision(nt, LimelightVisionConfig.DEFAULT,
+          headingConfig, () -> now, "first", "second");
+    }
 
     void publish(String camera, String topic, double[] values, double receiveTime) {
       nt.getTable(camera).getDoubleArrayTopic(topic).getEntry(new double[0], PubSubOption.keepDuplicates(true))
@@ -55,6 +61,103 @@ public class LimelightVisionTest {
       values[start + 4] = 2; values[start + 5] = 2; values[start + 6] = 0.05;
     }
     return values;
+  }
+
+  @Test public void tagDistanceTiersUsePerTagRangesAndFallBackToCloserTags() {
+    try (var fixture = new Fixture(LimelightHeadingConfig.DEFAULT.withDistanceLimits(5, 2))) {
+      fixture.reader.setTagDistanceLimits(new LimelightVision.TagDistanceLimits(2, 4, 5));
+      double[][] distances = {{5, 4.9, 4.5}, {12, 3.6, 4}, {5.1, 4.1, 2}, {5.1, 4.1, 2.1}};
+      double[] groupMeans = {4.8, 3.8, 2};
+      for (int sample = 0; sample < distances.length; sample++) {
+        double[] tags = frame(3, 25);
+        for (int tag = 0; tag < 3; tag++) tags[15 + tag * 7] = distances[sample][tag];
+        tags[9] = Arrays.stream(distances[sample]).average().orElseThrow();
+        fixture.publish("first", "botpose_orb_wpiblue", tags, fixture.now);
+        fixture.heading(tags);
+        var result = fixture.reader.update(25, 0, 0, 0, true);
+        int count = 3 - sample;
+        if (count > 0) {
+          var position = result.orElseThrow();
+          assertEquals(count, position.tagCount());
+          assertEquals(groupMeans[sample], position.averageTagDistanceMeters(), 1e-9);
+          assertEquals(0.07 * groupMeans[sample] * groupMeans[sample] / count, position.positionStdDev(), 1e-9);
+          assertEquals(25, position.pose().getRotation().getDegrees(), 1e-9);
+        } else {
+          assertTrue(result.isEmpty());
+        }
+        var heading = fixture.reader.getHeadingMeasurement();
+        if (count > 0) assertEquals(count, heading.orElseThrow().tagCount());
+        else assertTrue(heading.isEmpty());
+        fixture.now += .02;
+      }
+    }
+  }
+
+  @Test public void headingFallbackKeepsAmbiguitySpanAndSingleTagChecks() {
+    try (var fixture = new Fixture()) {
+      fixture.reader.setTagDistanceLimits(new LimelightVision.TagDistanceLimits(2, 4, 5));
+      double[] tags = frame(3, 0);
+      tags[15] = 6;
+      tags[22] = 3.5;
+      tags[29] = 3.8;
+      tags[17] = .21;
+      fixture.heading(tags);
+      fixture.update(0);
+      assertTrue(fixture.reader.getHeadingMeasurement().isEmpty());
+
+      fixture.now += .02;
+      tags[17] = .05;
+      tags[8] = 0;
+      fixture.heading(tags);
+      fixture.update(0);
+      assertTrue(fixture.reader.getHeadingMeasurement().isEmpty());
+
+      fixture.now += .02;
+      tags[8] = 1;
+      tags[29] = 4.5;
+      tags[22] = 1.9;
+      fixture.heading(tags);
+      fixture.update(0);
+      assertTrue(fixture.reader.getHeadingMeasurement().isEmpty());
+      fixture.now += .02;
+      fixture.heading(tags);
+      fixture.reader.update(0, 0, 0, 0, true);
+      assertEquals(1, fixture.reader.getHeadingMeasurement().orElseThrow().tagCount());
+    }
+  }
+
+  @Test public void enabledHeadingUsesTighterTiersAndYawRateWithoutGatingPosition() {
+    try (var fixture = new Fixture(LimelightHeadingConfig.DEFAULT.withDistanceLimits(5, 2))) {
+      fixture.reader.setTagDistanceLimits(new LimelightVision.TagDistanceLimits(2, 4, 5));
+      fixture.reader.setEnabledHeadingTagDistanceLimits(new LimelightVision.TagDistanceLimits(1, 2, 2.5));
+      double[][] distances = {{2.5, 2.4, 2.3}, {3, 2, 1.8}, {3, 2.2, 1}, {3, 2.2, 1.1}};
+      for (int sample = 0; sample < distances.length; sample++) {
+        var tags = frame(3, 20);
+        for (int tag = 0; tag < 3; tag++) tags[15 + 7 * tag] = distances[sample][tag];
+        fixture.publish("first", "botpose_orb_wpiblue", tags, fixture.now);
+        fixture.heading(tags);
+        var position = fixture.reader.update(0, 0, 0, -45, true, true, false).orElseThrow();
+        assertEquals(3, position.tagCount());
+        int expectedHeadingCount = 3 - sample;
+        var heading = fixture.reader.getHeadingMeasurement();
+        if (expectedHeadingCount > 0) assertEquals(expectedHeadingCount, heading.orElseThrow().tagCount());
+        else assertTrue(heading.isEmpty());
+
+        fixture.now += .02;
+        fixture.heading(tags);
+        fixture.reader.update(0, 0, 0, -46, true, true, true);
+        assertEquals(3, fixture.reader.getHeadingMeasurement().orElseThrow().tagCount());
+        fixture.now += .02;
+      }
+
+      var tags = frame(3, 20);
+      fixture.publish("first", "botpose_orb_wpiblue", tags, fixture.now);
+      fixture.heading(tags);
+      assertTrue(fixture.reader.update(0, 0, 0, -46, true, true, false).isPresent());
+      assertTrue(fixture.reader.getHeadingMeasurement().isEmpty());
+      fixture.reader.update(0, 0, 0, 0, true, true, false);
+      assertTrue("The rejected heading frame is not replayed", fixture.reader.getHeadingMeasurement().isEmpty());
+    }
   }
 
   @Test public void imuAssistWaitsForTrustedHeadingAndFreshAlignedPositionPerCamera() {

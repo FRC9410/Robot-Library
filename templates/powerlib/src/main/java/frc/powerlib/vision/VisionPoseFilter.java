@@ -83,20 +83,9 @@ public final class VisionPoseFilter {
 
   /** Historical pose must be sampled at image capture, not at receive time. No history means no fusion. */
   public boolean acceptPosition(Measurement measurement, Pose2d historicalPose, double now) {
-    if (measurement == null) return false;
+    var recovery = validatePosition(measurement, historicalPose, now);
+    if (recovery == null) return false;
     double timestamp = measurement.timestampSeconds();
-    var recovery = cameras.computeIfAbsent(measurement.cameraName(), name -> new CameraHistory());
-    if (!HealthChecks.isFresh(now - timestamp, maxFrameAgeSeconds)) {
-      recovery.resetRecovery(); status = "Rejected stale or future position"; return false;
-    }
-    if (timestamp <= recovery.lastFrame) return false;
-    // A rejected camera must not consume another camera's frame from the same instant.
-    recovery.lastFrame = timestamp;
-    if (!plausible(measurement, now) || !HealthChecks.finitePose(historicalPose)) {
-      recovery.resetRecovery();
-      status = "Rejected capture, position bounds or missing pose history";
-      return false;
-    }
     double dx = measurement.pose().getX() - historicalPose.getX();
     double dy = measurement.pose().getY() - historicalPose.getY();
     if (!Double.isFinite(dx) || !Double.isFinite(dy)) {
@@ -121,6 +110,31 @@ public final class VisionPoseFilter {
     }
     status = "Accepted consistent position recovery";
     return true;
+  }
+
+  /** Apply capture and field checks without requiring agreement with odometry. */
+  public boolean acceptPositionWithoutCorrectionLimit(Measurement measurement, Pose2d historicalPose, double now) {
+    if (validatePosition(measurement, historicalPose, now) == null) return false;
+    status = "Accepted position";
+    return true;
+  }
+
+  private CameraHistory validatePosition(Measurement measurement, Pose2d historicalPose, double now) {
+    if (measurement == null) return null;
+    double timestamp = measurement.timestampSeconds();
+    var recovery = cameras.computeIfAbsent(measurement.cameraName(), name -> new CameraHistory());
+    if (!HealthChecks.isFresh(now - timestamp, maxFrameAgeSeconds)) {
+      recovery.resetRecovery(); status = "Rejected stale or future position"; return null;
+    }
+    if (timestamp <= recovery.lastFrame) return null;
+    // A rejected camera must not consume another camera's frame from the same instant.
+    recovery.lastFrame = timestamp;
+    if (!plausible(measurement, now) || !HealthChecks.finitePose(historicalPose)) {
+      recovery.resetRecovery();
+      status = "Rejected capture, position bounds or missing pose history";
+      return null;
+    }
+    return recovery;
   }
 
   public void resetRecovery() { for (var camera : cameras.values()) camera.resetRecovery(); }

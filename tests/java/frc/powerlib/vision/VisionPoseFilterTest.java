@@ -94,6 +94,14 @@ public class VisionPoseFilterTest {
     assertTrue(filter.acceptPosition(frame(2.5, 3.5, 9.97), HISTORY, 10));
   }
 
+  @Test public void unrestrictedCorrectionAcceptsALargeOffsetWithValidCaptureAndHistory() {
+    var filter = ready();
+    assertTrue(filter.acceptPositionWithoutCorrectionLimit(frame(8, 3, 9.95), HISTORY, 10));
+    assertFalse(filter.acceptPositionWithoutCorrectionLimit(frame(8, 3, 9.95), HISTORY, 10));
+    assertFalse(filter.acceptPositionWithoutCorrectionLimit(frame(8, 3, 9.96), null, 10));
+    assertFalse(filter.acceptPositionWithoutCorrectionLimit(frame(18, 3, 9.97), HISTORY, 10));
+  }
+
   @Test public void oneLargeOrMultitagOutlierCannotMoveTheEstimator() {
     var filter = ready();
     assertFalse(filter.acceptPosition(frame(6, 3, 9.95), HISTORY, 10));

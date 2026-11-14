@@ -65,6 +65,8 @@ public class Vision extends SubsystemBase implements AutoCloseable {
         timestamp -> drivetrain.samplePoseAt(Utils.fpgaToCurrentTime(timestamp)), drivetrain::addVisionMeasurement);
     limelights = new LimelightVision(Constants.Vision.CONFIG, Constants.Vision.HEADING_CONFIG,
         Constants.Vision.LIMELIGHT_NAMES);
+    limelights.setTagDistanceLimits(Constants.Vision.TAG_DISTANCE_LIMITS);
+    limelights.setEnabledHeadingTagDistanceLimits(Constants.Vision.ENABLED_HEADING_TAG_DISTANCE_LIMITS);
     if (Constants.Vision.LIMELIGHT_IMU_ASSIST_ENABLED) limelights.enableIMUAssist();
   }
 
@@ -122,7 +124,6 @@ public class Vision extends SubsystemBase implements AutoCloseable {
     if (shouldUpdatePose != shouldUpdate) {
       headingSelector.reset();
       resetHeadingEvidence();
-      poseFilter.resetRecovery();
     }
     shouldUpdatePose = shouldUpdate;
   }
@@ -149,12 +150,14 @@ public class Vision extends SubsystemBase implements AutoCloseable {
             && HealthChecks.signalHealthy(pitch, Constants.Vision.POSE_FILTER_CONFIG.maxOrientationAgeSeconds())
             && HealthChecks.signalHealthy(roll, Constants.Vision.POSE_FILTER_CONFIG.maxOrientationAgeSeconds()));
     poseFilter.observe(now, pitch.getValueAsDouble(), roll.getValueAsDouble(), gyroHealthy);
+    boolean disabled = DriverStation.isDisabled();
+    double yawRate = Math.toDegrees(state.Speeds.omegaRadiansPerSecond);
+    double translationSpeed = Math.hypot(state.Speeds.vxMetersPerSecond, state.Speeds.vyMetersPerSecond);
+    boolean allowSingleTagHeading = disabled || headingEstablished || initializationConfig.isStationary(translationSpeed, yawRate);
     limelights.update(
         state.Pose.getRotation().getDegrees(),
         pitch.getValueAsDouble(), roll.getValueAsDouble(),
-        Math.toDegrees(state.Speeds.omegaRadiansPerSecond), DriverStation.isDisabled()
-          || initializationConfig.isStationary(Math.hypot(state.Speeds.vxMetersPerSecond, state.Speeds.vyMetersPerSecond),
-              Math.toDegrees(state.Speeds.omegaRadiansPerSecond)), headingEstablished && gyroHealthy);
+        yawRate, allowSingleTagHeading, headingEstablished && gyroHealthy, disabled);
     if (awaitingOrientationPublication) {
       // MT2 frames captured before publishing the corrected orientation used the old heading.
       fusion.resetPose(Timer.getFPGATimestamp());
@@ -162,7 +165,7 @@ public class Vision extends SubsystemBase implements AutoCloseable {
     }
     var positions = limelights.getPositionMeasurements();
     // Continue reading while disabled so those cached frames are not applied after enabling.
-    applyMeasurements(positions, limelights.getHeadingMeasurements());
+    applyMeasurements(positions, limelights.getHeadingMeasurements(), disabled);
     for (var imu : limelights.getImuStatuses()) {
       String logPath = "Vision/IMU/" + imu.cameraName() + "/";
       SignalLogger.writeString(logPath + "State", imu.state());
@@ -174,14 +177,13 @@ public class Vision extends SubsystemBase implements AutoCloseable {
   }
 
   private void applyMeasurements(List<LimelightVision.Measurement> positions,
-      List<LimelightVision.HeadingMeasurement> headings) {
+      List<LimelightVision.HeadingMeasurement> headings, boolean disabled) {
     var feedback = readDriveFeedback();
     double now = Timer.getFPGATimestamp();
     var eligibleHeadings = headings.stream()
         .filter(candidate -> poseFilter.captureAllowed(candidate.timestampSeconds(), now)).toList();
     headingSelector.update(eligibleHeadings, now);
     var heading = firstUsableHeading(eligibleHeadings, now);
-    boolean disabled = DriverStation.isDisabled();
     var collector = disabled ? headingInitializer : stationaryHeadingInitializer;
     (disabled ? stationaryHeadingInitializer : headingInitializer).reset();
     headingStatus = !shouldUpdatePose ? "Vision corrections disabled"
@@ -190,11 +192,11 @@ public class Vision extends SubsystemBase implements AutoCloseable {
     if (shouldUpdatePose) correctedHeading = recoverStationaryHeading(eligibleHeadings, now, collector, feedback);
     else collector.reset();
     if (shouldUpdatePose && disabled && headingEstablished && !correctedHeading) {
-      correctedHeading = applyHeadingCorrections(eligibleHeadings, now, collector, feedback);
+      correctedHeading = applyHeadingCorrections(eligibleHeadings, now, collector, feedback, disabled);
     }
     processPositions(positions, shouldUpdatePose && headingEstablished, now);
     if (shouldUpdatePose && !disabled && !correctedHeading) {
-      correctedHeading = applyHeadingCorrections(eligibleHeadings, now, collector, feedback);
+      correctedHeading = applyHeadingCorrections(eligibleHeadings, now, collector, feedback, disabled);
     }
     SignalLogger.writeBoolean("Vision/Heading/Accepted", correctedHeading);
     SignalLogger.writeString("Vision/Heading/Status", headingStatus);
@@ -209,7 +211,7 @@ public class Vision extends SubsystemBase implements AutoCloseable {
     LimelightVision.Measurement selected = null;
     for (var candidate : positions) {
       if (correctPose && applyPositionCorrection(candidate, now)) return candidate;
-      // Explicit manual seeds may use a plausible frame rejected for a large correction or missing history.
+      // Explicit manual seeds may use a plausible frame with no estimator history.
       if (selected == null && fusion.isNewPosition(candidate)
           && poseFilter.plausible(candidate, now)) {
         selected = candidate;
@@ -231,11 +233,9 @@ public class Vision extends SubsystemBase implements AutoCloseable {
     collector.observe(null, now, feedback.speed(), feedback.yawRate());
     headingStatus = collector.status();
     if (!initializationConfig.isStationary(feedback.speed(), feedback.yawRate())) return false;
-    double maxError = Constants.Vision.HEADING_CONFIG.headingErrorLimitDegrees(
-        feedback.speed(), feedback.yawRate(), initializationConfig);
     for (var candidate : headings) {
       double error = candidate.errorDegrees(feedback.pose());
-      if (!LimelightVision.HeadingMeasurement.isErrorAllowed(error, maxError)) continue;
+      if (!Double.isFinite(error)) continue;
       var rotation = collector.observe(candidate, now, feedback.speed(), feedback.yawRate());
       if (collector.isInconsistent(candidate.cameraName())) headingSelector.reject(candidate.cameraName());
       headingStatus = collector.status();
@@ -259,7 +259,7 @@ public class Vision extends SubsystemBase implements AutoCloseable {
   private boolean applyPositionCorrection(LimelightVision.Measurement measurement, double now) {
     if (!fusion.isNewPosition(measurement)) return false;
     var historical = drivetrain.samplePoseAt(Utils.fpgaToCurrentTime(measurement.timestampSeconds()));
-    if (!poseFilter.acceptPosition(measurement, historical.orElse(null), now)
+    if (!poseFilter.acceptPositionWithoutCorrectionLimit(measurement, historical.orElse(null), now)
         || !fusion.addPosition(measurement, now, historical.orElse(null))) return false;
     lastMeasurement = measurement;
     lastAcceptedMeasurement = measurement;
@@ -275,7 +275,6 @@ public class Vision extends SubsystemBase implements AutoCloseable {
     fusion.resetPose(now);
     lastMeasurement = null;
     lastAcceptedMeasurement = null;
-    poseFilter.resetRecovery();
   }
 
   private void resetHeadingEvidence() {
@@ -296,19 +295,25 @@ public class Vision extends SubsystemBase implements AutoCloseable {
   }
 
   private boolean applyHeadingCorrections(List<LimelightVision.HeadingMeasurement> headings, double now,
-      VisionHeadingInitializer collector, DriveFeedback feedback) {
+      VisionHeadingInitializer collector, DriveFeedback feedback, boolean disabled) {
     if (DriverStation.isTest()) { headingStatus = "Test mode"; return false; }
+    if (!Double.isFinite(feedback.speed()) || !Double.isFinite(feedback.yawRate())) {
+      headingStatus = "Waiting for finite drivetrain motion";
+      return false;
+    }
     boolean stationary = initializationConfig.isStationary(feedback.speed(), feedback.yawRate());
-    double maxError = Constants.Vision.HEADING_CONFIG.headingErrorLimitDegrees(
-        feedback.speed(), feedback.yawRate(), initializationConfig);
     for (var heading : headings) {
       if (stationary && collector.isInconsistent(heading.cameraName())) {
         headingStatus = "Rejected inconsistent stationary heading";
         continue;
       }
-      if (heading.tagCount() < 2 && (!stationary || !collector.isQualified(heading, now))) continue;
+      if (heading.tagCount() == 1) {
+        boolean stableSingleTag = stationary && collector.isQualified(heading, now);
+        boolean movingSingleTag = !disabled && !stationary && headingEstablished && heading.reliableSingleTag(now);
+        if (!stableSingleTag && !movingSingleTag) continue;
+      }
       if (!fusion.isNewHeading(heading) || !headingSelector.allows(heading, now, !stationary)) continue;
-      boolean applied = fusion.addHeading(heading, now, maxError);
+      boolean applied = fusion.addHeading(heading, now);
       SignalLogger.writeDouble("Vision/Heading/ErrorDegrees", fusion.headingErrorDegrees(), "degrees");
       headingStatus = fusion.status();
       if (!applied) {
