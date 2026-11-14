@@ -28,6 +28,25 @@ MegaTag1 heading correction, disabled-mode throttling, and Swerve pose correctio
 camera's mounting pose, calibration, team number, and AprilTag pipeline in its own Limelight web UI;
 names alone cannot describe mounting geometry. All measurements use blue-origin field coordinates.
 
+### Limelight IMU assist
+
+The starter enables IMU assist on cameras that publish `imu` and `imu_yaw_offset`. Use Limelight OS
+2026.1 or newer on cameras with an internal IMU, such as the Limelight 4. Cameras without those
+topics use the drivetrain's external orientation in mode `0`. Set `LIMELIGHT_IMU_ASSIST_ENABLED`
+to `false` in `VisionConstants.java` to use mode `0` on every camera.
+[Limelight firmware notes](https://docs.limelightvision.io/docs/docs-limelight/software-change-log)
+
+The starter sends the drivetrain's estimated field yaw every loop. Once field heading is established,
+each supported camera seeds its internal IMU in mode `1` and then switches to mode `4`, where it
+continuously corrects against the robot's estimate with an assist alpha of `0.001`. The starter
+resumes MegaTag2 position updates for that camera after fresh yaw telemetry agrees with the robot
+within 5 degrees. It reseeds after an explicit drivetrain pose or heading reset, a camera restart,
+stale IMU data, or a running heading difference over 15 degrees. MegaTag1 continues to supply independent
+AprilTag heading for the drivetrain estimator.
+
+For a bench check, log `Vision/IMU/<camera>/State`, `CameraYawDegrees`, and `HeadingErrorDegrees`.
+Compare them with `Vision/Heading/EstimatedDegrees` through a turn, a pose reset, and a camera power cycle.
+
 ## Position measurements
 
 The reusable `frc.powerlib.vision.LimelightVision` class exposes fresh position candidates ordered by

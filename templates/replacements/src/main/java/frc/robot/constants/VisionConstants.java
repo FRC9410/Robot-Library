@@ -13,6 +13,7 @@ public class VisionConstants {
   // Measurements are ranked by quality; camera order breaks ties. Empty means no Limelights.
   // Example: {"limelight-b", "limelight-l", "limelight-r"}
   public static final String[] LIMELIGHT_NAMES = {LIMELIGHT_NAME};
+  public static final boolean LIMELIGHT_IMU_ASSIST_ENABLED = true;
   // POWERLIB LOCALIZATION CONSTANTS START - DO NOT DELETE
   public static final double POSITION_TARGET_AREA_THRESHOLD = 0.0;
   public static final double POSITION_MAX_TARGET_DISTANCE_METERS = 6.25;

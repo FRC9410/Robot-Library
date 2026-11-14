@@ -37,6 +37,8 @@ import java.util.function.DoubleSupplier;
  * This class owns its publishers/subscribers, but not the NetworkTableInstance. Use on one thread.
  */
 public final class LimelightVision implements AutoCloseable {
+  public record ImuStatus(String cameraName, String state, double cameraYawDegrees, double headingErrorDegrees) {}
+
   private static final double IGNORED_AXIS_STD_DEV = 99999999.0;
   private static final double MIN_POSITION_STD_DEV = 0.001;
   private static final double SINGLE_TAG_MAX_AMBIGUITY = .05;
@@ -150,6 +152,7 @@ public final class LimelightVision implements AutoCloseable {
     final DoublePublisher imuMode;
     final DoublePublisher imuAssist;
     final DoublePublisher throttle;
+    LimelightImuSync imuSync;
     long lastSeenTimestamp;
     long lastHeadingTimestamp;
 
@@ -161,13 +164,14 @@ public final class LimelightVision implements AutoCloseable {
           new double[0], PubSubOption.keepDuplicates(true), PubSubOption.periodic(0.02));
       headingPose = table.getDoubleArrayTopic("botpose_wpiblue").subscribe(
           new double[0], PubSubOption.keepDuplicates(true), PubSubOption.periodic(0.02));
-      imuMode = table.getDoubleTopic("imumode_set").publish();
+      imuMode = table.getDoubleTopic("imumode_set").publish(PubSubOption.keepDuplicates(true));
       imuAssist = table.getDoubleTopic("imuassistalpha_set").publish();
       throttle = table.getDoubleTopic("throttle_set").publish();
     }
 
     @Override
     public void close() {
+      if (imuSync != null) imuSync.close();
       orientation.close();
       pose.close();
       headingPose.close();
@@ -267,6 +271,12 @@ public final class LimelightVision implements AutoCloseable {
   /** Permit single-tag candidates for stationary initialization/recovery; multi-tag frames still win. */
   public Optional<Measurement> update(double yawDegrees, double pitchDegrees, double rollDegrees,
       double yawRateDegreesPerSecond, boolean allowSingleTagHeading) {
+    return update(yawDegrees, pitchDegrees, rollDegrees, yawRateDegreesPerSecond, allowSingleTagHeading, true);
+  }
+
+  /** A trusted orientation requires an established field heading and healthy drivetrain feedback. */
+  public Optional<Measurement> update(double yawDegrees, double pitchDegrees, double rollDegrees,
+      double yawRateDegreesPerSecond, boolean allowSingleTagHeading, boolean trustedOrientation) {
     ensureOpen();
     headingMeasurements.clear();
     positionMeasurements.clear();
@@ -280,19 +290,21 @@ public final class LimelightVision implements AutoCloseable {
       orientation[2] = pitchDegrees;
       orientation[4] = rollDegrees;
       for (Camera camera : cameras) camera.orientation.set(orientation);
-      if (!cameras.isEmpty()) nt.flush();
     }
 
     double now = clockSeconds.getAsDouble();
     syncTunableValues(now);
+    boolean canSeedImu = trustedOrientation && validOrientation && Double.isFinite(yawRateDegreesPerSecond);
     for (Camera camera : cameras) {
+      if (camera.imuSync != null) camera.imuSync.update(now, yawDegrees, yawRateDegreesPerSecond, canSeedImu);
       TimestampedDoubleArray frame = camera.pose.getAtomic();
       if (frame.timestamp > camera.lastSeenTimestamp) {
         // Consume skipped/rejected frames too; never replay them after enabling or slowing down.
         camera.lastSeenTimestamp = frame.timestamp;
         if (validOrientation) {
           var candidate = parseMeasurement(camera.name, frame, now);
-          if (candidate != null) positionMeasurements.add(candidate);
+          if (candidate != null && (camera.imuSync == null
+              || camera.imuSync.acceptsPosition(candidate.timestampSeconds()))) positionMeasurements.add(candidate);
         }
       }
       TimestampedDoubleArray headingFrame = camera.headingPose.getAtomic();
@@ -306,6 +318,7 @@ public final class LimelightVision implements AutoCloseable {
         }
       }
     }
+    if (!cameras.isEmpty()) nt.flush();
     // Stable sorting keeps configured camera order as the final tie-breaker.
     positionMeasurements.sort(POSITION_QUALITY);
     headingMeasurements.sort(HEADING_QUALITY);
@@ -414,12 +427,44 @@ public final class LimelightVision implements AutoCloseable {
     measurementStdDevScale = scale;
   }
 
+  /** Automatically seed and verify cameras that report supported internal IMU telemetry. */
+  public void enableIMUAssist() {
+    ensureOpen();
+    for (Camera camera : cameras) {
+      if (camera.imuSync == null) {
+        camera.imuMode.set(0);
+        camera.imuAssist.set(0.001);
+        camera.imuSync = new LimelightImuSync(nt.getTable(camera.name), camera.imuMode);
+      }
+    }
+  }
+
+  /** IMU diagnostics for cameras managed by automatic sync. */
+  public List<ImuStatus> getImuStatuses() {
+    ensureOpen();
+    return cameras.stream().filter(camera -> camera.imuSync != null)
+        .map(camera -> camera.imuSync.status(camera.name)).toList();
+  }
+
+  /** Reseed managed cameras with the new field heading on the next update. */
+  public void reseedIMUs() {
+    ensureOpen();
+    for (Camera camera : cameras) {
+      if (camera.imuSync != null) camera.imuSync.requestReseed();
+    }
+  }
+
+  /** Set a fixed mode on all cameras and relinquish automatic IMU sync. */
   public void setIMUMode(int mode) {
     ensureOpen();
     if (mode < 0 || mode > 4) {
       throw new IllegalArgumentException("IMU mode must be between 0 and 4");
     }
     for (Camera camera : cameras) {
+      if (camera.imuSync != null) {
+        camera.imuSync.close();
+        camera.imuSync = null;
+      }
       camera.imuMode.set(mode);
     }
   }

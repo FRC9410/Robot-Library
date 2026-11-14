@@ -65,6 +65,7 @@ public class Vision extends SubsystemBase implements AutoCloseable {
         timestamp -> drivetrain.samplePoseAt(Utils.fpgaToCurrentTime(timestamp)), drivetrain::addVisionMeasurement);
     limelights = new LimelightVision(Constants.Vision.CONFIG, Constants.Vision.HEADING_CONFIG,
         Constants.Vision.LIMELIGHT_NAMES);
+    if (Constants.Vision.LIMELIGHT_IMU_ASSIST_ENABLED) limelights.enableIMUAssist();
   }
 
   /** A plausible manual-seed candidate; this does not imply automatic fusion accepted it. */
@@ -153,7 +154,7 @@ public class Vision extends SubsystemBase implements AutoCloseable {
         pitch.getValueAsDouble(), roll.getValueAsDouble(),
         Math.toDegrees(state.Speeds.omegaRadiansPerSecond), DriverStation.isDisabled()
           || initializationConfig.isStationary(Math.hypot(state.Speeds.vxMetersPerSecond, state.Speeds.vyMetersPerSecond),
-              Math.toDegrees(state.Speeds.omegaRadiansPerSecond)));
+              Math.toDegrees(state.Speeds.omegaRadiansPerSecond)), headingEstablished && gyroHealthy);
     if (awaitingOrientationPublication) {
       // MT2 frames captured before publishing the corrected orientation used the old heading.
       fusion.resetPose(Timer.getFPGATimestamp());
@@ -162,6 +163,12 @@ public class Vision extends SubsystemBase implements AutoCloseable {
     var positions = limelights.getPositionMeasurements();
     // Continue reading while disabled so those cached frames are not applied after enabling.
     applyMeasurements(positions, limelights.getHeadingMeasurements());
+    for (var imu : limelights.getImuStatuses()) {
+      String logPath = "Vision/IMU/" + imu.cameraName() + "/";
+      SignalLogger.writeString(logPath + "State", imu.state());
+      SignalLogger.writeDouble(logPath + "CameraYawDegrees", imu.cameraYawDegrees(), "degrees");
+      SignalLogger.writeDouble(logPath + "HeadingErrorDegrees", imu.headingErrorDegrees(), "degrees");
+    }
     SignalLogger.writeString("Vision/Position/Status", !shouldUpdatePose ? "Vision corrections disabled"
         : !headingEstablished ? "Waiting for absolute heading initialization" : poseFilter.status());
   }
@@ -263,6 +270,7 @@ public class Vision extends SubsystemBase implements AutoCloseable {
     headingEstablished = true;
     observedPoseResetVersion = drivetrain.getPoseResetVersion();
     resetHeadingEvidence();
+    limelights.reseedIMUs();
     awaitingOrientationPublication = true;
     fusion.resetPose(now);
     lastMeasurement = null;
