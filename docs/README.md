@@ -14,7 +14,6 @@ Start with [Getting started](getting-started.md), then choose the guide for the 
 | [Java programming](java-programming.md) | Project structure, autonomous APIs, state handlers and telemetry |
 | [Vision](vision.md) | Limelight setup, pose fusion and detailed heading policies |
 | [Simulation](simulation.md) | Simulation launch modes and the MapleSim setup skill |
-| [Development and releases](development.md) | Source development, packaging and validation |
 | [Integrations](integrations.md) | Optional MCP integration catalog and release folder layout |
 
 Each guide links back here and to the project README. File paths shown in robot examples are relative to the robot project root unless stated otherwise.

@@ -4,9 +4,9 @@ Start with [Development and releases](docs/development.md) for source setup, pac
 
 End users download the project ZIP from [GitHub Releases](https://github.com/FRC9410/Robot-Library/releases), extract it into a clean WPILib 2026 Java Command Robot project, and open **Power Tool.cmd**. See [README.md](README.md) for setup. Distribution uses a prebuilt application; there is no source installer or in-app updater.
 
-## Packaging
+## Working on Robot-Library
 
-Run from the repository root on Windows:
+Build both release ZIPs from the repository root on Windows:
 
 ```powershell
 .\release.ps1

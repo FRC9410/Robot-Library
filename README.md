@@ -55,8 +55,3 @@ Download `Robot-Library-2026-Windows-x64.zip` for a new robot project or `Power-
 | [Vision](docs/vision.md) | Limelight setup, pose fusion and detailed heading policies |
 | [Simulation](docs/simulation.md) | Simulation launch modes and the MapleSim setup skill |
 | [Integrations](docs/integrations.md) | Optional WPILib NetworkTables and MCP tools |
-| [Development and releases](docs/development.md) | Source development, packaging and validation |
-
-## Working on Robot-Library
-
-Build both release ZIPs with `.\release.ps1`. Use `-SkipInstall` to reuse installed npm dependencies while still rebuilding the app. See [Development and releases](docs/development.md) for source setup, output paths and validation.
