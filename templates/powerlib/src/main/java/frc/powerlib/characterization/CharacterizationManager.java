@@ -7,6 +7,7 @@ import com.ctre.phoenix6.hardware.CANcoder;
 import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.swerve.SwerveDrivetrain;
 import com.ctre.phoenix6.swerve.SwerveRequest;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableEntry;
@@ -112,6 +113,15 @@ public final class CharacterizationManager extends SubsystemBase {
         target.owner(), target.voltage(), target.stop(), List.of(signal)));
   }
 
+  private static PositionCrawl positionWindow(PositionCrawl.Target target, JsonNode bounds, int polarity) {
+    double lower = bounds.path("lower").asDouble(Double.NaN);
+    double upper = bounds.path("upper").asDouble(Double.NaN);
+    double margin = bounds.path("margin").asDouble(Double.NaN);
+    double lowerStop = bounds.has("lowerStop") ? bounds.path("lowerStop").asDouble(Double.NaN) : lower + margin;
+    double upperStop = bounds.has("upperStop") ? bounds.path("upperStop").asDouble(Double.NaN) : upper - margin;
+    return new PositionCrawl(target, lower, upper, lowerStop, upperStop, polarity);
+  }
+
   private static PositionCrawl.Feedback feedback(TalonFX motor) {
     if (motor == null) return null;
     var position = motor.getPosition();
@@ -157,6 +167,15 @@ public final class CharacterizationManager extends SubsystemBase {
         return details;
       }).toList();
       table.getEntry("crawlCatalog").setString(JSON.writeValueAsString(crawlCatalog));
+      var positions = new LinkedHashMap<String, PositionCrawl.Feedback>();
+      crawlTargets.forEach((key, value) -> {
+        var reading = value.feedback().get();
+        if (reading != null && Double.isFinite(reading.position()) && Double.isFinite(reading.velocity())) {
+          positions.put(key, reading);
+        }
+      });
+      table.getEntry("positionFeedback").setString(JSON.writeValueAsString(
+          Map.of("timestamp", Timer.getFPGATimestamp(), "positions", positions)));
       table.getEntry("status").setString(JSON.writeValueAsString(Map.ofEntries(
           Map.entry("version", 1), Map.entry("timestamp", Timer.getFPGATimestamp()),
           Map.entry("id", id), Map.entry("target", target), Map.entry("phase", phase),
@@ -226,8 +245,7 @@ public final class CharacterizationManager extends SubsystemBase {
         if (selected == null || (!simulationControl && !DriverStation.isTest())) {
           throw new IllegalArgumentException("Select a position subsystem and start in Driver Station Test mode.");
         }
-        var crawl = new PositionCrawl(selected, data.path("lower").asDouble(Double.NaN),
-            data.path("upper").asDouble(Double.NaN), data.path("margin").asDouble(Double.NaN));
+        var crawl = positionWindow(selected, data, data.path("polarity").asInt(1));
         stopAll();
         frc.powerlib.PowerRobotContainer.setTuningEnabled(false);
         active = new TestCommand(selected, crawl);
@@ -252,9 +270,8 @@ public final class CharacterizationManager extends SubsystemBase {
         if (!Double.isFinite(maxSpeed) || maxSpeed <= 0 || (polarity != 1 && polarity != -1)) {
           throw new IllegalArgumentException("Enter a positive speed cutoff and verify the voltage direction.");
         }
-        positionGuard = new PositionCrawl(crawlTargets.get(target), bounds.path("lower").asDouble(Double.NaN),
-            bounds.path("upper").asDouble(Double.NaN), bounds.path("margin").asDouble(Double.NaN));
-        positionGuard.verifySysIdStart();
+        positionGuard = positionWindow(crawlTargets.get(target), bounds, polarity);
+        positionGuard.verifySysIdStart(phase.endsWith("reverse") ? -1 : 1);
       }
       double duration = data.path("duration").asDouble(), ramp = data.path("ramp").asDouble(), step = data.path("step").asDouble();
       double rampLimit = data.has("rampLimit") ? data.path("rampLimit").asDouble(Double.NaN) : step;
@@ -273,6 +290,7 @@ public final class CharacterizationManager extends SubsystemBase {
     private final boolean manualControl;
     private final PositionCrawl crawl, positionGuard;
     private final double maxSpeed;
+    private final int travelDirection = phase.endsWith("reverse") ? -1 : 1;
     private final double armedAt = Timer.getFPGATimestamp();
     private String lastNudge = "";
     private CharacterizationRecorder recorder;
@@ -356,7 +374,7 @@ public final class CharacterizationManager extends SubsystemBase {
       try {
         if (crawl != null) { executeCrawl(); return; }
         if (!started) {
-          if (positionGuard != null) positionGuard.verifySysIdStart();
+          if (positionGuard != null) positionGuard.verifySysIdStart(travelDirection);
           recorder = new CharacterizationRecorder(id, selected.motors());
           file = recorder.file;
           referenceLog.accept("PowerToolCharacterization/TestId", id);
@@ -365,7 +383,7 @@ public final class CharacterizationManager extends SubsystemBase {
           started = true;
           status("running", "");
         }
-        String cutoff = positionGuard == null ? "" : positionGuard.sysIdCutoff(maxSpeed);
+        String cutoff = positionGuard == null ? "" : positionGuard.sysIdCutoff(travelDirection, maxSpeed);
         if (cutoff.isEmpty()) routine.execute();
         recorder.sample((long)(Timer.getFPGATimestamp() * 1e6));
         if (!cutoff.isEmpty() || routine.isFinished()) { finish(false); status("complete", cutoff); }

@@ -1,6 +1,7 @@
 import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress, Stack, Typography } from "@mui/material";
 import type { GeneratedSubsystem } from "../subsystems/types";
 import { useCharacterization } from "./useCharacterization";
+import { usePositionDrafts } from "./PositionCrawlSetup";
 import { CharacterizationSetup } from "./CharacterizationSetup";
 import { CharacterizationResults } from "./CharacterizationResults";
 import { CharacterizationManualStep } from "./CharacterizationManualStep";
@@ -10,6 +11,7 @@ type CharacterizationDialogProps = { open: boolean; onClose: () => void; subsyst
 
 export function CharacterizationDialog({ open, onClose, subsystems }: CharacterizationDialogProps) {
   const run = useCharacterization(subsystems);
+  const positionDrafts = usePositionDrafts();
   const drivetrain = run.subsystemType === "drivetrain";
   const station = run.controlMode === "simulation" ? "the WPILib Simulation GUI" : "FRC Driver Station";
   const { error } = run;
@@ -35,7 +37,7 @@ export function CharacterizationDialog({ open, onClose, subsystems }: Characteri
   }
 
   return (
-    <Dialog open={open} onClose={close} maxWidth="lg" fullWidth aria-labelledby="characterization-title"
+    <Dialog open={open} maxWidth="lg" fullWidth aria-labelledby="characterization-title"
       slotProps={{ paper: { sx: { m: 2, width: "calc(100% - 32px)", maxHeight: "calc(100% - 32px)" } } }}>
       <DialogTitle id="characterization-title" sx={{ py: 1.5 }}>Characterize Robot</DialogTitle>
       <DialogContent dividers sx={{ py: 1.5, overflow: "hidden", display: "flex", flexDirection: "column" }}>
@@ -53,7 +55,7 @@ export function CharacterizationDialog({ open, onClose, subsystems }: Characteri
               <CharacterizationResults report={run.report} />
             </>
           ) : (
-            <CharacterizationSetup run={run} control={drivetrain ? "Drive manual · Steering automatic" : control} errorNotice={errorNotice} drivetrain={drivetrain} />
+            <CharacterizationSetup run={run} positionDrafts={positionDrafts} control={drivetrain ? "Drive manual · Steering automatic" : control} errorNotice={errorNotice} drivetrain={drivetrain} />
           )}
           {(run.report || run.busy) && errorNotice}
         </Stack>

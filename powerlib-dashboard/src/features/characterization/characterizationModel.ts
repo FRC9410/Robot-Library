@@ -6,6 +6,14 @@ export function characterizationControlMode(status: RobotStatus | null): Control
   return status.controlMode === "simulation" || status.controlMode === "driver-station" ? status.controlMode : null;
 }
 
+export function readPositionFeedback(value: unknown, target: string) {
+  const decoded = decode(value) as { positions?: Record<string, { position?: unknown; velocity?: unknown }> } | null;
+  const reading = decoded?.positions && Object.hasOwn(decoded.positions, target) ? decoded.positions[target] : undefined;
+  return typeof reading?.position === "number" && Number.isFinite(reading.position)
+    && typeof reading.velocity === "number" && Number.isFinite(reading.velocity)
+    ? { position: reading.position, velocity: reading.velocity } : null;
+}
+
 function decode(value: unknown): unknown {
   try { return typeof value === "string" ? JSON.parse(value) : null; }
   catch { return null; }

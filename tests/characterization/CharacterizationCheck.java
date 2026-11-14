@@ -174,9 +174,10 @@ public final class CharacterizationCheck {
     feedback[0] = .16;
     tick(true);
     assertEquals(0, output[0], 0);
-    assertTrue(status().path("error").asText().contains("stopping margin"));
+    assertTrue(status().path("error").asText().contains("directional stop"));
     crawlNudge(id, -1, .015);
-    assertEquals(0, output[0], 0);
+    assertEquals(-.11, output[0], 1e-9);
+    for (int i=0; i<9; i++) tick(true);
     feedback[0] = 0;
     crawlNudge(id, 1, .005);
     assertEquals(.07, output[0], 1e-9);
@@ -208,7 +209,7 @@ public final class CharacterizationCheck {
   }
 
   static void checkPositionSysId(double[] feedback, double[] output) throws Exception {
-    var window = Map.of("lower", -.2, "upper", .2, "margin", .05, "speedLimit", .10, "polarity", -1);
+    var window = Map.of("lower", 0, "upper", .5, "lowerStop", .1, "upperStop", .4, "speedLimit", .10, "polarity", -1);
     var request = new LinkedHashMap<String, Object>(Map.of("target", "arm", "phase", "dynamic-forward",
         "positionTest", window, "duration", 3, "step", .3, "ramp", .1));
     request.put("id", UUID.randomUUID().toString());
@@ -217,13 +218,17 @@ public final class CharacterizationCheck {
     assertEquals("failed", status().path("state").asText());
     assertEquals(0, output[0], 0);
 
-    for (String cutoff : List.of("speed cutoff", "stopping margin")) {
+    for (String cutoff : List.of("speed cutoff", "upper stop", "lower stop", "outward motion")) {
       String id = UUID.randomUUID().toString();
       request.put("id", id);
       request.put("manualControl", true);
-      feedback[0] = 0;
+      boolean reverse = cutoff.equals("lower stop");
+      request.put("phase", reverse ? "dynamic-reverse" : "dynamic-forward");
+      feedback[0] = reverse ? .5 : 0;
       feedback[1] = 0;
-      tick(true);
+      for (int i=0; i<7; i++) tick(true);
+      assertEquals(feedback[0], JSON.readTree(table.value.getEntry("positionFeedback").getString("{}"))
+          .path("positions").path("arm").path("position").asDouble(), 0);
       publish("request", request);
       tick(true);
       assertEquals(status().toString(), "prepared", status().path("state").asText());
@@ -234,11 +239,19 @@ public final class CharacterizationCheck {
       DriverStationSim.setEnabled(true);
       for (int i=0; i<20; i++) tick(true);
       assertEquals("running", status().path("state").asText());
-      assertEquals(-.3, output[0], 1e-9);
-      if (cutoff.equals("speed cutoff")) feedback[1] = .11; else feedback[0] = .16;
+      assertEquals(reverse ? .3 : -.3, output[0], 1e-9);
+      switch (cutoff) {
+        case "speed cutoff" -> feedback[1] = .11;
+        case "upper stop" -> feedback[0] = .4;
+        case "lower stop" -> feedback[0] = .1;
+        case "outward motion" -> feedback[1] = -.001;
+        default -> throw new AssertionError(cutoff);
+      }
       tick(true);
-      assertEquals("complete", status().path("state").asText());
-      assertTrue(status().path("error").asText().contains(cutoff));
+      assertEquals(cutoff.equals("outward motion") ? "cancelled" : "complete", status().path("state").asText());
+      String reason = cutoff.endsWith("stop") ? "directional stop"
+          : cutoff.equals("outward motion") ? "starting limit" : cutoff;
+      assertTrue(status().path("error").asText().contains(reason));
       assertEquals(0, output[0], 0);
       assertTrue(Files.size(Path.of(status().path("file").asText())) > 100);
       assertTrue(DriverStation.isEnabled());

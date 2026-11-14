@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Alert, Box, Button, MenuItem, Select, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip, Typography } from "@mui/material";
 import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
 import type { Gain, Report } from "../../../electron/characterization/types";
-import { resolveTargetLimits } from "../../../electron/characterization/limits";
+import { positionStops, resolveTargetLimits } from "../../../electron/characterization/limits";
 import { CharacterizationTestData } from "./CharacterizationTestData";
 
 type CharacterizationResultsProps = { report: Report };
@@ -19,6 +19,7 @@ export function CharacterizationResults({ report }: CharacterizationResultsProps
   const target = report.targets.find(item => item.id === targetId) ?? report.targets[0];
   const { duration, ramp, rampLimit, step } = resolveTargetLimits(report.settings, target);
   const { settle, medianWindow, positionTest } = report.settings;
+  const stops = positionTest && positionStops(positionTest);
   const runSettings = [
     ["Test duration", `${duration} s`],
     ["Ramp", `${ramp} V/s`],
@@ -55,8 +56,8 @@ export function CharacterizationResults({ report }: CharacterizationResultsProps
           </Box>
         ))}
       </Box>
-      {positionTest && <Typography variant="body2">
-        {positionTest.model === "arm" ? "Arm" : "Elevator"} · Window {positionTest.lower} to {positionTest.upper} rot · Margin {positionTest.margin} rot · Speed cutoff {positionTest.speedLimit} rot/s
+      {positionTest && stops && <Typography variant="body2">
+        {positionTest.model === "arm" ? "Arm" : "Elevator"} · Window {positionTest.lower} to {positionTest.upper} rot · Stops {stops.lowerStop} and {stops.upperStop} rot · Speed cutoff {positionTest.speedLimit} rot/s
         {positionTest.model === "arm" && ` · Horizontal ${positionTest.horizontal} rot`}
       </Typography>}
       {showTestData ? <CharacterizationTestData key={target.id} quality={report.results.find(result => result.target.id === target.id)?.testQuality ?? []} />

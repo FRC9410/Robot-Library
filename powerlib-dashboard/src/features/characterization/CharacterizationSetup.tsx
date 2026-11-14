@@ -2,12 +2,13 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { Alert, Box, Checkbox, FormControl, FormControlLabel, InputLabel, MenuItem, Pagination, Select, Stack, Typography } from "@mui/material";
 import type { CharacterizationSubsystemType, useCharacterization } from "./useCharacterization";
-import { PositionCrawlSetup } from "./PositionCrawlSetup";
+import { PositionCrawlSetup, type usePositionDrafts } from "./PositionCrawlSetup";
 import { CharacterizationSettings } from "./CharacterizationSettings";
 
 type CharacterizationSetupProps = {
   run: Pick<ReturnType<typeof useCharacterization>,
     "subsystemType" | "changeSubsystemType" | "options" | "picked" | "setPicked" | "settings" | "setSettings" | "ready" | "setReady" | "robot" | "connected" | "supported" | "controlMode" | "startPosition">;
+  positionDrafts: ReturnType<typeof usePositionDrafts>;
   control: string;
   errorNotice: ReactNode;
   drivetrain: boolean;
@@ -15,7 +16,7 @@ type CharacterizationSetupProps = {
 
 const targetsPerPage = 6;
 
-export function CharacterizationSetup({ run, control, errorNotice, drivetrain }: CharacterizationSetupProps) {
+export function CharacterizationSetup({ run, positionDrafts, control, errorNotice, drivetrain }: CharacterizationSetupProps) {
   const [page, setPage] = useState(1);
   const pages = Math.max(1, Math.ceil(run.options.length / targetsPerPage));
   const currentPage = Math.min(page, pages);
@@ -43,7 +44,7 @@ export function CharacterizationSetup({ run, control, errorNotice, drivetrain }:
     <Stack spacing={1.5}>
       <Alert severity="warning">Clear the travel area. Crawl and SysId remove motor output at the test limits. Verify the mechanism can stop safely with output removed.</Alert>
       <Box sx={{ maxWidth: 360 }}>{subsystemTypePicker}</Box>
-      <PositionCrawlSetup onStart={run.startPosition} />
+      <PositionCrawlSetup onStart={run.startPosition} drafts={positionDrafts} />
       {errorNotice}
     </Stack>
   );

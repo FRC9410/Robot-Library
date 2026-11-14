@@ -19,7 +19,7 @@ export type RunAdapter = {
   uuid(): string;
 };
 class Cancelled extends Error {}
-export type ManualStep = { state: "arm" | "prepare" | "enable" | "running" | "disable" | "collect" | "cancel"; label: string; number: number; total: number; detail?: string };
+export type ManualStep = { state: "arm" | "prepare" | "enable" | "running" | "disable" | "collect" | "cancel"; label: string; number: number; total: number; detail?: string; positionTarget?: string };
 type ManualControl = { update(step: ManualStep | null): void; armRequested(): boolean };
 
 export async function runCharacterization(adapter: RunAdapter, targets: Target[], settings: Settings,
@@ -51,7 +51,7 @@ export async function runCharacterization(adapter: RunAdapter, targets: Target[]
   let heartbeat = 0, outcome: Report["outcome"] = "complete", error: string | undefined;
   let manualTest = false, manualArmed = false, driverChecked = false, stepNumber = 0;
   const showStep = (state: ManualStep["state"], detail?: string) => {
-    if (manualTest) manual?.update({ state, label, number: stepNumber, total: targets.length * phases.length, detail });
+    if (manualTest) manual?.update({ state, label, number: stepNumber, total: targets.length * phases.length, detail, positionTarget: hasPosition ? targetId : undefined });
   };
   let diagnosticWrites = Promise.resolve(), diagnosticError = "";
   const record = (event: string, message: string, observation = adapter.observe()) => {

@@ -60,6 +60,8 @@ declare global {
         swerve?: unknown;
         revision?: string;
       }>;
+      hasCharacterizationAccess: () => Promise<boolean>;
+      restartForCharacterization: () => Promise<boolean>;
       startCharacterization: import("../features/characterization/runCharacterization").CharacterizationApi["start"];
       collectCharacterization: import("../features/characterization/runCharacterization").CharacterizationApi["collect"];
       recordCharacterizationDiagnostic: import("../features/characterization/runCharacterization").CharacterizationApi["diagnostic"];

@@ -19,10 +19,22 @@ export function resolveTargetLimits(settings: Settings, target: Target): Require
   return resolveLimits(settings, settings.targetLimits && Object.hasOwn(settings.targetLimits, target.id) ? target.id : target.group);
 }
 
+export function positionStops({ lower, upper, lowerStop, upperStop, margin }: {
+  lower: number; upper: number; lowerStop?: number; upperStop?: number; margin?: number;
+}) {
+  return { lowerStop: lowerStop ?? lower + (margin ?? NaN), upperStop: upperStop ?? upper - (margin ?? NaN) };
+}
+
+export function validPositionBounds(bounds: Parameters<typeof positionStops>[0]): boolean {
+  const { lower, upper } = bounds;
+  const { lowerStop, upperStop } = positionStops(bounds);
+  return [lower, upper, lowerStop, upperStop, upper - lower].every(Number.isFinite)
+    && lower < lowerStop && lowerStop < upperStop && upperStop < upper;
+}
+
 export function validPositionTest(value: PositionTest | undefined): value is PositionTest {
   return !!value && (value.model === "elevator" || value.model === "arm" && Number.isFinite(value.horizontal))
-    && [value.lower, value.upper, value.margin, value.speedLimit, value.upper - value.lower].every(Number.isFinite)
-    && value.margin > 0 && value.margin < (value.upper - value.lower) / 2 && value.speedLimit > 0
+    && validPositionBounds(value) && Number.isFinite(value.speedLimit) && value.speedLimit > 0
     && (value.polarity === 1 || value.polarity === -1);
 }
 

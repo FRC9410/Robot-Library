@@ -15,35 +15,39 @@ final class PositionCrawl {
   private static final double MAX_NUDGE_VOLTS = 0.45;
   private static final double REST_SPEED = 0.01;
   private final Target target;
-  private final double lower, upper, margin;
+  private final double lower, upper, lowerStop, upperStop;
+  private final int polarity;
   private Feedback feedback;
   private int direction;
   private double expires, speedLimit;
 
-  PositionCrawl(Target target, double lower, double upper, double margin) {
-    if (!Double.isFinite(lower) || !Double.isFinite(upper) || !Double.isFinite(margin)
-        || !Double.isFinite(upper - lower) || margin <= 0 || margin >= (upper - lower) / 2
-        || lower < target.softMin() || upper > target.softMax()) {
-      throw new IllegalArgumentException("Enter a test window within the mechanism limits with room for the stopping margin.");
+  PositionCrawl(Target target, double lower, double upper, double lowerStop, double upperStop, int polarity) {
+    if (!Double.isFinite(lower) || !Double.isFinite(upper) || !Double.isFinite(upper - lower)
+        || !(lower < lowerStop && lowerStop < upperStop && upperStop < upper)
+        || lower < target.softMin() || upper > target.softMax() || (polarity != 1 && polarity != -1)) {
+      throw new IllegalArgumentException("Set Min, Lower stop, Upper stop, and Max in increasing order within the mechanism limits.");
     }
     this.target = target;
     this.lower = lower;
     this.upper = upper;
-    this.margin = margin;
+    this.lowerStop = lowerStop;
+    this.upperStop = upperStop;
+    this.polarity = polarity;
     checkFeedback();
     if (Math.abs(feedback.velocity()) > REST_SPEED) throw new IllegalStateException("Wait until the mechanism is stationary.");
   }
 
-  void verifySysIdStart() {
+  void verifySysIdStart(int travelDirection) {
     checkFeedback();
-    if (Math.abs(feedback.velocity()) > REST_SPEED || clearance() <= margin) {
-      throw new IllegalStateException("Start stationary inside both stopping margins.");
+    if (Math.abs(feedback.velocity()) > REST_SPEED || reachedStop(travelDirection) || movingOutward(travelDirection)) {
+      throw new IllegalStateException("Start stationary before the stop in the test direction and clear of outward motion.");
     }
   }
 
-  String sysIdCutoff(double maxSpeed) {
+  String sysIdCutoff(int travelDirection, double maxSpeed) {
     checkFeedback();
-    if (clearance() <= margin) return "Test ended at the stopping margin.";
+    if (reachedStop(travelDirection)) return "Test ended at the directional stop.";
+    if (movingOutward(travelDirection)) throw new IllegalStateException("Mechanism moved toward its starting limit.");
     if (Math.abs(feedback.velocity()) >= maxSpeed) return "Test ended at the speed cutoff.";
     return "";
   }
@@ -66,7 +70,8 @@ final class PositionCrawl {
     if (Math.abs(feedback.velocity()) > REST_SPEED || Math.abs(feedback.velocity()) >= requestedSpeed) {
       return "Wait until the mechanism is stationary.";
     }
-    if (clearance() <= margin) return "Inside the stopping margin. Reposition the mechanism while disabled.";
+    if (reachedStop(nextDirection * polarity)) return "Already at the stop in this direction. Flip direction or reposition the mechanism.";
+    if (movingOutward(nextDirection * polarity)) return "Wait until the mechanism is stationary.";
     direction = nextDirection;
     speedLimit = requestedSpeed;
     expires = now + PULSE_SECONDS;
@@ -77,7 +82,9 @@ final class PositionCrawl {
   String update(double now) {
     checkFeedback();
     if (direction == 0) return null;
-    if (clearance() <= margin) return stop("Stopped at the stopping margin.");
+    int travelDirection = direction * polarity;
+    if (reachedStop(travelDirection)) return stop("Stopped at the directional stop.");
+    if (movingOutward(travelDirection)) return stop("Stopped because the mechanism moved toward its starting limit.");
     if (Math.abs(feedback.velocity()) >= speedLimit) return stop("Stopped at the crawl speed cutoff.");
     if (now >= expires) return stop("Nudge complete.");
     return null;
@@ -96,7 +103,13 @@ final class PositionCrawl {
     return message;
   }
 
-  private double clearance() {
-    return Math.min(upper - feedback.position(), feedback.position() - lower);
+  private boolean reachedStop(int travelDirection) {
+    return travelDirection > 0 ? feedback.position() >= upperStop : feedback.position() <= lowerStop;
+  }
+
+  private boolean movingOutward(int travelDirection) {
+    return travelDirection > 0
+        ? feedback.position() <= lowerStop && feedback.velocity() < 0
+        : feedback.position() >= upperStop && feedback.velocity() > 0;
   }
 }

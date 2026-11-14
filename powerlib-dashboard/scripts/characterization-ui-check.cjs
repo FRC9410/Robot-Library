@@ -9,6 +9,8 @@ const childProcess=require('node:child_process');
 const {promisify}=require('node:util');
 const originalExecFile=childProcess.execFile,originalExecute=promisify(originalExecFile),driverCalls=[];
 let driverFailure='';
+const unelevatedFixture=process.argv.includes('--fixture-unelevated');
+let restartRequests=0;
 let lockReports=false;
 // Exercise production Driver Station IPC and script generation without ever
 // executing those scripts or sending keyboard input to a real application.
@@ -17,6 +19,8 @@ childProcess.execFile[promisify.custom]=async(command,args,options)=>{
  const encodedIndex=args?.indexOf('-EncodedCommand')??-1;
  const fileIndex=args?.indexOf('-File')??-1;
  const script=fileIndex>=0?fs.readFileSync(args[fileIndex+1],'utf8'):encodedIndex>=0?Buffer.from(args[encodedIndex+1],'base64').toString('utf16le'):'';
+ if(script.includes('WindowsBuiltInRole]::Administrator')) return {stdout:unelevatedFixture?'False':'True',stderr:''};
+ if(script.includes('-Verb RunAs')) { restartRequests++; return {stdout:'cancelled',stderr:''}; }
  if(script.includes('Get-Process -Name DriverStation')){
    const action=script.includes('219,221,220')?'enable':script.includes('[uint16[]]@(13)')?'disable':'check';
    driverCalls.push(action);
@@ -100,7 +104,7 @@ function Fixture(){const network=useNetworkTables();const [additional,setAdditio
  network.clientRef.current.publish=publish;
  window.fixtureSetMoreSubsystems=()=>setAdditional(Array.from({length:9},(_,index)=>({id:'extra-'+index,name:'Extra mechanism '+index,type:'velocity'})));
  network.setStatus('connected');
- const update=()=>network.setTopics([{name:base+'catalog',type:'string',value:JSON.stringify(catalog),receivedAt:performance.now()},{name:base+'status',type:'string',value:JSON.stringify(state),receivedAt:performance.now()},{name:base+'crawlCatalog',type:'string',value:JSON.stringify([{id:'position',name:'Arm'},{id:'elevator',name:'Elevator',lower:-.5,upper:.5}]),receivedAt:performance.now()}]);
+ const update=()=>network.setTopics([{name:base+'catalog',type:'string',value:JSON.stringify(catalog),receivedAt:performance.now()},{name:base+'status',type:'string',value:JSON.stringify(state),receivedAt:performance.now()},{name:base+'crawlCatalog',type:'string',value:JSON.stringify([{id:'position',name:'Arm'},{id:'elevator',name:'Elevator',lower:-.5,upper:.5}]),receivedAt:performance.now()},{name:base+'positionFeedback',type:'string',value:JSON.stringify({positions:window.fixturePositions??{position:{position:0,velocity:0},elevator:{position:-.4,velocity:0}}}),receivedAt:performance.now()}]);
  update();const timer=setInterval(update,25);return()=>clearInterval(timer);
 },[]);return <LogsPanel active subsystems={[...subsystems,...additional]}/>;}
 createRoot(document.getElementById('root')).render(<ThemeProvider theme={createTheme({palette:{mode:'dark',primary:{main:'#facc15'}}})}><CssBaseline/><NetworkTablesProvider><LoadedLogsProvider><Fixture/></LoadedLogsProvider></NetworkTablesProvider></ThemeProvider>);
@@ -126,6 +130,20 @@ async function assertDialogFits(label){
 const reports=()=>{const folder=path.join(fixture,'power-tool/characterization');return fs.existsSync(folder)?fs.readdirSync(folder).map(name=>{const recovery=path.join(folder,name,'characterization-recovery.json');return fs.existsSync(recovery)?recovery:path.join(folder,name,'characterization.json');}).filter(file=>fs.existsSync(file)).map(file=>JSON.parse(fs.readFileSync(file,'utf8'))):[];};
 async function run(){
  window.setContentSize(960,640);
+ if(unelevatedFixture){
+   await wait(()=>evaluate(`[...document.querySelectorAll('button')].some(el=>el.textContent==='Characterize Robot')`));
+   await click('Characterize Robot');
+   await wait(()=>evaluate(`document.body.innerText.includes('Restart Power Tool as administrator?')`));
+   assert.equal(await evaluate(`!!document.querySelector('#characterization-title')`),false);
+   await click('Restart as administrator');
+   await wait(()=>evaluate(`document.body.innerText.includes('Administrator restart canceled.')`));
+   assert.equal(restartRequests,1);
+   await click('Cancel');
+   await wait(()=>evaluate(`!document.querySelector('[role=dialog]')`));
+   assert.equal(reports().length,0);
+   console.log('Unelevated characterization is blocked and Windows elevation cancellation preserves the window.');
+   return;
+ }
  await wait(()=>evaluate(`[...document.querySelectorAll('button')].some(el=>el.textContent==='Characterize Robot')`));
  assert.deepEqual(await evaluate(`[...document.querySelectorAll('button')].map(el=>el.textContent).filter(text=>text.startsWith('Characterize'))`),['Characterize Robot']);
  await click('Characterize Robot');
@@ -140,8 +158,21 @@ async function run(){
  assert.equal(await evaluate(`[...document.querySelectorAll('button')].some(el=>el.textContent==='Start characterization')`),false);
  await choose('Mechanism','Elevator');
  const valueOf=label=>evaluate(`[...document.querySelectorAll('input')].find(el=>el.labels?.[0]?.textContent===${JSON.stringify(label)}).value`);
- assert.equal(await valueOf('Lower test position (rot)'),'-0.5');
- await fill('Stopping margin on each end (rot)',.1);
+ assert.equal(await valueOf('Min (rot)'),'-0.5');
+ await fill('Lower stop (rot)',-.35);
+ await fill('Upper stop (rot)',.35);
+ await wait(()=>evaluate(`document.body.innerText.includes('Position -0.400000 rot')`));
+ await evaluate(`document.querySelector('[aria-label="Use current position for Min"]').click()`);
+ assert.equal(await valueOf('Min (rot)'),'-0.4');
+ await evaluate(`window.fixturePositions={position:{position:.2,velocity:0},elevator:{position:.45,velocity:0}}`);
+ await wait(()=>evaluate(`document.body.innerText.includes('Position 0.450000 rot')`));
+ await evaluate(`document.querySelector('[aria-label="Use current position for Max"]').click()`);
+ assert.equal(await valueOf('Max (rot)'),'0.45');
+ await choose('Mechanism','Arm');
+ await wait(()=>evaluate(`document.body.innerText.includes('Position 0.200000 rot')`));
+ await choose('Mechanism','Elevator');
+ assert.equal(await valueOf('Lower stop (rot)'),'-0.35');
+ assert.equal(await valueOf('Max (rot)'),'0.45');
  await evaluate(`document.querySelector('[role=dialog] input[type=checkbox]').click()`);
  await click('Arm Crawl');
  await wait(()=>evaluate(`document.body.innerText.includes('Enable Test mode in the WPILib Simulation GUI')`));
@@ -375,8 +406,8 @@ async function run(){
  await click('Close');await wait(()=>evaluate(`!document.querySelector('[role=dialog]')`));
  await click('Characterize Robot');await wait(()=>evaluate(`!!document.querySelector('[role=dialog] [role=combobox]')`));
  await choose('Subsystem types','Arms & elevators');
- await fill('Lower test position (rot)',-.5);await fill('Upper test position (rot)',.5);
- await fill('Stopping margin on each end (rot)',.05);
+ await fill('Min (rot)',-.5);await fill('Max (rot)',.5);
+ await fill('Lower stop (rot)',-.4);await fill('Upper stop (rot)',.35);
  await evaluate(`document.querySelector('[role=dialog] input[type=checkbox]').click()`);
  await click('SysId');
  await assertDialogFits('Arm SysId setup');
@@ -400,6 +431,16 @@ async function run(){
  assert.equal(driverCalls.length,beforePosition);
  await wait(()=>evaluate(`document.querySelector('[aria-label="Characterization results"]')?.textContent.includes('kG')`));
  await assertDialogFits('Arm SysId report');
+ await click('Run again');
+ await wait(()=>evaluate(`[...document.querySelectorAll('button')].some(el=>el.textContent==='Start SysId walkthrough'&&el.disabled)`));
+ assert.equal(await valueOf('Horizontal position (rot)'),'0');
+ assert.equal(await valueOf('Upper stop (rot)'),'0.35');
+ await evaluate(`document.querySelector('[role=dialog]').dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,key:'Escape'}));document.querySelector('.MuiDialog-container').click();`);
+ assert.equal(await evaluate(`!!document.querySelector('[role=dialog]')`),true);
+ await click('Close');await wait(()=>evaluate(`!document.querySelector('[role=dialog]')`));
+ await click('Characterize Robot');await wait(()=>evaluate(`!!document.querySelector('[role=dialog] [role=combobox]')`));
+ await choose('Subsystem types','Arms & elevators');
+ assert.equal(await valueOf('Upper stop (rot)'),'');
  console.log('Characterization UI passed: five-second defaults, target limits, motion data, progress, completion/Stop, paged subsystem list, timeout diagnostics, DS simulation, focus/privilege errors and report recovery. All DS scripts intercepted. '+fixture);
 }
 setTimeout(()=>{console.error('Characterization UI timeout');app.exit(1);},90000).unref();

@@ -1,9 +1,15 @@
 import { LinearProgress, Stack, Typography } from "@mui/material";
+import { useNetworkTables, useTopics } from "../networktables/NetworkTablesContext";
+import { readPositionFeedback } from "./characterizationModel";
 import type { ManualStep } from "./runCharacterization";
 
 type CharacterizationManualStepProps = { step: ManualStep; station: string };
 
 export function CharacterizationManualStep({ step, station }: CharacterizationManualStepProps) {
+  const topic = useTopics("app").find(item => item.name === "/PowerLib/Characterization/positionFeedback");
+  const { status } = useNetworkTables();
+  const reading = step.positionTarget && status === "connected" && topic?.receivedAt !== undefined && performance.now() - topic.receivedAt < 500
+    ? readPositionFeedback(topic.value, step.positionTarget) : null;
   const instruction = {
     arm: "Keep the robot disabled. Reposition the robot or mechanism if needed, then arm this test.",
     prepare: "Keep the robot disabled while Power Tool prepares the test.",
@@ -20,6 +26,7 @@ export function CharacterizationManualStep({ step, station }: CharacterizationMa
       <Typography variant="h6">{step.label}</Typography>
       <LinearProgress variant="determinate" value={(step.number - (step.state === "collect" ? 0 : 1)) / step.total * 100}
         aria-label="Characterization walkthrough progress" />
+      {step.positionTarget && <Typography variant="body2">{reading ? `Position ${reading.position.toPrecision(6)} rot` : "Live position unavailable"}</Typography>}
       <Typography role="status">{step.detail && step.detail + " "}{instruction}</Typography>
     </Stack>
   );

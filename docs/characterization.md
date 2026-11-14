@@ -19,15 +19,15 @@ Each completed test is saved with the run report. Rebuild the robot with current
 
 ## Arms and elevators
 
-Choose **Arms & elevators** in **Subsystem types** to check a position mechanism before characterization. Select the mechanism and confirm the test window in mechanism rotations. Power Tool prefills configured relative-position soft limits when available. Leave room for the mechanism to stop inside both ends, including when motor output is removed. Gravity-loaded mechanisms may need mechanical support.
+Choose **Arms & elevators** in **Subsystem types** to check a position mechanism before characterization. Select the mechanism and confirm the test window in mechanism rotations. Power Tool prefills configured relative-position soft limits when available. Watch the live encoder reading and use **Use current position** to fill **Min** or **Max**. Set an inner **Lower stop** and **Upper stop** with room to stop after motor output is removed. Gravity-loaded mechanisms may need mechanical support.
 
 Click **Arm Crawl** with the robot disabled, then enable manually in Test mode. In Sim without DS, use the WPILib Simulation GUI. **Nudge** applies a short, low-voltage pulse with an initial speed cutoff of **0.010 rotations/s**. The cutoff changes in **0.005 rotations/s** increments, and the pulse voltage remains capped. **Speed Up**, **Speed Down**, and **Flip Direction** change the next nudge. Flip Direction changes the sign of the pulse and leaves motor and encoder configuration intact.
 
-The robot cuts output at the speed cutoff, the stopping margin, or the pulse timeout. Disable the robot to finish the crawl.
+The robot cuts output at the speed cutoff, the stop in the travel direction, or the pulse timeout. Disable the robot to finish the crawl.
 
 Switch to **SysId** in the same setup. Select the gravity model, confirm which way positive voltage moves the mechanism, and enter the encoder position at horizontal for an arm. Use a speed cutoff that leaves enough room to stop. Review the ramp, voltage ceilings and duration for the test window.
 
-Click **Start SysId walkthrough**, then arm, enable and disable manually for each of the four phases. Start each phase stationary inside the stopping margins. The robot ends a phase early at the speed cutoff or stopping margin. Power Tool collects the completed logs and fits **kS**, **kV**, **kA**, and **kG**. The report includes the test window and flags inadequate motion. [WPILib arm and elevator models](https://docs.wpilib.org/en/stable/docs/software/advanced-controls/system-identification/introduction.html#elevator-identification)
+Click **Start SysId walkthrough**, then arm, enable and disable manually for each of the four phases. Start each phase stationary within the outer bounds and before its directional stop. With a window of 0.0 to 0.5 rotations and inner stops at 0.1 and 0.4, start forward at 0.0 or reverse at 0.5. The robot ends a phase early at the speed cutoff or the stop in its travel direction. Power Tool collects the completed logs and fits **kS**, **kV**, **kA**, and **kG**. The report includes the test window and directional stops and flags inadequate motion. **Run again** restores the selected mechanism and its fields. Use **Close** to clear the dialog drafts. [WPILib arm and elevator models](https://docs.wpilib.org/en/stable/docs/software/advanced-controls/system-identification/introduction.html#elevator-identification)
 
 ## Before starting
 
@@ -37,7 +37,7 @@ On a physical robot or in **Sim with DS**, open the normal **FRC Driver Station 
 
 Power Tool brings Driver Station to the foreground and uses its documented enable and disable keyboard shortcuts. Driver Station must be running at the same privilege level as Power Tool and able to receive focus. It must remain in Test mode. FMS attachment or an E-stop prevents the sequence. Power Tool does not replace Driver Station or send hardware enable through NetworkTables.
 
-Power Tool checks Driver Station focus and permissions before preparing the first test. Open Driver Station first, then double-click the project's **Power Tool.cmd**. If Driver Station is elevated, the launcher requests matching administrator access automatically; accept Windows' UAC prompt. If you need to request elevation before Driver Station opens, run `"Power Tool.cmd" -Administrator`. A privilege mismatch or blocked focus stops the workflow with a readable message before any enable shortcut is sent. Keep Driver Station's main window available and close any popup.
+Power Tool checks Driver Station focus and permissions before preparing the first test. On Windows, open **Logs → Characterize Robot** and choose **Restart as administrator** when prompted. Accept Windows UAC to return directly to characterization. A privilege mismatch or blocked focus stops the workflow with a readable message before any enable shortcut is sent. Keep Driver Station's main window available and close any popup.
 
 NI's LabVIEW application exposes a wrapper window separately from the visible FRC Driver Station control panel. Power Tool identifies the visible panel and verifies that exact panel and process before delivering a shortcut; help windows and dialogs are excluded.
 
