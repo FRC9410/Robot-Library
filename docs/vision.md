@@ -186,8 +186,11 @@ while corrections are blocked, preventing rejected frames from being replayed la
 Position candidates must be within the configured field bounds plus a 0.25 m margin, with
 absolute robot-origin height no more than 0.5 m. `Measurement.heightMeters()` preserves the
 camera's Z coordinate; the existing six-argument planar constructor remains supported.
-Fusion requires estimator history at image capture time. Frames that pass these checks are
-eligible for correction at any X/Y or heading disagreement with odometry.
+Fusion requires estimator history at image capture time. A MegaTag2 X/Y correction over 1 m
+requires at least three distinct frames from the same camera spanning at least 0.1 s. Their
+correction vectors must stay within 0.25 m of the first vector in that window. Comparing the
+offset from odometry at each capture lets the robot collect evidence while moving. Pose resets
+and changes to the vision corrections switch clear this evidence.
 
 Fusion uses `measurement.standardDeviations()` so distance, tag count and uncertainty scaling
 reach the estimator; the MT2 heading remains ignored. `Vision/Position/Status` logs filter status.
@@ -195,7 +198,7 @@ These settings are starting values to test on hardware.
 Agreement does not prove a camera's calibration or tag map is correct; check mounting pose, field
 map and gyro signs. Low-level `LimelightVision` readers expose measurements but do not apply
 robot-specific filtering automatically: call `observe()` every loop, `plausible()` for cached/manual
-seeds and `acceptPositionWithoutCorrectionLimit()` with capture-time estimator history before fusion. Adopt updated
+seeds and `acceptPosition()` with capture-time estimator history before fusion. Adopt updated
 `Vision`, `Swerve`, and `VisionConstants` templates together in an existing robot project.
 
 ## Configuration and heading readiness
@@ -243,7 +246,7 @@ Motion clears all windows; stale or inconsistent observations discard the affect
 
 `stateMachine.vision.seedFromFreshVision()` explicitly resets drivetrain translation from
 the last plausible MegaTag2 measurement while disabled, including when automatic fusion lacked
-estimator history. It uses a fresh independent MegaTag1
+estimator history or was waiting for agreement on a large correction. It uses a fresh independent MegaTag1
 heading when available (including the disabled single-tag fallback); otherwise it preserves the drivetrain heading. Frames captured before
 the reset cannot subsequently undo it. It returns `false` when enabled,
 when no plausible frame is cached, or when the frame is stale, future-dated, or invalid.

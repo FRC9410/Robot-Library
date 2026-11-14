@@ -124,6 +124,7 @@ public class Vision extends SubsystemBase implements AutoCloseable {
     if (shouldUpdatePose != shouldUpdate) {
       headingSelector.reset();
       resetHeadingEvidence();
+      poseFilter.resetRecovery();
     }
     shouldUpdatePose = shouldUpdate;
   }
@@ -211,7 +212,7 @@ public class Vision extends SubsystemBase implements AutoCloseable {
     LimelightVision.Measurement selected = null;
     for (var candidate : positions) {
       if (correctPose && applyPositionCorrection(candidate, now)) return candidate;
-      // Explicit manual seeds may use a plausible frame with no estimator history.
+      // Explicit manual seeds may use a plausible frame rejected for a large correction or missing history.
       if (selected == null && fusion.isNewPosition(candidate)
           && poseFilter.plausible(candidate, now)) {
         selected = candidate;
@@ -259,7 +260,7 @@ public class Vision extends SubsystemBase implements AutoCloseable {
   private boolean applyPositionCorrection(LimelightVision.Measurement measurement, double now) {
     if (!fusion.isNewPosition(measurement)) return false;
     var historical = drivetrain.samplePoseAt(Utils.fpgaToCurrentTime(measurement.timestampSeconds()));
-    if (!poseFilter.acceptPositionWithoutCorrectionLimit(measurement, historical.orElse(null), now)
+    if (!poseFilter.acceptPosition(measurement, historical.orElse(null), now)
         || !fusion.addPosition(measurement, now, historical.orElse(null))) return false;
     lastMeasurement = measurement;
     lastAcceptedMeasurement = measurement;
@@ -275,6 +276,7 @@ public class Vision extends SubsystemBase implements AutoCloseable {
     fusion.resetPose(now);
     lastMeasurement = null;
     lastAcceptedMeasurement = null;
+    poseFilter.resetRecovery();
   }
 
   private void resetHeadingEvidence() {
