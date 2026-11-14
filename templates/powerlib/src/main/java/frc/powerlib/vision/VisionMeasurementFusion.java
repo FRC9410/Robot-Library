@@ -75,6 +75,11 @@ public final class VisionMeasurementFusion {
     return true;
   }
 
+  /** Fuse independent heading across the full angular range. */
+  public boolean addHeading(HeadingMeasurement measurement, double now) {
+    return addHeading(measurement, now, 180);
+  }
+
   public boolean addHeading(HeadingMeasurement measurement, double now, double maxErrorDegrees) {
     headingErrorDegrees = Double.NaN;
     if (!isNewHeading(measurement)) {

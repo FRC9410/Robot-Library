@@ -25,8 +25,14 @@ public class LimelightVisionTest {
   private static final class Fixture implements AutoCloseable {
     final NetworkTableInstance nt = NetworkTableInstance.create();
     double now = 10;
-    final LimelightVision reader = new LimelightVision(nt, LimelightVisionConfig.DEFAULT,
-        LimelightHeadingConfig.DEFAULT, () -> now, "first", "second");
+    final LimelightVision reader;
+
+    Fixture() { this(LimelightHeadingConfig.DEFAULT); }
+
+    Fixture(LimelightHeadingConfig headingConfig) {
+      reader = new LimelightVision(nt, LimelightVisionConfig.DEFAULT,
+          headingConfig, () -> now, "first", "second");
+    }
 
     void publish(String camera, String topic, double[] values, double receiveTime) {
       nt.getTable(camera).getDoubleArrayTopic(topic).getEntry(new double[0], PubSubOption.keepDuplicates(true))
@@ -35,6 +41,13 @@ public class LimelightVisionTest {
 
     void heading(double[] values) { publish("first", "botpose_wpiblue", values, now); }
     void update(double rate) { reader.update(0, 0, 0, rate); }
+    void publishImu(String camera, double yaw, double heartbeat) {
+      publish(camera, "imu", new double[] {yaw, 0, 0, 0, 0, 0, 0, 0, 0, 1}, now);
+      nt.getTable(camera).getDoubleTopic("hb").getEntry(Double.NaN).set(heartbeat, (long) (now * 1e6));
+    }
+    double number(String camera, String topic) {
+      return nt.getTable(camera).getEntry(topic).getDouble(Double.NaN);
+    }
     @Override public void close() { reader.close(); nt.close(); }
   }
 
@@ -48,6 +61,201 @@ public class LimelightVisionTest {
       values[start + 4] = 2; values[start + 5] = 2; values[start + 6] = 0.05;
     }
     return values;
+  }
+
+  @Test public void tagDistanceTiersUsePerTagRangesAndFallBackToCloserTags() {
+    try (var fixture = new Fixture(LimelightHeadingConfig.DEFAULT.withDistanceLimits(5, 2))) {
+      fixture.reader.setTagDistanceLimits(new LimelightVision.TagDistanceLimits(2, 4, 5));
+      double[][] distances = {{5, 4.9, 4.5}, {12, 3.6, 4}, {5.1, 4.1, 2}, {5.1, 4.1, 2.1}};
+      double[] groupMeans = {4.8, 3.8, 2};
+      for (int sample = 0; sample < distances.length; sample++) {
+        double[] tags = frame(3, 25);
+        for (int tag = 0; tag < 3; tag++) tags[15 + tag * 7] = distances[sample][tag];
+        tags[9] = Arrays.stream(distances[sample]).average().orElseThrow();
+        fixture.publish("first", "botpose_orb_wpiblue", tags, fixture.now);
+        fixture.heading(tags);
+        var result = fixture.reader.update(25, 0, 0, 0, true);
+        int count = 3 - sample;
+        if (count > 0) {
+          var position = result.orElseThrow();
+          assertEquals(count, position.tagCount());
+          assertEquals(groupMeans[sample], position.averageTagDistanceMeters(), 1e-9);
+          assertEquals(0.07 * groupMeans[sample] * groupMeans[sample] / count, position.positionStdDev(), 1e-9);
+          assertEquals(25, position.pose().getRotation().getDegrees(), 1e-9);
+        } else {
+          assertTrue(result.isEmpty());
+        }
+        var heading = fixture.reader.getHeadingMeasurement();
+        if (count > 0) assertEquals(count, heading.orElseThrow().tagCount());
+        else assertTrue(heading.isEmpty());
+        fixture.now += .02;
+      }
+    }
+  }
+
+  @Test public void headingFallbackKeepsAmbiguitySpanAndSingleTagChecks() {
+    try (var fixture = new Fixture()) {
+      fixture.reader.setTagDistanceLimits(new LimelightVision.TagDistanceLimits(2, 4, 5));
+      double[] tags = frame(3, 0);
+      tags[15] = 6;
+      tags[22] = 3.5;
+      tags[29] = 3.8;
+      tags[17] = .21;
+      fixture.heading(tags);
+      fixture.update(0);
+      assertTrue(fixture.reader.getHeadingMeasurement().isEmpty());
+
+      fixture.now += .02;
+      tags[17] = .05;
+      tags[8] = 0;
+      fixture.heading(tags);
+      fixture.update(0);
+      assertTrue(fixture.reader.getHeadingMeasurement().isEmpty());
+
+      fixture.now += .02;
+      tags[8] = 1;
+      tags[29] = 4.5;
+      tags[22] = 1.9;
+      fixture.heading(tags);
+      fixture.update(0);
+      assertTrue(fixture.reader.getHeadingMeasurement().isEmpty());
+      fixture.now += .02;
+      fixture.heading(tags);
+      fixture.reader.update(0, 0, 0, 0, true);
+      assertEquals(1, fixture.reader.getHeadingMeasurement().orElseThrow().tagCount());
+    }
+  }
+
+  @Test public void enabledHeadingUsesTighterTiersAndYawRateWithoutGatingPosition() {
+    try (var fixture = new Fixture(LimelightHeadingConfig.DEFAULT.withDistanceLimits(5, 2))) {
+      fixture.reader.setTagDistanceLimits(new LimelightVision.TagDistanceLimits(2, 4, 5));
+      fixture.reader.setEnabledHeadingTagDistanceLimits(new LimelightVision.TagDistanceLimits(1, 2, 2.5));
+      double[][] distances = {{2.5, 2.4, 2.3}, {3, 2, 1.8}, {3, 2.2, 1}, {3, 2.2, 1.1}};
+      for (int sample = 0; sample < distances.length; sample++) {
+        var tags = frame(3, 20);
+        for (int tag = 0; tag < 3; tag++) tags[15 + 7 * tag] = distances[sample][tag];
+        fixture.publish("first", "botpose_orb_wpiblue", tags, fixture.now);
+        fixture.heading(tags);
+        var position = fixture.reader.update(0, 0, 0, -45, true, true, false).orElseThrow();
+        assertEquals(3, position.tagCount());
+        int expectedHeadingCount = 3 - sample;
+        var heading = fixture.reader.getHeadingMeasurement();
+        if (expectedHeadingCount > 0) assertEquals(expectedHeadingCount, heading.orElseThrow().tagCount());
+        else assertTrue(heading.isEmpty());
+
+        fixture.now += .02;
+        fixture.heading(tags);
+        fixture.reader.update(0, 0, 0, -46, true, true, true);
+        assertEquals(3, fixture.reader.getHeadingMeasurement().orElseThrow().tagCount());
+        fixture.now += .02;
+      }
+
+      var tags = frame(3, 20);
+      fixture.publish("first", "botpose_orb_wpiblue", tags, fixture.now);
+      fixture.heading(tags);
+      assertTrue(fixture.reader.update(0, 0, 0, -46, true, true, false).isPresent());
+      assertTrue(fixture.reader.getHeadingMeasurement().isEmpty());
+      fixture.reader.update(0, 0, 0, 0, true, true, false);
+      assertTrue("The rejected heading frame is not replayed", fixture.reader.getHeadingMeasurement().isEmpty());
+    }
+  }
+
+  @Test public void imuAssistWaitsForTrustedHeadingAndFreshAlignedPositionPerCamera() {
+    try (var fixture = new Fixture()) {
+      fixture.reader.enableIMUAssist();
+      fixture.nt.getTable("first").getEntry("imu_yaw_offset").setDouble(0);
+      fixture.publishImu("first", 179, 10);
+      fixture.publishImu("second", 179, 10); // Older firmware can publish IMU data without the new diagnostic.
+      fixture.publish("first", "botpose_orb_wpiblue", frame(2, 179), fixture.now);
+      fixture.reader.update(179, 0, 0, 0, true, false);
+      assertEquals(0, fixture.number("first", "imumode_set"), 0);
+      assertEquals("first", fixture.reader.getPositionMeasurements().get(0).cameraName());
+
+      fixture.now = 10.10;
+      fixture.publish("first", "botpose_orb_wpiblue", frame(2, 179), fixture.now);
+      fixture.publish("second", "botpose_orb_wpiblue", frame(2, 179), fixture.now);
+      fixture.heading(frame(2, 179));
+      fixture.reader.update(179, 0, 0, 0, true, true);
+      assertEquals(1, fixture.number("first", "imumode_set"), 0);
+      assertEquals(0.001, fixture.number("first", "imuassistalpha_set"), 0);
+      assertEquals(0, fixture.number("second", "imumode_set"), 0);
+      assertEquals(java.util.List.of("second"), fixture.reader.getPositionMeasurements().stream()
+          .map(LimelightVision.Measurement::cameraName).toList());
+      assertEquals("first", fixture.reader.getHeadingMeasurement().orElseThrow().cameraName());
+
+      fixture.now = 10.35;
+      fixture.publishImu("first", 179, 20);
+      fixture.reader.update(179, 0, 0, 0);
+      assertEquals(4, fixture.number("first", "imumode_set"), 0);
+
+      fixture.now = 10.50;
+      fixture.publishImu("first", -150, 25);
+      fixture.publish("first", "botpose_orb_wpiblue", frame(2, -150), fixture.now);
+      assertTrue(fixture.reader.update(179, 0, 0, 0).isEmpty());
+
+      fixture.now = 10.55;
+      fixture.publishImu("first", -179, 27);
+      fixture.publish("first", "botpose_orb_wpiblue", frame(2, -179), fixture.now);
+      assertTrue("A pre-confirmation capture is dropped", fixture.reader.update(179, 0, 0, 0).isEmpty());
+
+      fixture.now = 10.65;
+      fixture.publish("first", "botpose_orb_wpiblue", frame(2, -179), fixture.now);
+      assertEquals("first", fixture.reader.update(179, 0, 0, 0).orElseThrow().cameraName());
+
+      fixture.reader.reseedIMUs();
+      fixture.now = 10.70;
+      fixture.publish("first", "botpose_orb_wpiblue", frame(2, -179), fixture.now);
+      assertTrue(fixture.reader.update(45, 0, 0, 0).isEmpty());
+      assertEquals(1, fixture.number("first", "imumode_set"), 0);
+      assertEquals(45, fixture.nt.getTable("first").getEntry("robot_orientation_set").getDoubleArray(new double[0])[0], 0);
+    }
+  }
+
+  @Test public void imuAssistReseedsOnlyTheCameraThatRebootsOrLosesTelemetry() {
+    try (var fixture = new Fixture()) {
+      fixture.reader.enableIMUAssist();
+      for (String camera : new String[] {"first", "second"}) {
+        fixture.nt.getTable(camera).getEntry("imu_yaw_offset").setDouble(0);
+        fixture.publishImu(camera, 0, 100);
+      }
+      fixture.update(0);
+      fixture.now = 10.25;
+      fixture.publishImu("first", 0, 110);
+      fixture.publishImu("second", 0, 110);
+      fixture.update(0);
+      fixture.now = 10.40;
+      fixture.publishImu("first", 0, 115);
+      fixture.publishImu("second", 0, 115);
+      fixture.update(0);
+
+      fixture.now = 10.50;
+      fixture.publishImu("first", 0, 1);
+      fixture.publish("first", "botpose_orb_wpiblue", frame(2, 0), fixture.now);
+      fixture.publish("second", "botpose_orb_wpiblue", frame(2, 0), fixture.now);
+      fixture.update(0);
+      assertEquals(1, fixture.number("first", "imumode_set"), 0);
+      assertEquals(4, fixture.number("second", "imumode_set"), 0);
+      assertEquals(java.util.List.of("second"), fixture.reader.getPositionMeasurements().stream()
+          .map(LimelightVision.Measurement::cameraName).toList());
+
+      fixture.now = 10.75;
+      fixture.publishImu("first", 0, 10);
+      fixture.publish("second", "botpose_orb_wpiblue", frame(2, 0), fixture.now);
+      fixture.update(0);
+      assertEquals(4, fixture.number("first", "imumode_set"), 0);
+      assertEquals(1, fixture.number("second", "imumode_set"), 0);
+      assertTrue(fixture.reader.getPositionMeasurements().isEmpty());
+
+      fixture.now = 10.90;
+      fixture.publishImu("first", 0, 15);
+      fixture.update(0);
+      fixture.now = 11.00;
+      fixture.publishImu("first", 20, 20);
+      fixture.publish("first", "botpose_orb_wpiblue", frame(2, 20), fixture.now);
+      fixture.update(0);
+      assertEquals("A large running yaw error requests a reseed", 1, fixture.number("first", "imumode_set"), 0);
+      assertTrue(fixture.reader.getPositionMeasurements().isEmpty());
+    }
   }
 
   @Test public void headingDistanceTunablesApplyToBothRecoveryPoliciesAndRetainValidLimits() {

@@ -215,6 +215,13 @@ public class VisionMeasurementFusionTest {
     }
   }
 
+  @Test public void unrestrictedHeadingFusionAcceptsLargeAngularDisagreement() {
+    var fixture = new Fixture(); // Starts at 90 degrees.
+    assertTrue(fixture.fusion.addHeading(heading(9.98), 10));
+    assertEquals(-90, fixture.fusion.headingErrorDegrees(), 1e-9);
+    assertTrue(fixture.estimator.getEstimatedPosition().getRotation().getDegrees() < 90);
+  }
+
   @Test public void stationaryHeadingLimitAcceptsOppositeHeadingAndRejectsInvalidMotion() {
     var fixture = new Fixture(); // Starts at 90 degrees.
     var config = LimelightHeadingConfig.DEFAULT;
