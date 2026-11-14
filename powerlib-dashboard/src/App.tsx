@@ -106,6 +106,7 @@ function AppContent() {
   const [robotAction, setRobotAction] = useState<RobotAction | null>(null);
   const robotActionBusy = useRef(false);
   const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(false);
+  const [connectionSource, setConnectionSource] = useState(clientRef.current.source);
   const [configOpen, setConfigOpen] = useState(false);
   const [networkTablesOpen, setNetworkTablesOpen] = useState(false);
   const [desiredTuningMode, setDesiredTuningMode] = useState<boolean | null>(null);
@@ -214,16 +215,21 @@ function AppContent() {
     setTopics([]);
 
     try {
-      clientRef.current.connect(connectionSettings.host, connectionSettings.port, (connected) => {
+      clientRef.current.connect(connectionSettings.host, connectionSettings.port, (connected, switched) => {
+        if (switched) {
+          setTopics([]);
+          tuningSyncRef.current!.connectionChanged(false);
+        }
         tuningSyncRef.current!.connectionChanged(connected);
+        if (connected) setConnectionSource(clientRef.current.source);
         const nextStatus = connected ? "connected" : "disconnected";
         connectionStatusRef.current = nextStatus;
         setStatus(nextStatus);
-      });
+      }, connectionSettings);
       networkTableWatchPrefixes.forEach((prefix) => {
         clientRef.current.watchPrefix(prefix, upsertTopic);
       });
-      clientRef.current.watchPrefix("/PowerLib/", upsertTopic, tuningUpdateIntervalMs);
+      clientRef.current.watchPrefix("/PowerLib/", upsertTopic, Math.max(tuningUpdateIntervalMs, connectionSettings.updateIntervalMs));
       clientRef.current.watchCameraAnnouncements(upsertTopic);
     } catch (caught) {
       tuningSyncRef.current!.connectionChanged(false);
@@ -240,15 +246,6 @@ function AppContent() {
     setAutoConnectPaused(false);
     attemptNetworkTablesConnection(true);
   }
-
-  useEffect(() => {
-    if (status !== "connected" || !networkTablesOpen) return;
-    const stop = clientRef.current.watchPrefix("/", upsertTopic);
-    return () => {
-      stop();
-      pruneTopics(snapshot => clientRef.current.isWatchedValue(snapshot.name));
-    };
-  }, [status, networkTablesOpen, clientRef, upsertTopic, pruneTopics]);
 
   function disconnectNetworkTables() {
     setAutoConnectPaused(true);
@@ -268,13 +265,25 @@ function AppContent() {
   useEffect(() => {
     tuningSyncRef.current!.reset();
     setDesiredTuningMode(null);
+  }, [connectionSettings.host, connectionSettings.port]);
+
+  useEffect(() => {
     automaticConnectRef.current();
     return () => {
       clientRef.current.disconnect();
       tuningSyncRef.current!.connectionChanged(false);
       connectionStatusRef.current = "idle";
     };
-  }, [clientRef, connectionSettings.host, connectionSettings.port]);
+  }, [clientRef, connectionSettings.host, connectionSettings.port, connectionSettings.updateIntervalMs, connectionSettings.heartbeatIntervalMs]);
+
+  useEffect(() => {
+    if (connectionStatusRef.current !== "connected" || !networkTablesOpen) return;
+    const stop = clientRef.current.watchPrefix("/", upsertTopic);
+    return () => {
+      stop();
+      pruneTopics(snapshot => clientRef.current.isWatchedValue(snapshot.name));
+    };
+  }, [status, connectionSettings, networkTablesOpen, clientRef, upsertTopic, pruneTopics]);
 
   function setTuningModeEnabled(enabled: boolean) {
     tuningSyncRef.current!.request(enabled);
@@ -378,7 +387,8 @@ function AppContent() {
               )}
               <Chip
                 color={status === "connected" ? "success" : status === "connecting" ? "warning" : "error"}
-                label={`${connectionSettings.host}:${connectionSettings.port}`}
+                label={status === "connected" && connectionSource === "WPILib NT4" ? "MCP" : `${connectionSettings.host}:${connectionSettings.port}`}
+                title={status === "connected" ? connectionSource : undefined}
                 variant="outlined"
               />
             </Stack>

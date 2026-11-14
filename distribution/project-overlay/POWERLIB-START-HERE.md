@@ -7,7 +7,11 @@
 
 The project keeps its original Gradle wrapper, `build.gradle`, WPILib preferences, team number, `Main.java` and `Robot.java`. WPILib and its Java tools are still required. The first robot build may download the vendor libraries referenced by the included dependency files.
 
-The included `.gitignore` excludes all of `power-tool/app/`, including Electron, application archives and resources. Robot source, `vendordeps/` and auto definitions in `power-tool/generated/` can be committed normally. Each developer gets the prebuilt app by extracting the same ZIP. Local build output, logs and simulator settings are also ignored.
+The included `.gitignore` excludes all of `power-tool/app/`, including Electron, application archives and resources. Robot source, `vendordeps/` and auto definitions in `power-tool/generated/` can be committed normally. Each developer gets the prebuilt app by extracting the same ZIP. Git also ignores local build output and simulator settings.
+
+Log Viewer downloads recordings to the project's `logs/` folder by default. The ZIP includes `logs/README.md`, which Git can track. Git ignores the recordings in this folder and common robot log formats elsewhere in the project.
+
+The ZIP also includes `integrations/mapping.json` and `integrations/wpilib.json` for **File → Settings → Integrations**. Git can track both JSON files and ignores the other contents of `integrations/`.
 
 Save in Auto Builder writes Java explicitly. Rebuild/restart simulation or deploy after saving changes. Simulation console output is in `build/power-tool/simulation.log`.
 
