@@ -37,19 +37,19 @@ The packaged release contains the runtime. Edit React components and imported as
 
 ## Build the distribution
 
-From Robot-Library on Windows with Node/npm available:
+Run these PowerShell scripts from Robot-Library on Windows with Node/npm available. They write ZIPs to `build/distributions/` by default.
 
-```powershell
-.\build-project-zip.ps1
-# Reuse installed npm dependencies:
-.\build-project-zip.ps1 -SkipInstall
-```
+| Script | ZIP | Extract into |
+|---|---|---|
+| `.\release-library-and-power-tool.ps1` | `Robot-Library-2026-Windows-x64.zip` | A clean WPILib 2026 Java Command Robot project |
+| `.\release-power-tool.ps1` | `Power-Tool-Windows-x64.zip` | An existing PowerLib robot project with Power Tool closed |
+| `.\release.ps1` | Both ZIPs | Use the instructions for each ZIP |
 
-Output: `build/distributions/Robot-Library-2026-Windows-x64.zip`. Power Tool is rebuilt and packaged before archiving. For an already packaged app, pass `-PowerToolDirectory .\PowerTool-local\win-unpacked`. The archive has no enclosing folder, includes `.gitignore`, and contains generic templates rather than the test robot's configuration. Pinned vendor snapshots live in `templates/vendordeps/`.
+The combined release builds Power Tool once and bundles that same build in both ZIPs. The full ZIP includes generic robot templates, pinned vendor snapshots, and the project overlay. The Power Tool update ZIP includes the prebuilt app under `power-tool/app/` and the launch scripts. Both archives are ready to extract into the project root. You can also pass `-PowerToolDirectory .\PowerTool-local\win-unpacked` to the full release script to package an existing app.
 
 New library files and robot templates under the copied trees are included recursively. New UI components and assets are included when imported by the app build. Use a full dependency installation when adding npm packages; `-SkipInstall` only skips that installation, not the build.
 
-Attach the resulting project ZIP to a [GitHub Release](https://github.com/FRC9410/Robot-Library/releases). The packaging command writes local output; it does not publish a release automatically. Users should choose the attached project ZIP instead of GitHub's automatic source archive.
+Attach the resulting ZIPs to a [GitHub Release](https://github.com/FRC9410/Robot-Library/releases). These scripts prepare the assets locally for upload.
 
 ## Validate a release
 
