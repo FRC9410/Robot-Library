@@ -3,6 +3,8 @@ package frc.powerlib.subsystems.io;
 public interface RelativePositionSubsystemIO {
   public static class Inputs {
     public double position = 0.0;
+    public double velocityRotationsPerSecond = 0.0;
+    public double appliedVoltage = 0.0;
     public double setpoint = 0.0;
   }
 

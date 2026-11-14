@@ -21,10 +21,9 @@ export function readSubsystemDocument(root: string) { return sourceOperation(roo
 export function saveSubsystemDocument(root: string, subsystems: GeneratedSubsystem[], swerve?: GeneratedSwerveConstants, revision?: string, deleted?: string[]) {
   return sourceOperation(root, async project => {
     await project.assertRevision(stateMachinePath, revision);
-    const before = (await subsystemRecords(project)).map(record => ({ id: record.data.id, type: record.data.type, name: record.data.name }));
     await writeSubsystems(project, subsystems, deleted);
     if (swerve) await writeSwerve(project, swerve);
-    if (JSON.stringify(before) !== JSON.stringify(subsystems.map(data => ({ id: data.id, type: data.type, name: data.name })))) await writeCharacterization(project);
+    await writeCharacterization(project);
     await writeTunableRegistry(project);
     return readSubsystemProject(project);
   });

@@ -107,6 +107,9 @@ public class RelativePositionSubsystem extends PowerSubsystem {
     return inputs.position;
   }
 
+  public double getReverseSoftLimit() { return config.reverseSoftLimit(); }
+  public double getForwardSoftLimit() { return config.forwardSoftLimit(); }
+
   public double getSetpoint() {
     return setpoint;
   }

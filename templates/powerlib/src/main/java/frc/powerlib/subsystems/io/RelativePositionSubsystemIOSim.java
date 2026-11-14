@@ -6,6 +6,7 @@ public class RelativePositionSubsystemIOSim implements RelativePositionSubsystem
   private final MechanismSimulation model;
   private final RelativePositionSubsystemConfig config;
   private double setpoint;
+  private double appliedVoltage;
   public RelativePositionSubsystemIOSim() { config = null; model = new MechanismSimulation(1, 2, 10); }
   public RelativePositionSubsystemIOSim(RelativePositionSubsystemConfig config) {
     this.config = config;
@@ -16,7 +17,10 @@ public class RelativePositionSubsystemIOSim implements RelativePositionSubsystem
   @Override public void updateInputs(Inputs inputs) {
     model.update();
     if (config != null) model.limits(config.reverseSoftLimit(), config.forwardSoftLimit());
-    inputs.position = model.position; inputs.setpoint = setpoint;
+    inputs.position = model.position;
+    inputs.velocityRotationsPerSecond = model.velocity;
+    inputs.appliedVoltage = appliedVoltage;
+    inputs.setpoint = setpoint;
   }
   @Override public void setPosition(double position) {
     if (config != null) {
@@ -26,7 +30,7 @@ public class RelativePositionSubsystemIOSim implements RelativePositionSubsystem
     }
     setpoint = position; model.position(position);
   }
-  @Override public void setVoltage(double volts) { model.voltage(volts); }
+  @Override public void setVoltage(double volts) { appliedVoltage = volts; model.voltage(volts); }
   @Override public void zeroEncoder(double position) { setpoint = position; model.reset(position); }
-  @Override public void stop(double stopVoltage) { model.voltage(stopVoltage); }
+  @Override public void stop(double stopVoltage) { setVoltage(stopVoltage); }
 }

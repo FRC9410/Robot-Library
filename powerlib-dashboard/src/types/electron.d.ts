@@ -60,6 +60,13 @@ declare global {
         swerve?: unknown;
         revision?: string;
       }>;
+      hasCharacterizationAccess: () => Promise<boolean>;
+      restartForCharacterization: () => Promise<boolean>;
+      startCharacterization: import("../features/characterization/runCharacterization").CharacterizationApi["start"];
+      collectCharacterization: import("../features/characterization/runCharacterization").CharacterizationApi["collect"];
+      recordCharacterizationDiagnostic: import("../features/characterization/runCharacterization").CharacterizationApi["diagnostic"];
+      finishCharacterization: import("../features/characterization/runCharacterization").CharacterizationApi["finish"];
+      controlCharacterizationDriverStation: import("../features/characterization/runCharacterization").CharacterizationApi["driver"];
       runRobotAction: (action: import("../../electron/robotActions").RobotAction) => Promise<import("../../electron/robotActions").RobotActionResult>;
       onMenuSettings: (callback: () => void) => () => void;
       onMenuRobotAction: (callback: (action: import("../../electron/robotActions").RobotAction) => void) => () => void;

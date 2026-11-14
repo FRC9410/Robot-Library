@@ -5,6 +5,7 @@ import frc.powerlib.configs.AbsolutePositionSubsystemConfig;
 public class AbsolutePositionSubsystemIOSim implements AbsolutePositionSubsystemIO {
   private final MechanismSimulation model;
   private double setpoint;
+  private double appliedVoltage;
   public AbsolutePositionSubsystemIOSim() { model = new MechanismSimulation(1, 2, 10); }
   public AbsolutePositionSubsystemIOSim(AbsolutePositionSubsystemConfig config) {
     model = new MechanismSimulation(config.leadConfig().sensorToMechanismRatio() * config.leadConfig().rotorToSensorRatio(),
@@ -16,9 +17,10 @@ public class AbsolutePositionSubsystemIOSim implements AbsolutePositionSubsystem
     model.update();
     inputs.positionRotations = model.position;
     inputs.velocityRotationsPerSecond = model.velocity;
+    inputs.appliedVoltage = appliedVoltage;
     inputs.setpointRotations = setpoint;
   }
   @Override public void setPositionRotations(double rotations) { setpoint = rotations; model.position(rotations); }
-  @Override public void setVoltage(double volts) { model.voltage(volts); }
-  @Override public void stop() { model.voltage(0); }
+  @Override public void setVoltage(double volts) { appliedVoltage = volts; model.voltage(volts); }
+  @Override public void stop() { setVoltage(0); }
 }

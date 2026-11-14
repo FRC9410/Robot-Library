@@ -5,6 +5,8 @@
 3. Double-click **Power Tool.cmd**. Power Tool is already built and includes Electron. Node, npm and an install script are not needed on this computer.
 4. Open **File → Settings** to configure the robot. Use **File → Build Robot**, **Build and Deploy**, **Sim with DS**, or **Sim without DS**. Sim with DS assumes FRC Driver Station is already running.
 
+Open Driver Station before Power Tool for automatic characterization. The launcher requests administrator access automatically if Driver Station is elevated; approve Windows' UAC prompt. Other launches run normally. Use `"Power Tool.cmd" -Administrator` to request administrator access explicitly.
+
 The project keeps its original Gradle wrapper, `build.gradle`, WPILib preferences, team number, `Main.java` and `Robot.java`. WPILib and its Java tools are still required. The first robot build may download the vendor libraries referenced by the included dependency files.
 
 The included `.gitignore` excludes all of `power-tool/app/`, including Electron, application archives and resources. Robot source, `vendordeps/` and auto definitions in `power-tool/generated/` can be committed normally. Each developer gets the prebuilt app by extracting the same ZIP. Git also ignores local build output and simulator settings.

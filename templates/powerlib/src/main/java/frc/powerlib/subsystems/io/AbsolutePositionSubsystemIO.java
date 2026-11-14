@@ -4,6 +4,7 @@ public interface AbsolutePositionSubsystemIO {
   public static class Inputs {
     public double positionRotations = 0.0;
     public double velocityRotationsPerSecond = 0.0;
+    public double appliedVoltage = 0.0;
     public double setpointRotations = 0.0;
   }
 

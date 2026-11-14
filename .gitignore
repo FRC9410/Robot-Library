@@ -48,6 +48,8 @@ build/
 
 # Local Power Tool authoring/build artifacts
 power-tool/
+# Keep the release startup helper in source control.
+!distribution/project-overlay/power-tool/
 /integrations/*
 !/integrations/mapping.json
 !/integrations/wpilib.json

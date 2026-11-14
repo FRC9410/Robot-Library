@@ -49,6 +49,7 @@ preserved = {name: (fixture / name).read_bytes() for name in preserved_names}
 with zipfile.ZipFile(args.zip) as archive:
     names = archive.namelist()
     assert '.gitignore' in names and 'Power Tool.cmd' in names
+    assert 'power-tool/launch.ps1' in names, 'ZIP omitted the privilege-aware startup helper'
     assert archive.read('logs/README.md') == (root / 'distribution/project-overlay/logs/README.md').read_bytes()
     integration_source = root / 'distribution/integrations'
     for path in integration_source.rglob('*'):

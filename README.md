@@ -50,4 +50,4 @@ Download the project ZIP from [GitHub Releases](https://github.com/FRC9410/Robot
 
 ## Working on Robot-Library
 
-Build the release ZIP with `./build-project-zip.ps1`; use `-SkipInstall` to reuse installed npm dependencies while still rebuilding the app. See [Development and releases](docs/development.md) for source setup, output paths and validation.
+Build both release ZIPs with `.\release.ps1`. Use `-SkipInstall` to reuse installed npm dependencies while still rebuilding the app. See [Development and releases](docs/development.md) for source setup, output paths and validation.

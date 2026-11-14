@@ -90,7 +90,8 @@ function AppContent() {
     pruneTopics
   } = useNetworkTables();
   const topics = useTopics("app");
-  const [activeView, setActiveView] = useState<AppView>("dashboard");
+  const [characterizeOnStartup] = useState(() => new URLSearchParams(window.location.search).get("characterize") === "1");
+  const [activeView, setActiveView] = useState<AppView>(characterizeOnStartup ? "logs" : "dashboard");
   const [subsystemDocument, setSubsystemDocument] = useState<SubsystemDocumentState>({
     loading: false,
     exists: false,
@@ -446,7 +447,7 @@ function AppContent() {
 
           {/* Stays mounted so an open log survives switching tabs. */}
           <Box sx={{ display: activeView === "logs" ? "flex" : "none", flexDirection: "column", flex: 1, minHeight: 0 }}>
-            <LogsPanel active={activeView === "logs"} subsystems={subsystemDocument.subsystems} />
+            <LogsPanel active={activeView === "logs"} subsystems={subsystemDocument.subsystems} characterizeOnStartup={characterizeOnStartup} />
           </Box>
 
           {activeView === "limelights" && (

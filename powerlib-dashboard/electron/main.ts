@@ -21,6 +21,9 @@ import { readUploadedField, removeUploadedField, saveUploadedField } from "./upl
 import { validateUploadedField } from "./uploadedField.js";
 import { generateAutoCode, readAutoFiles, saveAutoFiles } from "./autoFiles.js";
 import { runRobotAction } from "./robotActions.js";
+import { startCharacterization, collectCharacterization, recordCharacterizationDiagnostic, finishCharacterization, canControlCharacterizationDriver, session as characterizationSession } from "./characterization/files.js";
+import { acknowledgeCharacterizationRestart, hasCharacterizationAccess, openCharacterizationOnStartup, startElevatedCharacterization } from "./characterization/elevation.js";
+import { controlDriverStation } from "./characterization/driverStation.js";
 import { IntegrationManager } from "./integrations/manager.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -271,6 +274,27 @@ ipcMain.handle("powerlib:save-constants", async (_event, id, source, constants) 
 ipcMain.handle("powerlib:run-robot-action", (event, action: unknown) => runRobotAction(getDetectedRobotRoot(), action,
   message => { if (!event.sender.isDestroyed()) event.sender.send("powerlib:robot-action-error", message); }));
 
+ipcMain.handle("powerlib:characterization-access", () => hasCharacterizationAccess());
+ipcMain.handle("powerlib:characterization-restart", async () => {
+  if (process.platform !== "win32" || await hasCharacterizationAccess()) return false;
+  const started = await startElevatedCharacterization(process.execPath, getDetectedRobotRoot(), app.isPackaged ? undefined : app.getAppPath());
+  if (started) app.quit();
+  return started;
+});
+ipcMain.handle("powerlib:characterization-start", async (_event, data) => {
+  if (!await hasCharacterizationAccess()) throw Error("Restart Power Tool as administrator to characterize.");
+  return startCharacterization(getDetectedRobotRoot(), data);
+});
+ipcMain.handle("powerlib:characterization-collect", (_event, id, test) => collectCharacterization(id, test));
+ipcMain.handle("powerlib:characterization-diagnostic", (_event, id, entry) => recordCharacterizationDiagnostic(id, entry));
+ipcMain.handle("powerlib:characterization-finish", (_event, id, outcome, error) => finishCharacterization(id, outcome, error));
+ipcMain.handle("powerlib:characterization-driver", async (_event, id, action) => {
+  const { report } = characterizationSession(id);
+  if (report.controlMode !== "driver-station" || report.outcome !== "running" || !["check", "enable", "disable"].includes(action)
+    || !canControlCharacterizationDriver(report) || !await hasCharacterizationAccess()) throw Error("Invalid Driver Station control request.");
+  await controlDriverStation(action);
+});
+
 /** Folders that may hold CTRE's Owlet; AdvantageScope keeps every version it has downloaded. */
 function owletDirectories() {
   return Array.from(new Set([
@@ -451,19 +475,31 @@ function createWindow() {
     return { action: "deny" };
   });
 
+  if (openCharacterizationOnStartup) {
+    window.webContents.once("did-finish-load", () => {
+      void acknowledgeCharacterizationRestart().then(restoreIntegrations);
+    });
+  }
   createAppMenu(window);
   if (process.platform !== "darwin") window.setMenuBarVisibility(false);
 
   if (isDev && process.env.VITE_DEV_SERVER_URL) {
-    window.loadURL(process.env.VITE_DEV_SERVER_URL);
+    const url = new URL(process.env.VITE_DEV_SERVER_URL);
+    if (openCharacterizationOnStartup) url.searchParams.set("characterize", "1");
+    window.loadURL(url.href);
   } else {
-    window.loadFile(path.join(__dirname, "../dist-renderer/index.html"));
+    window.loadFile(path.join(__dirname, "../dist-renderer/index.html"),
+      openCharacterizationOnStartup ? { query: { characterize: "1" } } : undefined);
   }
+}
+
+function restoreIntegrations() {
+  void integrations().restore().catch(error => console.warn("Could not restore integrations:", error));
 }
 
 app.whenReady().then(() => {
   createWindow();
-  void integrations().restore().catch(error => console.warn("Could not restore integrations:", error));
+  if (!openCharacterizationOnStartup) restoreIntegrations();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
