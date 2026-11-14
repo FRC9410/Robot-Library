@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "id": "mcp-wpilib",
+  "name": "WPILib MCP Servers",
+  "description": "Optional assistant tools for live robot data, recorded logs, simulation, WPILib commands, and Java profiling.",
+  "requirements": {
+    "commands": ["uv"],
+    "python": "3.13"
+  },
+  "inputs": {
+    "nt4Host": {
+      "label": "Robot or simulation host",
+      "type": "string",
+      "default": "127.0.0.1"
+    },
+    "nt4Port": {
+      "label": "NetworkTables port",
+      "type": "integer",
+      "default": 5810,
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "logDirectory": {
+      "label": "Robot log folder",
+      "type": "directory",
+      "default": "${robotProjectDir}/logs",
+      "required": true
+    },
+    "jfrDirectory": {
+      "label": "Java profiling recordings folder",
+      "type": "directory",
+      "default": "${robotProjectDir}/integrations/recordings",
+      "required": true
+    }
+  },
+  "servers": {
+    "wpilib-nt4": {
+      "name": "Live Robot Data",
+      "description": "Read live NetworkTables values from a robot or simulation. Robot writes are disabled.",
+      "documentation": "docs/NT4.md",
+      "enabledByDefault": false,
+      "transport": "stdio",
+      "command": "uv",
+      "args": ["--directory", "${integrationDir}", "run", "--locked", "--no-dev", "--python", "3.13", "mcp-wpilib-nt4"],
+      "env": {
+        "NT4_HOST": "${nt4Host}",
+        "NT4_PORT": "${nt4Port}",
+        "NT4_READ_ONLY": "1"
+      }
+    },
+    "wpilib-wpilog": {
+      "name": "Robot Log Analysis",
+      "description": "Read and analyze recorded .wpilog files in the selected log folder.",
+      "documentation": "docs/WPILOG.md",
+      "enabledByDefault": false,
+      "transport": "stdio",
+      "command": "uv",
+      "args": ["--directory", "${integrationDir}", "run", "--locked", "--no-dev", "--python", "3.13", "mcp-wpilib-wpilog"],
+      "env": {
+        "WPILOG_DIR": "${logDirectory}"
+      }
+    },
+    "wpilib-sim": {
+      "name": "Robot Simulation",
+      "description": "Run WPILib desktop simulation and inspect its console output for the selected robot project.",
+      "documentation": "docs/SIM.md",
+      "enabledByDefault": false,
+      "transport": "stdio",
+      "command": "uv",
+      "args": ["--directory", "${integrationDir}", "run", "--locked", "--no-dev", "--python", "3.13", "mcp-wpilib-sim"],
+      "env": {
+        "SIM_PROJECT_DIR": "${robotProjectDir}"
+      }
+    },
+    "wpilib-vscode": {
+      "name": "WPILib Project Commands",
+      "description": "Use WPILib build, test, and project commands. Deployment requires a separate server opt-in.",
+      "documentation": "docs/VSCODE.md",
+      "enabledByDefault": false,
+      "transport": "stdio",
+      "command": "uv",
+      "args": ["--directory", "${integrationDir}", "run", "--locked", "--no-dev", "--python", "3.13", "mcp-wpilib-vscode"],
+      "env": {
+        "VSCODE_PROJECT_DIR": "${robotProjectDir}"
+      }
+    },
+    "jfr": {
+      "name": "Java Profiling",
+      "description": "Record and analyze Java Flight Recorder data. Recording requires a compatible JDK.",
+      "documentation": "docs/JFR.md",
+      "enabledByDefault": false,
+      "transport": "stdio",
+      "command": "uv",
+      "args": ["--directory", "${integrationDir}", "run", "--locked", "--no-dev", "--python", "3.13", "mcp-jfr"],
+      "env": {
+        "JFR_DIR": "${jfrDirectory}"
+      }
+    }
+  }
+}

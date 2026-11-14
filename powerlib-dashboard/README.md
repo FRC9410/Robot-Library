@@ -2,6 +2,8 @@
 
 User guides: [Power Tool](../docs/power-tool.md), [Auto Builder](../docs/auto-builder.md), and [Log Viewer](../docs/log-viewer.md). This file contains the more detailed Power Tool source and UI reference.
 
+**File → Settings → Integrations** builds its list from the project catalog and runs the servers you enable. [Integration setup and catalog format](../docs/integrations.md)
+
 ## Shared field layouts
 
 Choose **View → Field Layout** or **File → Settings → Field → Field layout** to select the

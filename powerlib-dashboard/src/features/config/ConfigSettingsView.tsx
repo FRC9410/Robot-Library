@@ -7,6 +7,7 @@ import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import StraightenIcon from "@mui/icons-material/Straighten";
 import VideocamOutlinedIcon from "@mui/icons-material/VideocamOutlined";
 import ListAltIcon from "@mui/icons-material/ListAlt";
+import ExtensionOutlinedIcon from "@mui/icons-material/ExtensionOutlined";
 import type { GeneratedSubsystem, SubsystemDocumentState } from "../subsystems/types";
 import { FieldSettings } from "./FieldSettings";
 import { SubsystemSettings } from "./SubsystemSettings";
@@ -14,6 +15,7 @@ import { VisionSettings } from "./VisionSettings";
 import { StatesSettings } from "./StatesSettings";
 import RouteIcon from "@mui/icons-material/Route";
 import { AutoSettings } from "./AutoSettings";
+import { IntegrationsSettings } from "./IntegrationsSettings";
 import type { useAutoEditor } from "../autos/useAutoEditor";
 
 export function ConfigSettingsView({ autoEditor, document, onRefresh, onCreate, onEdit, onClose, titleId, titleRef }: {
@@ -26,7 +28,7 @@ export function ConfigSettingsView({ autoEditor, document, onRefresh, onCreate, 
   titleId: string;
   titleRef: Ref<HTMLHeadingElement>;
 }) {
-  const [category, setCategory] = useState<"subsystems" | "field" | "vision" | "states" | "auto">("subsystems");
+  const [category, setCategory] = useState<"subsystems" | "field" | "vision" | "states" | "auto" | "integrations">("subsystems");
   return <>
     <Box className="config-header">
       <SettingsOutlinedIcon color="primary" />
@@ -42,9 +44,10 @@ export function ConfigSettingsView({ autoEditor, document, onRefresh, onCreate, 
           <ListItemButton selected={category === "vision"} aria-current={category === "vision" ? "page" : undefined} onClick={() => setCategory("vision")}><ListItemIcon><VideocamOutlinedIcon /></ListItemIcon><ListItemText primary="Vision" /></ListItemButton>
           <ListItemButton selected={category === "field"} aria-current={category === "field" ? "page" : undefined} onClick={() => setCategory("field")}><ListItemIcon><StraightenIcon /></ListItemIcon><ListItemText primary="Field" /></ListItemButton>
           <ListItemButton selected={category === "auto"} aria-current={category === "auto" ? "page" : undefined} onClick={() => setCategory("auto")}><ListItemIcon><RouteIcon /></ListItemIcon><ListItemText primary="Auto" /></ListItemButton>
+          <ListItemButton selected={category === "integrations"} aria-current={category === "integrations" ? "page" : undefined} onClick={() => setCategory("integrations")}><ListItemIcon><ExtensionOutlinedIcon /></ListItemIcon><ListItemText primary="Integrations" /></ListItemButton>
         </List>
       </Box>
-      {category === "auto" ? <AutoSettings editor={autoEditor} /> : category === "field" ? <FieldSettings /> : category === "vision" ? <VisionSettings /> : category === "states" ? <StatesSettings /> : <SubsystemSettings document={document} onRefresh={onRefresh} onCreate={onCreate} onEdit={onEdit} />}
+      {category === "integrations" ? <IntegrationsSettings /> : category === "auto" ? <AutoSettings editor={autoEditor} /> : category === "field" ? <FieldSettings /> : category === "vision" ? <VisionSettings /> : category === "states" ? <StatesSettings /> : <SubsystemSettings document={document} onRefresh={onRefresh} onCreate={onCreate} onEdit={onEdit} />}
     </Box>
   </>;
 }

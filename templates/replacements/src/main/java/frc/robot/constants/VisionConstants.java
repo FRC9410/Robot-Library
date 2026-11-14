@@ -4,6 +4,7 @@ import frc.powerlib.configs.LimelightVisionConfig;
 import frc.powerlib.configs.LimelightHeadingConfig;
 import frc.powerlib.configs.VisionHeadingInitializationConfig;
 import frc.powerlib.configs.VisionPoseFilterConfig;
+import frc.powerlib.vision.LimelightVision.TagDistanceLimits;
 
 public class VisionConstants {
   public static final double LIMELIGHT_FOV_DEGREES = 60.0;
@@ -13,10 +14,13 @@ public class VisionConstants {
   // Measurements are ranked by quality; camera order breaks ties. Empty means no Limelights.
   // Example: {"limelight-b", "limelight-l", "limelight-r"}
   public static final String[] LIMELIGHT_NAMES = {LIMELIGHT_NAME};
+  public static final boolean LIMELIGHT_IMU_ASSIST_ENABLED = true;
+  public static final TagDistanceLimits TAG_DISTANCE_LIMITS = new TagDistanceLimits(2.0, 4.0, 5.0);
+  public static final TagDistanceLimits ENABLED_HEADING_TAG_DISTANCE_LIMITS = new TagDistanceLimits(1.0, 2.0, 2.5);
   // POWERLIB LOCALIZATION CONSTANTS START - DO NOT DELETE
   public static final double POSITION_TARGET_AREA_THRESHOLD = 0.0;
-  public static final double POSITION_MAX_TARGET_DISTANCE_METERS = 6.25;
-  public static final double HEADING_MAX_TAG_DISTANCE_METERS = 4.0;
+  public static final double POSITION_MAX_TARGET_DISTANCE_METERS = 5.0;
+  public static final double HEADING_MAX_TAG_DISTANCE_METERS = 5.0;
   public static final double HEADING_SINGLE_TAG_MAX_DISTANCE_METERS = 2.0;
   // POWERLIB LOCALIZATION CONSTANTS END - DO NOT DELETE
   public static final LimelightVisionConfig CONFIG = LimelightVisionConfig.DEFAULT.withPositionLimits(

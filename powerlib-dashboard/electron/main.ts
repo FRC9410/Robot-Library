@@ -23,6 +23,7 @@ import { generateAutoCode, readAutoFiles, saveAutoFiles } from "./autoFiles.js";
 import { runRobotAction } from "./robotActions.js";
 import { startCharacterization, collectCharacterization, recordCharacterizationDiagnostic, finishCharacterization, canControlCharacterizationDriver, session as characterizationSession } from "./characterization/files.js";
 import { controlDriverStation } from "./characterization/driverStation.js";
+import { IntegrationManager } from "./integrations/manager.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -204,6 +205,37 @@ function getPowerToolRootCandidates() {
   );
 }
 
+let integrationManager: IntegrationManager | undefined;
+function integrations() {
+  const catalog = app.isPackaged ? path.join(process.resourcesPath, "integrations-catalog")
+    : path.resolve(__dirname, "../../distribution/integrations");
+  const runtime = app.isPackaged ? path.join(process.resourcesPath, "integrations-runtime") : path.resolve(__dirname, "../integrations-runtime");
+  return integrationManager ??= new IntegrationManager(getDetectedRobotRoot(), catalog, path.join(runtime, "wpilib-nt4.py"));
+}
+
+ipcMain.handle("powerlib:dashboard-nt4", (_event, request: unknown) => integrations().dashboardNt4(request));
+ipcMain.handle("powerlib:list-integrations", () => integrations().list());
+ipcMain.handle("powerlib:install-integration", (_event, id: unknown) => integrations().install(id));
+ipcMain.handle("powerlib:enable-integration-server", (_event, id: unknown, server: unknown, enabled: unknown) =>
+  integrations().enable(id, server, enabled));
+ipcMain.handle("powerlib:uninstall-integration", async (event, id: unknown) => {
+  const manager = integrations();
+  const integration = (await manager.list()).find(entry => entry.id === id);
+  if (!integration) throw new Error("Unknown integration.");
+  if (!integration.installed) return;
+  const owner = BrowserWindow.fromWebContents(event.sender);
+  const options: Electron.MessageBoxOptions = {
+    type: "warning", buttons: ["Cancel", "Uninstall"], defaultId: 0, cancelId: 0, noLink: true,
+    message: `Uninstall ${integration.name}?`,
+    detail: "Power Tool will stop its servers and move the installed package folder to the trash. Your integration settings will be kept."
+  };
+  const result = owner ? await dialog.showMessageBox(owner, options) : await dialog.showMessageBox(options);
+  if (result.response === 1) await manager.uninstall(id, directory => shell.trashItem(directory));
+});
+ipcMain.handle("powerlib:enable-all-integration-servers", (_event, id: unknown, enabled: unknown) =>
+  integrations().enable(id, null, enabled));
+ipcMain.handle("powerlib:save-integration-inputs", (_event, id: unknown, values: unknown) => integrations().saveInputs(id, values));
+
 ipcMain.handle("powerlib:read-vision", async () => readVisionConfig(getDetectedRobotRoot()));
 ipcMain.handle("powerlib:read-autos", () => readAutoFiles(getDetectedRobotRoot()));
 ipcMain.handle("powerlib:save-autos", (_event, document: unknown, revision: unknown) => saveAutoFiles(getDetectedRobotRoot(), document, revision));
@@ -362,7 +394,7 @@ ipcMain.handle("powerlib:open-log-files", async (_event, filePaths: unknown) => 
   return readLogFiles(filePaths);
 });
 
-ipcMain.handle("powerlib:default-logs-folder", () => path.join(app.getPath("documents"), "Power Tool", "Logs"));
+ipcMain.handle("powerlib:default-logs-folder", () => path.join(getDetectedRobotRoot(), "logs"));
 
 ipcMain.handle("powerlib:list-logs", async (_event, folder: unknown) => {
   if (typeof folder !== "string" || !folder) throw new Error("Pick a logs folder first.");
@@ -444,12 +476,20 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+  void integrations().restore().catch(error => console.warn("Could not restore integrations:", error));
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     }
   });
+});
+
+let integrationsClosed = false;
+app.on("will-quit", (event) => {
+  if (!integrationManager || integrationsClosed) return;
+  event.preventDefault();
+  void integrationManager.close().finally(() => { integrationsClosed = true; app.quit(); });
 });
 
 app.on("window-all-closed", () => {
