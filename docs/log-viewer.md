@@ -4,7 +4,7 @@
 
 Use the **Logs** tab to review saved robot runs. You can open local files without a live robot connection, or download logs from a reachable robot.
 
-Use **Characterize Subsystems** to run the automatic SysId workflow for velocity, velocity-torque, drive and steering motors. See [Characterization](characterization.md) for setup, test limits, gain units and saved reports.
+Use **Characterize Robot** for automatic velocity and steering SysId, the manual drive SysId walkthrough, and the crawl and SysId workflows for arms and elevators. [Characterization](characterization.md)
 
 - [Open a local log](#open-a-local-log)
 - [Download logs from the robot](#download-logs-from-the-robot)

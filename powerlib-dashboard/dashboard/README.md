@@ -31,6 +31,6 @@ with the other app views. Keep your dashboard customization in version control
 and review shared component interfaces when updating the source checkout.
 
 Run `npm run build` from `powerlib-dashboard/` after editing. Run
-`./build-project-zip.ps1 -SkipInstall` from the repository root to package the
-application and starter robot files together. To return to the generic view,
+`./release.ps1 -SkipInstall` from the repository root to package both release ZIPs.
+To return to the generic view,
 restore the original export in `index.tsx`.

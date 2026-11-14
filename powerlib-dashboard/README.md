@@ -28,7 +28,7 @@ The dimensions persist on this laptop across field-layout changes and restarts.
 
 Power Tool opens at 1920 × 1200. Create a routine with **New auto**. The Steps panel
 has one **Add step** dropdown with **Add point**, **Add wait**, **Execute state**, and
-**Wait for state**. The standalone state steps use a Robot state dropdown and run
+**Wait for state**, and **Add branch**. The standalone state steps use a Robot state dropdown and run
 in list order. A drive point's
 settings include optional **Execute state** and **Wait for state** dropdowns, both
 None by default. After arrival, the robot requests the Execute state if set, then
@@ -36,8 +36,8 @@ waits for the selected actual state if set, before proceeding. State waits have 
 timeout; older saved state timeouts are disabled. Either option works independently.
 Add wait inserts a timed delay. The settings divider stays outside the scroll area.
 All new steps go immediately after the selected step, or at the end when none is
-selected. Each step row has a trash icon. Select a step to edit its settings. Empty
-field clicks do nothing. Create the first point with **Add step → Add point**.
+selected. Each step row has a trash icon. Select a step to edit its settings. Click
+empty field space to clear the selection. Create the first point with **Add step → Add point**.
 Select a point to show its green **+** handle, then drag it to preview a new point and release
 to insert it immediately after its source. The new point inherits the source heading;
 the source stays fixed. Clicking the handle without dragging adds nothing; Escape
@@ -49,9 +49,9 @@ Numbers sit inside point dots; the selected point is filled without a focus box.
 The dotted segment leading into the selected point is highlighted white and thicker.
 Field drags do not select text or highlight the field border, and creation handles
 only appear on the selected point, hide while dragging the heading, and return on release.
-The first point is the simulation start. Existing standalone state steps from older
-documents retain their original order and behavior. Existing point state actions
-also remain available and unchanged. Mid-drive progress actions are planned for a later phase.
+The first point sets the starting pose in simulation. Use **Turning** to turn immediately, turn
+after a percentage of the leg, or face a field point throughout the leg. The **Limit turn rate**
+option sets a maximum for that leg.
 Name and alliance share one
 row above the field. Delete a routine from its list row; confirmation is required.
 Generated routines are never defaults: None remains the initial chooser selection.
@@ -64,8 +64,7 @@ Drive steps finish within their distance and measured-speed tolerances. Enable
 **Wait for heading** to also require alignment with the commanded heading; its
 default tolerance is 10 degrees, adjustable above 0 through 180 degrees. It is off
 for new steps and older documents. Java callers can opt in with
-`.withHeadingTolerance(Rotation2d.fromDegrees(10))`. Saved documents use version 5
-so older generators cannot silently ignore named points, mirroring, or point settings.
+`.withHeadingTolerance(Rotation2d.fromDegrees(10))`. Saved auto documents use version 6.
 
 Undo and redo icons sit beside the **Steps** label. Each row has a move icon,
 duplicate icon, and trash icon. Drag anywhere on a row to move it; using the move
@@ -157,7 +156,7 @@ npm run dev
 
 ## NetworkTables
 
-This app uses `ntcore-ts-client`, a TypeScript client for WPILib NetworkTables 4 over WebSocket. The UI connects to a selected host on port `5810`, watches configurable topic prefixes, and can publish boolean, integer, double, and string topics.
+Power Tool can share the optional WPILib **Live Robot Data** server connection when it matches the selected host and port. It uses `ntcore-ts-client` over WebSocket when the shared connection is unavailable. The default port is `5810`. The topic explorer supports configurable prefixes, and the app supports boolean, integer, double, and string publications. [Integration setup](../docs/integrations.md)
 
 Common robot addresses:
 
@@ -183,11 +182,9 @@ Rows appear as matching topic values arrive from NetworkTables.
 ## Custom dashboard
 
 The Dashboard tab renders `dashboard/index.tsx`, which initially re-exports the
-generic dashboard. Customize that entry point and keep all custom
-components, styles and assets in `dashboard/`. Installs and updates seed this
-folder only when it is missing and preserve an existing folder without merging
-or overwriting any files. The shared application and generic dashboard still
-update normally. See [the custom dashboard guide](dashboard/README.md).
+generic dashboard. Customize that entry point in this source checkout and keep custom
+components, styles and assets in `dashboard/`. Rebuild and package Power Tool to distribute
+those changes. [Custom dashboard guide](dashboard/README.md)
 
 ## Cameras and Limelight configuration
 
@@ -204,7 +201,7 @@ unless a configuration address was previously saved for that camera.
 
 ## Configuration
 
-Open **Config** in the dashboard header for the settings modal. Select
+Open **File → Settings** for the settings modal. Select
 **Subsystems** on the left and expand a subsystem to inspect its read-only
 configuration. The **Edit** action stays in each expander header.
 
@@ -254,8 +251,10 @@ edits at 5 Hz while Tuning is enabled and keeps the last applied values when
 disabled. Position filters and heading filters have independent distance limits.
 The overall heading distance also caps single-tag distance; single-tag recovery
 still requires its stricter ambiguity, freshness and stationary stability checks.
-Defaults preserve the prior policy: no minimum area and the configured maximum
-position distance (6.25 m), with heading limits of 4 m and 2 m for single tags.
+The starter defaults to no minimum area, a 5 m cap for position and multi-tag heading,
+and a 2 m cap for single-tag heading. These settings can limit the per-tag tiers defined in
+`VisionConstants.java`. Enabled MegaTag1 heading uses its own 1/2/2.5 m tiers.
+[Vision filtering](../docs/vision.md#heading-correction-and-camera-selection)
 Older robots show unavailable fields until the library is updated.
 Apply changes live values. Save tuned values reviews the current card's live values and saves selected differences directly to Java. Localization edits update the four defaults in VisionConstants and the recognized CONFIG/HEADING_CONFIG bindings while preserving other vision policy. Build and deploy to use the defaults at startup.
 
@@ -263,9 +262,10 @@ Saves serialize project operations, check source revisions and use recoverable m
 
 Successfully applied tunables also have an app-local JSON recovery cache, isolated by robot project and connection profile/host/port. Restore edits loads matching values into pending drafts after an app restart. It never automatically reapplies them or changes code defaults. Apply and Save tuned values remain separate actions.
 
-The app has Dashboard, Limelights and Logs tabs; NetworkTables opens in a drawer from the View menu. Subsystem
-configuration is accessed through Config on the Dashboard; mechanism tuning is
-accessed through the enabled mechanism cards.
+The app has Dashboard, Autos and Logs tabs. The Limelights tab appears when cameras are discovered.
+Open the NetworkTables drawer from the View menu, subsystem configuration from **File → Settings**,
+and live mechanism tuning from the Dashboard cards. Open **Logs → Characterize Robot** for SysId
+and position crawl. [Characterization guide](../docs/characterization.md)
 
 File → Settings → Vision manages an ordered list of Limelights, with Add, Edit and Delete.
 New names always use `limelight-` followed by lowercase letters, numbers and
@@ -301,14 +301,12 @@ its contents into a clean WPILib robot project and launch **Power Tool.cmd**.
 They do not need Node or npm. The bundled `power-tool/app/` directory is ignored
 by Git; robot source and auto definitions remain available to commit.
 
-Maintainers build the ZIP from the Robot-Library root with:
+Maintainers build both release ZIPs from the Robot-Library root with:
 
 ```powershell
-.\build-project-zip.ps1 -SkipInstall
+.\release.ps1 -SkipInstall
 ```
 
-Omit `-SkipInstall` when npm dependencies need to be installed. This builds the
-current UI and Electron code, then includes all release templates and pinned
-vendor dependency files. Output is
-`build/distributions/Robot-Library-2026-Windows-x64.zip`; attach it as a release
-asset. Packaging does not publish automatically.
+Omit `-SkipInstall` when npm dependencies need to be installed. The app-only ZIP updates
+Power Tool in an existing project. The full project ZIP also contains the robot templates
+and pinned vendor dependencies. Both appear under `build/distributions/`. [Release workflow](../docs/development.md#build-the-distribution)

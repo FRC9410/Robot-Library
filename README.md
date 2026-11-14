@@ -6,11 +6,18 @@ Every year, we found ourselves writing the same boilerplate for a new FRC robot:
 
 **Robot Library** grew out of that repeated work. It brings our reusable Java code, called **PowerLib**, together with starter files for a WPILib robot project. It provides a foundation for mechanisms, robot states, autonomous commands, telemetry and vision, while leaving each team to build the behavior its robot needs.
 
-**Power Tool** is the desktop companion to that library. It puts configuration, live robot data, tuning, autonomous editing and log viewing in one place, helping us work with the robot throughout development and testing.
-
-As you configure the robot in Power Tool, it generates and maintains the corresponding Java boilerplate: mechanism classes, constants, state-handler scaffolding and registrations. Saving an autonomous routine also generates its Java commands. Your team can focus on the robot-specific behavior built on top of that foundation.
+**Power Tool** is the desktop companion to that library. It puts configuration, live robot data, tuning, autonomous editing, log viewing and subsystem characterization in one place.
 
 Our goal is to make the familiar work easier each season and give teams more time to understand, test and improve their robot.
+
+## What Power Tool provides and what your team owns
+
+| Area | Power Tool provides | Your team owns |
+|---|---|---|
+| Robot setup | Forms that generate and maintain supported Java code, including mechanism classes, constants, state-handler scaffolding and registrations | Hardware setup, Tuner X drivetrain configuration, and each Limelight's mounting pose, calibration and pipelines |
+| Robot behavior | Auto Builder generates Java commands from the routines you design | Driver bindings, state-handler logic, custom commands and match strategy |
+| Testing and tuning | Live telemetry, log playback, tuning controls and SysId characterization | Choosing and validating gains, testing on the actual robot, and deciding when the robot is ready to run |
+| Build and run | Menu actions for the project's Gradle build, deployment and simulation | WPILib project setup, robot deployment targets and FRC Driver Station operation |
 
 ## An opinionated ecosystem
 
@@ -35,7 +42,7 @@ Power Tool includes its runtime; users do not need Node or npm. WPILib and its J
 
 ## Documentation
 
-Download the project ZIP from [GitHub Releases](https://github.com/FRC9410/Robot-Library/releases). Start with the Getting Started guide below, then open the Java or vision reference when you need its implementation details.
+Download `Robot-Library-2026-Windows-x64.zip` for a new robot project or `Power-Tool-Windows-x64.zip` to update the desktop app in an existing project. [GitHub Releases](https://github.com/FRC9410/Robot-Library/releases)
 
 | Guide | What you will find |
 |---|---|
@@ -43,9 +50,11 @@ Download the project ZIP from [GitHub Releases](https://github.com/FRC9410/Robot
 | [Power Tool](docs/power-tool.md) | Connections, Dashboard, Settings, tuning, build and deployment |
 | [Auto Builder](docs/auto-builder.md) | Editing routines, saving, state steps and robot check branches |
 | [Log Viewer](docs/log-viewer.md) | Opening, downloading and reviewing recorded runs |
+| [Characterization](docs/characterization.md) | SysId for velocity, drivetrain and position mechanisms |
 | [Java programming](docs/java-programming.md) | Project structure, autonomous APIs, state handlers and telemetry |
 | [Vision](docs/vision.md) | Limelight setup, pose fusion and detailed heading policies |
 | [Simulation](docs/simulation.md) | Simulation launch modes and the MapleSim setup skill |
+| [Integrations](docs/integrations.md) | Optional WPILib NetworkTables and MCP tools |
 | [Development and releases](docs/development.md) | Source development, packaging and validation |
 
 ## Working on Robot-Library

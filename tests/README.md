@@ -2,7 +2,7 @@
 
 [Project README](../README.md) · [Development and releases](../docs/development.md)
 
-For the Windows ZIP distribution, build with `./build-project-zip.ps1 -SkipInstall`, then run:
+Build both Windows archives with `./release.ps1 -SkipInstall`. To validate the full project ZIP, run:
 
 ```powershell
 python tests/project-zip-check.py
@@ -53,7 +53,7 @@ powerlib-dashboard/node_modules/electron/dist/electron.exe powerlib-dashboard/sc
 powerlib-dashboard/node_modules/electron/dist/electron.exe powerlib-dashboard/scripts/vision-config-electron-check.cjs
 ```
 
-The launcher check intercepts all application launches and UAC requests. It verifies normal launch, elevation when Driver Station is elevated, inherited administrator access, explicit `-Administrator`, project paths containing spaces, canceled UAC without an unelevated fallback, and the distribution overlay's helper placement. Its live Driver Station privilege check is read-only.
+The launcher check intercepts application launches and UAC requests. It verifies normal launch, inherited administrator access, explicit `-Administrator`, project paths containing spaces, canceled UAC, and the distribution overlay's helper placement. The hidden desktop check exercises the app's separate characterization elevation prompt and cancellation with `--fixture-unelevated`.
 
 The characterization checks run real WPILib SysId profiles against a known motor model and CTRE's drivetrain simulator, including all four drive and steering motors. They cover the stock `testInit()` cancellation transition, disabled gaps, manual disable, communication lease expiry, FMS rejection and neutral cleanup. The analysis check converts their actual WPILOGs to CSV, recovers known kS/kV/kA, analyzes all eight drivetrain motors, checks current-based gain units and saves complete/failed/cancelled JSON reports. A local fake SFTP robot verifies hardware log collection. The hidden desktop check exercises the production Logs modal, preload and IPC with simulated telemetry. It verifies unchecked selections, eligibility, sequence completion, displayed results, cancellation and reset on reopen. No physical Driver Station keys or robot motor commands are sent by these checks.
 
@@ -124,7 +124,7 @@ The follow-up quality review adds these checks without changing the vision flush
 | Activate relative targets only after profile acknowledgement; hold position while pending | Prevent movement toward a new target under the wrong profile | MotionProfileSequencingTest, ConfigurationQueueTest, RelativeControlTest |
 | Share gain construction and change detection; deprecate unused slowThreshold access | Reduce repeated control configuration without introducing a tuning framework | MotorConfigurationTest and generated-source compilation |
 
-- Dashboard telemetry snapshots run every 100 ms (10 Hz). Tuning mode reconciliation, variable synchronization, mechanism/Swerve tuning, reflected constants, and the dashboard tuning display run every 200 ms (5 Hz). Apply sends a user's edit immediately; the robot reads it on the next tuning pass. Logging remains on every 20 ms robot loop (50 Hz). See [the telemetry contract](TELEMETRY-CONTRACT.md).
+- The robot publishes dashboard telemetry snapshots every 100 ms (10 Hz). The desktop live data interval defaults to 100 ms and can be changed in Connection Settings. Tuning reconciliation, variable synchronization, mechanism/Swerve tuning, reflected constants, and the dashboard tuning display run every 200 ms (5 Hz). Apply sends an edit immediately, and the robot reads it on the next tuning pass. Logging runs every 20 ms robot loop (50 Hz). [Telemetry contract](TELEMETRY-CONTRACT.md)
 - Power Tool retains the switch's requested mode through transient disconnects and resends it on reconnection. While connected, it checks both `/PowerLib/Tuning/RequestedEnabled` and the robot's `/PowerLib/Tuning/Enabled` acknowledgement every 200 ms and retries mismatches. A matching requested value alone is insufficient. Changing the host/port discards the old robot's switch intent. Failed publications retry without repeating the same error notification. `tuning-check.mjs` covers reboot recovery, stale cached observations, on/off requests, delayed/failing publication, connection changes, and tuning-view refreshes; `TuningCadenceTest` verifies five updates across fifty robot loops.
 - Shared data and tuning access belongs to the robot thread. Public mutable backing fields were replaced with getters and update methods. Returned maps are read-only; the legacy flat data getter returns a snapshot. Value-only updates retain previously registered units.
 - Mechanism tuning configuration is asynchronous. Configuration caches update after successful acknowledgement. Configuration writes use a 50 ms timeout and failed changes retry no sooner than 500 ms while still requested. The imperative motor registration and neutral-mode helpers remain synchronous setup APIs. Relative motion profiles are selected when a new position command arrives and remain selected while it executes. Standard Motion Magic controls remain supported without adding a Phoenix Pro requirement.
@@ -137,17 +137,17 @@ The follow-up quality review adds these checks without changing the vision flush
 - AutoTest checks equivalent direct-point and path-cursor sequences, drive completion before subsequent commands, copied destinations, mixed styles, fresh command instances, subsystem requirements, interrupted drive cleanup and invalid definitions. AutoBuilderTest checks chooser registration snapshots, repeated runs, alliance filtering, defaults and existing factory registration. The release-template check also verifies the Auto definition class and RobotAutos starter are present and wired, and source edits preserve custom robot checks and autos.
 - DriveToPoseControllerTest checks convergence, velocity/acceleration limits, measured-velocity handoffs, deceleration into a lower limit, initially moving away, and finish tolerances. LegSubpointsTest and LegHeadingTest check progress ordering, one-shot actions, replay/reset behavior, delayed turns, and facing a point. `drive-to-pose-check.ps1` runs the actual robot command with real WPILib commands/CTRE request types and hardware IO replaced: ideal tracking, scheduler cancellation, drivetrain ownership, blue-origin requests, measured-velocity conversion, heading/turn-rate requests, normal versus interrupted subpoints, command reuse, and stopping both translation and rotation. These are command/control checks; native drivetrain response remains part of manual simulation testing.
 - HealthChecksTest covers freshness boundaries, invalid timestamps/poses, and missing feedback. ConfigurationValidationTest verifies that simulation health checks still reject failed startup configuration.
-- LimelightVisionTest uses real local NetworkTables and a pose estimator to verify independent MT1 heading, unchanged MT2 weights, gradual drift correction, delayed-heading fusion that preserves newer translation and intervening rotation, timestamp/latency handling, angle wrapping, malformed/poor tag rejection, fast-turn suppression, camera priority, and consuming skipped/repeated frames. Disabled single-tag fallback tests cover quality checks, preference for multi-tag frames across cameras, stable heading initialization, and single-tag rejection during motion, with strict stationary fallback after enabling. VisionHeadingInitializerTest verifies default-enabled initialization, explicit disabling, configurable stationary limits, distinct stable frames, angle wrapping, and resets after motion or inconsistent observations. Release-template compilation verifies the heading configuration and robot integration together. Camera calibration and correction strength still need real-robot validation.
+- `LimelightVisionTest` uses local NetworkTables to verify capture timestamps, per-tag distance tiers and fallback, enabled yaw-rate gating, skipped-frame consumption, and per-camera IMU alignment and reseeding. `VisionHeadingInitializerTest` covers stable multi-tag and single-tag initialization, configurable stationary limits, angle wrapping, and recovery after inconsistent frames. Release-template compilation verifies starter wiring. Camera calibration and correction strength still need real-robot validation.
 - MotorConfigurationTest verifies optional stator limits preserve other velocity settings and reject invalid limits. The generated-robot check carries a configured limit through both velocity mechanism types, repeated saves, and compilation.
 - Mechanism simulation is a deterministic control/readiness model with acceleration and soft limits. It is not a calibrated model of mechanism inertia or loads. Swerve/MapleSim integration remains separate.
 
 VisionMeasurementFusionTest covers both latency orderings, long-delayed position updates, independent
 per-axis replay checks, heading/pose resets, convergence without position overshoot, and preserving
 intervening robot travel and rotation. Camera fallback tests cover simultaneous frames and preventing
-invalid cameras from erasing another camera's large-correction evidence. The default heading-error
-limits are 180 degrees stationary and 45 degrees moving. Tests cover translation/rotation thresholds,
-the 45-degree acceptance boundary, opposite-heading stationary correction, invalid motion feedback,
-custom limits and the legacy constructor. Tag quality, freshness, tilt, field bounds and height checks still apply.
+invalid cameras from erasing another camera's large-correction evidence. The reusable heading API
+tests cover explicit angular error limits, invalid motion feedback and the legacy constructor. The
+starter fuses eligible yaw across the full angular range. A MegaTag2 position correction over 1 m
+requires the existing per-camera agreement window. [Vision filters](../docs/vision.md#capture-time-pose-filtering)
 Heading diagnostics also cover rejected large errors and clearing the error when history is unavailable
 or a frame is repeated, so the subsystem can log the fusion result without a second history lookup.
 Position fusion tests cover a supplied capture-time pose without resampling, invalid/missing history,
@@ -162,9 +162,8 @@ agreement window, rejection of stale/future/nonfinite observations, gaps, and re
 regressions check gradual heading recovery in auto/teleop, releasing position fusion after convergence,
 recognizing direct drivetrain pose/heading seeds without MT1 tags, discarding delayed pre-recovery
 images, and preserving the corrections-off switch and single-tag initialization policy.
-Confirmation through gradual fusion accepts the 5-degree agreement boundary; heading correction
-retains the separate 180-degree stationary and 45-degree moving limits. Stationary initialization
-retains its separate 2-degree multi-tag spread limit.
+Confirmation through gradual fusion accepts the 5-degree agreement boundary. Stationary initialization
+uses its separate 2-degree multi-tag spread limit.
 Camera-quality tests verify distance/tag-count ranking, ambiguity/span/freshness tie-breakers,
 unchanged estimator weights, and fallback after downstream rejection. Stationary initializer tests
 cover asynchronous camera cadences, independent angle averages, and preserving a stable camera's
@@ -172,7 +171,7 @@ evidence when another camera is inconsistent. The SOTM robot additionally tests 
 stationary hard recovery, preserving X/Y, avoiding repeated resets when heading is already correct,
 and prohibiting hard resets during measured motion, Test mode, or corrections-off operation.
 
-Strict single-tag regressions cover the 2 m / 0.05 ambiguity / 100 ms quality limits and the longer
+Strict single-tag regressions cover the distance, 0.05 ambiguity and 100 ms quality limits and the longer
 ten-frame, half-second, one-degree stability window. Native regressions reproduce an unstable
 top-ranked heading camera with a stable backup and a thirteen-meter correction that previously
 starved because an accepted fallback cleared every camera's history. Both were verified failing
@@ -195,7 +194,7 @@ Position fusion tracks accepted timestamps per camera, so a fresh slower pipelin
 The vision cleanup adds qualification tests for small stationary single-tag corrections, invalidation
 after motion/stale/inconsistent frames, and preventing multi-tag evidence from authorizing single-tag
 fusion. Passive camera stability remains available when automatic initialization is disabled, and
-stationary classification and correction limits use one configuration. Native SOTM regressions check
+stationary classification uses the heading initialization configuration. Native SOTM regressions check
 three-degree single-tag convergence without hard resets or position interruption, stronger-camera
 handoff with initialization disabled, and separate disabled/enabled recovery evidence using actual
 pose/reset outcomes. The robot's `tests/competition-checks.init.gradle` exposes `verifyRobot` to run

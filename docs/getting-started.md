@@ -5,6 +5,7 @@
 Start here to add PowerLib and the prebuilt Power Tool to a new robot project. Review the [project requirements](../README.md#requirements) before continuing.
 
 - [Download and extract](#download-and-extract)
+- [Update Power Tool](#update-power-tool)
 - [First configuration](#first-configuration)
 - [First build and simulation](#first-build-and-simulation)
 - [Vendor dependencies](#vendor-dependencies)
@@ -19,11 +20,15 @@ Download the Windows project ZIP attached to a release from [GitHub Releases](ht
 3. Double-click **Power Tool.cmd**. Power Tool is prebuilt and runs without Node or npm.
 4. Configure the robot through **File > Settings**, then build, simulate or deploy from File.
 
-Open Driver Station first when you need automatic characterization. If it is running as administrator, **Power Tool.cmd** automatically requests matching access through Windows' UAC prompt. Otherwise Power Tool starts normally. You can also run `"Power Tool.cmd" -Administrator` to request administrator access explicitly.
+For characterization on Windows, open **Logs → Characterize Robot** and choose **Restart as administrator** if prompted. You can also start Power Tool with `"Power Tool.cmd" -Administrator` from Command Prompt. [Characterization setup](characterization.md#before-starting)
 
 The ZIP contains PowerLib Java source, generic robot starter files, pinned vendor dependency JSONs, skills, and the standalone Windows x64 application in `power-tool/app/`. Its `.gitignore` excludes the entire prebuilt application while leaving robot source and auto authoring files available to commit. The project keeps its original Gradle files, WPILib preferences, team number, `Main.java` and `Robot.java`. The first robot build may download vendor libraries.
 
 This is a starter overlay for a **clean project**. Extracting it replaces matching starter files directly. For an existing robot, review the release notes and preserve your project changes before applying files.
+
+## Update Power Tool
+
+Close Power Tool, then extract `Power-Tool-Windows-x64.zip` into the existing robot project root. Replace the bundled application and launcher files when prompted, then open **Power Tool.cmd**. This archive updates the desktop app. Apply any PowerLib Java updates separately before building or deploying the robot. [GitHub Releases](https://github.com/FRC9410/Robot-Library/releases)
 
 ## First configuration
 

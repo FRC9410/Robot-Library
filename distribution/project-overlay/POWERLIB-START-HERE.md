@@ -5,7 +5,7 @@
 3. Double-click **Power Tool.cmd**. Power Tool is already built and includes Electron. Node, npm and an install script are not needed on this computer.
 4. Open **File → Settings** to configure the robot. Use **File → Build Robot**, **Build and Deploy**, **Sim with DS**, or **Sim without DS**. Sim with DS assumes FRC Driver Station is already running.
 
-Open Driver Station before Power Tool for automatic characterization. The launcher requests administrator access automatically if Driver Station is elevated; approve Windows' UAC prompt. Other launches run normally. Use `"Power Tool.cmd" -Administrator` to request administrator access explicitly.
+For characterization, open **Logs → Characterize Robot** and choose **Restart as administrator** if prompted. You can also run `"Power Tool.cmd" -Administrator` from Command Prompt. For hardware and **Sim with DS**, use FRC Driver Station on the same computer and start disabled in Test mode.
 
 The project keeps its original Gradle wrapper, `build.gradle`, WPILib preferences, team number, `Main.java` and `Robot.java`. WPILib and its Java tools are still required. The first robot build may download the vendor libraries referenced by the included dependency files.
 
@@ -16,5 +16,7 @@ Log Viewer downloads recordings to the project's `logs/` folder by default. The 
 The ZIP also includes `integrations/mapping.json` and `integrations/wpilib.json` for **File → Settings → Integrations**. Git can track both JSON files and ignores the other contents of `integrations/`.
 
 Save in Auto Builder writes Java explicitly. Rebuild/restart simulation or deploy after saving changes. Simulation console output is in `build/power-tool/simulation.log`.
+
+To update Power Tool later, close it and extract `Power-Tool-Windows-x64.zip` from GitHub Releases into this project root, replacing the bundled app and launcher files.
 
 This archive contains the generic starter configuration, not a configured competition robot. Set your drivetrain dimensions, CAN IDs and other hardware settings before deploying. Bundled vendor versions are recorded in `power-tool/release.txt`.

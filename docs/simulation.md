@@ -16,7 +16,7 @@ Those actions run the simulation configured in your robot project. The optional 
 3. Select the appropriate simulation action from Power Tool's File menu; it rebuilds first.
 4. Use the simulation GUI's Driver Station controls, or the already-running FRC Driver Station for the with-DS mode.
 
-Simulation output is written to `build/power-tool/simulation.log`. Auto Builder's first drive point seeds its simulated starting pose; a real robot keeps its measured pose. See [Auto Builder](auto-builder.md) for save and runtime behavior.
+Simulation output is written to `build/power-tool/simulation.log`. The Power Tool actions use GradleRIO's simulation configuration and require `wpi.sim.addGui()` in `build.gradle`. **Sim with DS** also requires `wpi.sim.addDriverstation()`. Auto Builder's first drive point seeds the starting pose in simulation. [Auto Builder save and runtime behavior](auto-builder.md)
 
 ## Set up MapleSim with the project skill
 
@@ -33,8 +33,8 @@ The release ZIP includes project-local agent skills in the root-level `skills/` 
 | File | Action |
 |------|--------|
 | `gradle.properties` | Created — pins Gradle to WPILib JDK 17 |
-| `src/.../simulation/MapleSimSwerveDrivetrain.java` | Created — MapleSim physics wrapper |
-| `src/.../simulation/SimManager.java` | Created — game piece spawning and pose publishing |
+| `src/main/java/frc/robot/utils/simulation/MapleSimSwerveDrivetrain.java` | Created — MapleSim physics wrapper |
+| `src/main/java/frc/robot/utils/simulation/SimManager.java` | Created — game piece spawning and pose publishing |
 | `src/.../subsystems/Swerve.java` | Modified — sim thread and pose publisher |
 | `src/.../Robot.java` | Modified — `simulationPeriodic()`, `resetField()`, `publishPoses()` |
 | `sim-config.md` | Created — reference doc with all values used |

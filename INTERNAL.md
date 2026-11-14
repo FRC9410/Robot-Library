@@ -9,14 +9,14 @@ End users download the project ZIP from [GitHub Releases](https://github.com/FRC
 Run from the repository root on Windows:
 
 ```powershell
-.\build-project-zip.ps1
+.\release.ps1
 # Reuse existing npm dependencies, while still rebuilding the app:
-.\build-project-zip.ps1 -SkipInstall
+.\release.ps1 -SkipInstall
 ```
 
-Output: `build/distributions/Robot-Library-2026-Windows-x64.zip`. Attach this file as a GitHub Release asset; creating it does not publish anything automatically. Do not substitute GitHub's automatic source-code ZIP.
+Attach `Robot-Library-2026-Windows-x64.zip` and `Power-Tool-Windows-x64.zip` from `build/distributions/` to the GitHub Release. Use the full project ZIP for new robots and the app-only ZIP for Power Tool updates. [Release commands](docs/development.md#build-the-distribution)
 
-`build-dashboard.ps1` builds the renderer and Electron code and packages a standalone app under `PowerTool-local/win-unpacked/`. The ZIP builder calls it, then copies the complete `templates/powerlib/` and `templates/replacements/` trees, the five pinned dependency files in `templates/vendordeps/`, `skills/`, and `distribution/project-overlay/`. Newly imported UI components and assets are rebuilt; new library and robot template files are picked up recursively. A new npm dependency requires running without `-SkipInstall`.
+`build-dashboard.ps1` packages Power Tool under `PowerTool-local/win-unpacked/`. `release.ps1` uses that single build for both ZIPs. The full ZIP also copies `templates/powerlib/`, `templates/replacements/`, the pinned files in `templates/vendordeps/`, `skills/`, `distribution/project-overlay/`, and `distribution/integrations/`. Reinstall npm dependencies when their manifests change.
 
 `-PowerToolDirectory` reuses an already packaged application; use this only when its build is current. The ZIP has no enclosing directory and includes `.gitignore`, which excludes the full prebuilt `power-tool/app/` tree while preserving robot source and auto definitions for Git. The receiver keeps their Gradle wrapper, build configuration, team preferences, `Main.java` and `Robot.java`.
 

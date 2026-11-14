@@ -2,7 +2,7 @@
 
 [Project README](../README.md) · [All guides](README.md) · [Log Viewer](log-viewer.md)
 
-Open **Logs → Characterize Robot**. Choose a category in **Subsystem types**, select the mechanisms to test, confirm the robot and area are ready, then click **Start characterization**. All selections start unchecked.
+Open **Logs → Characterize Robot**. Choose a category in **Subsystem types** and select the mechanisms to test. All selections start unchecked. The selected category determines whether you start an automatic sequence, a manual walkthrough, or a position crawl.
 
 Choose **All velocity subsystems** to test velocity and velocity-torque mechanisms together, or choose a single type to filter the list. Choose **Drivetrain** for manual drive tests and automatic steering tests.
 
@@ -35,9 +35,9 @@ Connect Power Tool to a robot or simulation rebuilt with the current PowerLib fi
 
 On a physical robot or in **Sim with DS**, open the normal **FRC Driver Station on the same Windows computer**, choose **Test**, and start **Disabled**. Verify travel in both directions and review the ramp ceiling, step voltage, and duration for each selected mechanism before confirming readiness.
 
-Power Tool brings Driver Station to the foreground and uses its documented enable and disable keyboard shortcuts. Driver Station must be running at the same privilege level as Power Tool and able to receive focus. It must remain in Test mode. FMS attachment or an E-stop prevents the sequence. Power Tool does not replace Driver Station or send hardware enable through NetworkTables.
+For automatic tests, Power Tool brings Driver Station to the foreground and uses its enable and disable keyboard shortcuts. Driver Station must be running at the same privilege level as Power Tool and able to receive focus. Keep Driver Station in Test mode. FMS attachment or an E-stop prevents the sequence. Hardware enable goes through Driver Station.
 
-Power Tool checks Driver Station focus and permissions before preparing the first test. On Windows, open **Logs → Characterize Robot** and choose **Restart as administrator** when prompted. Accept Windows UAC to return directly to characterization. A privilege mismatch or blocked focus stops the workflow with a readable message before any enable shortcut is sent. Keep Driver Station's main window available and close any popup.
+On Windows, open **Logs → Characterize Robot** and choose **Restart as administrator** when prompted. Accept Windows UAC to return directly to characterization. Before an automatic Driver Station sequence, Power Tool checks focus and permissions. A privilege mismatch or blocked focus stops the workflow before any enable shortcut is sent. Keep Driver Station's main window available and close any popup.
 
 NI's LabVIEW application exposes a wrapper window separately from the visible FRC Driver Station control panel. Power Tool identifies the visible panel and verifies that exact panel and process before delivering a shortcut; help windows and dialogs are excluded.
 
@@ -45,9 +45,12 @@ Shortcuts use keyboard scan codes and hold the chord for 200 ms before releasing
 
 | Runtime | Enable/disable control | Log collection |
 |---|---|---|
-| Physical robot | Open FRC Driver Station | Robot SFTP |
-| Sim with DS | Open FRC Driver Station | Local simulation logs |
-| Sim without DS | Internal WPILib simulation controls | Local simulation logs |
+| Physical robot | FRC Driver Station | Robot SFTP |
+| Sim with DS | FRC Driver Station | Local simulation logs |
+| Sim without DS | WPILib simulation controls | Local simulation logs |
+
+For drive and position walkthroughs, the operator enables and disables at each phase. Power Tool
+controls those transitions for the automatic velocity and steering sequences.
 
 The robot reports which source controls enable/disable, and the modal displays it. **Sim with DS** is detected from WPILib's loaded DS-socket extension; internal simulation-control requests are ignored in that mode. Physical enable always stays with Driver Station. Rebuild and restart an older simulation if Power Tool cannot identify its control mode. Launch only one robot simulation at a time.
 
@@ -83,6 +86,9 @@ The built-in analysis uses a centered median velocity filter, a three-point deri
 |---|---|---|---|
 | Velocity | V | V / (rotations/s) | V / (rotations/s²) |
 | Velocity-torque | A | A / (rotations/s) | A / (rotations/s²) |
+| Arm, elevator, drivetrain drive and steering | V | V / (rotations/s) | V / (rotations/s²) |
+
+Arm and elevator fits also report `kG` in volts. The arm model uses the encoder position at horizontal.
 
 Rotations are the configured motor feedback's mechanism rotations. Verify feedback ratios before transferring gains to another configuration. Velocity-torque tests command voltage and fit the **measured torque current**. The JSON also retains a secondary voltage fit when available. For hardware validation, check the amp-based gains at low and high operating speeds in `TorqueCurrentFOC`. [CTRE torque-current tuning](https://v6.docs.ctr-electronics.com/en/stable/docs/api-reference/device-specific/talonfx/manual-pid-tuning.html#flywheel-tuning-with-torquecurrentfoc)
 

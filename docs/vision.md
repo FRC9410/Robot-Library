@@ -23,10 +23,11 @@ public static final String[] LIMELIGHT_NAMES = {
 };
 ```
 
-The starter `Vision` subsystem handles orientation publishing, MegaTag2 position, independent
-MegaTag1 heading correction, disabled-mode throttling, and Swerve pose corrections. An empty array disables camera handling. Configure each
-camera's mounting pose, calibration, team number, and AprilTag pipeline in its own Limelight web UI;
-names alone cannot describe mounting geometry. All measurements use blue-origin field coordinates.
+The starter `Vision` subsystem publishes robot orientation and fuses MegaTag2 position and
+independent MegaTag1 heading into the Swerve pose. It keeps the cameras unthrottled while disabled
+so heading initialization can collect fresh frames. An empty array disables camera handling.
+Configure each camera's mounting pose, calibration, team number and AprilTag pipeline in its own
+Limelight web UI. All measurements use blue-origin field coordinates.
 
 ### Limelight IMU assist
 
@@ -36,13 +37,18 @@ topics use the drivetrain's external orientation in mode `0`. Set `LIMELIGHT_IMU
 to `false` in `VisionConstants.java` to use mode `0` on every camera.
 [Limelight firmware notes](https://docs.limelightvision.io/docs/docs-limelight/software-change-log)
 
-The starter sends the drivetrain's estimated field yaw every loop. Once field heading is established,
-each supported camera seeds its internal IMU in mode `1` and then switches to mode `4`, where it
-continuously corrects against the robot's estimate with an assist alpha of `0.001`. The starter
-resumes MegaTag2 position updates for that camera after fresh yaw telemetry agrees with the robot
-within 5 degrees. It reseeds after an explicit drivetrain pose or heading reset, a camera restart,
-stale IMU data, or a running heading difference over 15 degrees. MegaTag1 continues to supply independent
-AprilTag heading for the drivetrain estimator.
+Each robot loop publishes the drivetrain's estimated field yaw to all cameras. The starter flushes
+NetworkTables once after queuing orientation and IMU mode updates, then reads the latest pose frames.
+Once field heading is established, each supported camera seeds in mode `1` for at least 200 ms and
+must publish fresh IMU telemetry before switching to mode `4`. Mode `4` uses the camera's IMU and
+gradually aligns it to the robot's yaw with an assist alpha of `0.001`.
+
+After switching to mode `4`, the starter waits for fresh camera yaw within 5 degrees of the robot
+before using that camera's MegaTag2 position. A camera that fails this check within 500 ms tries
+seeding again. During normal operation, the camera reseeds if yaw disagreement exceeds 15 degrees,
+IMU telemetry becomes invalid or stale, the camera restarts, or the drivetrain heading becomes
+untrustworthy. A drivetrain pose or heading reset reseeds all managed cameras. MegaTag1 continues
+to supply independent AprilTag heading for the drivetrain estimator during camera reseeding.
 
 For a bench check, log `Vision/IMU/<camera>/State`, `CameraYawDegrees`, and `HeadingErrorDegrees`.
 Compare them with `Vision/Heading/EstimatedDegrees` through a turn, a pose reset, and a camera power cycle.
@@ -60,7 +66,9 @@ counting the distinct tags within each camera-to-tag distance limit:
 - Otherwise, use one tag within **2 m** if it qualifies for single-tag use.
 
 For example, tags at 3.4, 3.8 and 6 m qualify as a two-tag frame. Position uncertainty uses
-`0.07 * distance^2 / tagCount` with the qualifying group's average distance and count. The pose
+`0.07 * distance^2 / tagCount` with the qualifying group's average distance and count and a 1 mm
+minimum. For two qualifying tags averaging 1 m away, the estimator uses 0.035 m per axis. Increasing
+the coefficient gives each vision measurement less influence. The pose
 and tag-span measurements come from the camera's original solve. The camera's pipeline filters
 control which tags participate in that solve.
 
@@ -217,9 +225,10 @@ views are valid until the next update. The starter supplies accepted observation
 The five-argument `update(..., allowSingleTagHeading)` overload lets callers opt in to single-tag
 heading reads. The starter passes its disabled state explicitly so the reader can select the correct
 heading tiers and apply the enabled yaw-rate gate.
-`LimelightHeadingConfig` contains the uncertainty, distance, age, angular-rate, heading-error and
-ambiguity limits. In CTRE Swerve, `samplePoseAt()` needs `Utils.fpgaToCurrentTime()`; the
-Swerve wrapper already performs that conversion for `addVisionMeasurement()`.
+`LimelightHeadingConfig` contains the uncertainty, distance, age, angular-rate and ambiguity limits.
+The reusable fusion API also accepts an explicit heading-error limit. The starter allows eligible
+MegaTag1 yaw corrections across the full angular range. In CTRE Swerve, `samplePoseAt()` uses
+`Utils.fpgaToCurrentTime()`. The Swerve wrapper performs that conversion for `addVisionMeasurement()`.
 The starter enables corrections while disabled, during autonomous and during teleop. Call
 `stateMachine.vision.setShouldUpdatePose(false)` to disable corrections, and `true` to restore them.
 With heading initialization enabled, automatic position fusion initially waits for a trustworthy heading.

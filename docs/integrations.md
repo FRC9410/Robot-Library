@@ -1,5 +1,7 @@
 # Power Tool integration catalog
 
+[Project README](../README.md) · [All guides](README.md) · [Power Tool](power-tool.md)
+
 **File → Settings → Integrations** lists the optional packages available to this robot project. **Install** downloads the complete source tree at the catalog's pinned commit using Git and its existing credentials. Keep Git and `uv` on PATH. `uv` prepares the Python environment and locked dependencies on the first start.
 
 After installation, use the package checkbox to select or clear all servers. Expand the package to choose individual servers or edit their settings. Checking a server starts it immediately using the saved inputs for this robot project. Power Tool also starts all checked servers when it opens. Unchecking a running server stops it. **Copy MCP URL** gives you a local Streamable HTTP endpoint for a running server. Add it to your MCP client as an HTTP server. The URL includes a private access token and stays the same across launches of this project.
@@ -12,7 +14,7 @@ When **Live Robot Data** is selected and connected to the same host and port as 
 
 ## Release layout
 
-The release packager copies `distribution/integrations/` into the archive as `integrations/`. Expanding that archive into a clean robot project supplies:
+The full project ZIP copies `distribution/integrations/` into the project as `integrations/`. Both release ZIPs include a copy in the packaged app for fallback. Extracting the full project ZIP supplies these project files:
 
 ```text
 integrations/
@@ -32,13 +34,13 @@ Each server maps directly to a public command already declared in the external p
 
 | Server ID | Command | Existing entry point |
 |---|---|---|
-| `wpilib-nt4` | `mcp-wpilib-nt4` | `src/mcp_wpilib_nt4/cli.py` → `main()` |
+| `wpilib-nt4` | `mcp-wpilib-nt4` | Power Tool uses its bundled `wpilib-nt4.py` bridge with the installed package |
 | `wpilib-wpilog` | `mcp-wpilib-wpilog` | `src/mcp_wpilib_wpilog/cli.py` → `main()` |
 | `wpilib-sim` | `mcp-wpilib-sim` | `src/mcp_wpilib_sim/cli.py` → `main()` |
 | `wpilib-vscode` | `mcp-wpilib-vscode` | `src/mcp_wpilib_vscode/cli.py` → `main()` |
 | `jfr` | `mcp-jfr` | `src/mcp_jfr/cli.py` → `main()` |
 
-No extra launcher scripts are needed. `uv` resolves those commands from the project, using its locked dependencies without the development dependency group. The manifest's `requirements` describe the required launcher and Python version; it does not install them itself.
+Power Tool supplies the launcher arguments. `uv` runs the commands using the installed project's locked dependencies and skips the development dependency group. The manifest lists the required launcher and Python version.
 
 ## Reading version 1
 

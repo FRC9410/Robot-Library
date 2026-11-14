@@ -19,6 +19,7 @@ Use this guide when changing PowerLib, developing the desktop app, or producing 
 | `templates/vendordeps/` | Pinned vendor dependency JSON files |
 | `powerlib-dashboard/` | Electron, React and dashboard source |
 | `distribution/project-overlay/` | Release launcher, Git ignore rules and starter instructions |
+| `distribution/integrations/` | Shared integration catalog bundled with the app and full project ZIP |
 | `skills/` | Project-local agent skill and simulation templates |
 | `tests/` | Java, integration and release validation tools |
 
@@ -45,7 +46,7 @@ Run these PowerShell scripts from Robot-Library on Windows with Node/npm availab
 | `.\release-power-tool.ps1` | `Power-Tool-Windows-x64.zip` | An existing PowerLib robot project with Power Tool closed |
 | `.\release.ps1` | Both ZIPs | Use the instructions for each ZIP |
 
-The combined release builds Power Tool once and bundles that same build in both ZIPs. The full ZIP includes generic robot templates, pinned vendor snapshots, and the project overlay. The Power Tool update ZIP includes the prebuilt app under `power-tool/app/` and the launch scripts. Both archives are ready to extract into the project root. You can also pass `-PowerToolDirectory .\PowerTool-local\win-unpacked` to the full release script to package an existing app.
+The combined release builds Power Tool once and bundles that same build in both ZIPs. The full ZIP also includes generic robot templates, pinned vendor dependencies, simulation skills, and the project overlay. The Power Tool update ZIP contains `Power Tool.cmd`, `power-tool/launch.ps1` and the packaged app under `power-tool/app/`. Its integration catalog is inside the app resources. Both archives extract at the project root. Pass `-PowerToolDirectory .\PowerTool-local\win-unpacked` to the full release script to package an existing app build.
 
 New library files and robot templates under the copied trees are included recursively. New UI components and assets are included when imported by the app build. Use a full dependency installation when adding npm packages; `-SkipInstall` only skips that installation, not the build.
 
@@ -60,7 +61,7 @@ python tests/project-zip-check.py
 node powerlib-dashboard/scripts/packaged-project-check.mjs
 ```
 
-These checks extract over an actual stock WPILib template, verify the project/team settings and Git exclusions, build the robot, then launch the packaged executable and test log downloads against a local fake SFTP robot. See [test requirements and the full validation catalog](../tests/README.md) for the required SDK, cached dependencies and source/UI checks.
+These checks exercise the full project ZIP. They extract over a stock WPILib template, verify project and team settings and Git exclusions, build the robot, then launch the packaged executable and test log downloads against a local fake SFTP robot. [Test requirements and validation catalog](../tests/README.md)
 
 `tests/source-config-checks.ps1`, `tests/generated-robot-check.ps1` and `tests/app-generation-check.ps1` cover source edits, migration, template compilation and saving through the app before building. They do not deploy a robot.
 

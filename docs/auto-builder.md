@@ -5,6 +5,7 @@
 Use the **Autos** tab to create routines on the field, then save them into robot Java. Start with a drive point or wait; use state steps and branches as your routine grows.
 
 - [Editing a routine](#editing-a-routine)
+- [Turning and state changes during a drive](#turning-and-state-changes-during-a-drive)
 - [Robot check conditions](#robot-check-conditions)
 - [Java autonomous API](java-programming.md#autonomous-chooser)
 
@@ -43,6 +44,17 @@ invalid waits/limits, and missing drive helpers. Names found in handwritten robo
 registration code are protected too. Reload discovers Java/source changes. Stale
 saves keep the current draft, and newer, malformed, or unsupported auto documents
 cannot be overwritten by this editor.
+
+## Turning and state changes during a drive
+
+In a drive point's settings, choose **Turn now**, **Turn later**, or **Face point**. **Turn later**
+uses a percentage of the leg to decide when to turn. **Face point** tracks a field coordinate or
+named point during the leg. Use **Limit turn rate** to cap angular speed for that leg and
+**Wait for heading** to require heading alignment before the drive step finishes.
+
+Use **Add state change** to request a robot state at a percentage of the drive leg. If the leg
+finishes first, the remaining state changes run at arrival. **Execute state** and **Wait for state**
+on the drive point run after arrival.
 
 ## Robot check conditions
 

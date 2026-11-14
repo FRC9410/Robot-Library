@@ -13,7 +13,7 @@ No shooter, intake, hub, passing, or other game-specific telemetry is assumed. O
 
 ## Robot integration
 
-The release templates wire `DriveTelemetry` into `PowerDashboard`. It collects drive data into the subsystem data map, then `SubsystemTelemetry` publishes one complete JSON map at `/PowerLib/Data` every 100 ms (10 Hz), while logging the latest values every 20 ms (50 Hz). Power Tool requests the latest NT4 feedback every 100 ms and batches screen updates at that cadence. Robot control and input collection continue at the normal scheduler rate.
+The release templates wire `DriveTelemetry` into `PowerDashboard`. It collects drive data into the subsystem data map, then `SubsystemTelemetry` publishes one complete JSON map at `/PowerLib/Data` every 100 ms (10 Hz), while logging the latest values every 20 ms (50 Hz). Power Tool requests NT4 feedback and refreshes its display at the **Live data update interval** in Connection Settings, which defaults to 100 ms. Robot control and input collection continue at the normal scheduler rate. [Connection settings](../docs/power-tool.md#connect-to-a-robot-or-simulation)
 
 For an existing project, compare the release templates with your `PowerDashboard` integration. For a custom integration, collect drive data before the shared publisher runs:
 

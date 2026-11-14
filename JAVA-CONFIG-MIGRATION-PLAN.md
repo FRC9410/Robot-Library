@@ -2,7 +2,7 @@
 
 Java source is the authoritative robot configuration. Existing Save actions write the affected declarations and registrations immediately. Build and deploy remain separate actions. Handwritten code, state handler behavior and unrelated declarations are preserved.
 
-This is the execution copy of the plan approved in the chat. The previously saved plan was absent from the checkout when implementation began.
+This file records the migration plan and its original validation. For the current release workflow and source editor behavior, see [Development and releases](docs/development.md) and [Java configuration notes](INTERNAL.md#edit-robot-configuration).
 
 ## Scope
 

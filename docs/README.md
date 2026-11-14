@@ -10,7 +10,7 @@ Start with [Getting started](getting-started.md), then choose the guide for the 
 | [Power Tool](power-tool.md) | Connections, Dashboard, Settings, tuning, build and deployment |
 | [Auto Builder](auto-builder.md) | Editing routines, saving, state steps and robot check branches |
 | [Log Viewer](log-viewer.md) | Opening, downloading and reviewing recorded runs |
-| [Characterization](characterization.md) | Automatic SysId tests, drive and steering gains, and saved reports |
+| [Characterization](characterization.md) | Velocity, drivetrain and arm/elevator SysId, position crawl, and saved reports |
 | [Java programming](java-programming.md) | Project structure, autonomous APIs, state handlers and telemetry |
 | [Vision](vision.md) | Limelight setup, pose fusion and detailed heading policies |
 | [Simulation](simulation.md) | Simulation launch modes and the MapleSim setup skill |

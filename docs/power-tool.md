@@ -9,6 +9,7 @@ Power Tool is the desktop app for your robot's live dashboard, configuration, au
 - [Settings](#settings)
 - [Field and display settings](#field-and-display-settings)
 - [Build, deploy and simulate](#build-deploy-and-simulate)
+- [Saving configuration](#saving-configuration)
 - [Live tuning and saved defaults](#live-tuning-and-saved-defaults)
 - [Settings and Java source](#settings-and-java-source)
 - [Application files](#application-files)
@@ -17,13 +18,16 @@ Power Tool is the desktop app for your robot's live dashboard, configuration, au
 
 Open **File → Connection Settings** to choose a target. Local simulation uses `localhost` or `127.0.0.1` on port `5810`. Robot presets include Team 9410 addresses; choose the host appropriate to your own team and network. The connection controls show the active endpoint and status.
 
+The live data update interval defaults to 100 ms. With the optional WPILib **Live Robot Data** server connected to the same endpoint, Power Tool can share its connection and display an **MCP** badge. [Integration setup](integrations.md)
+
 ## Choose a workspace
 
 | Tab | Use it for |
 |---|---|
 | Dashboard | Live robot pose, discovered cameras, mechanism telemetry and autonomous selection |
+| Limelights | Configuration pages for discovered Limelights |
 | Autos | Creating and saving autonomous routines; see [Auto Builder](auto-builder.md) |
-| Logs | Opening and reviewing recorded runs; see [Log Viewer](log-viewer.md) |
+| Logs | [Recorded runs](log-viewer.md) and [subsystem characterization](characterization.md) |
 
 Dashboard's live pose needs a robot connection. You can edit autos and review recorded log poses while disconnected.
 
@@ -38,6 +42,7 @@ Dashboard's live pose needs a robot connection. You can edit autos and review re
 | Vision | Set Limelight names and shared camera dimensions |
 | Field | Choose a field image/layout, upload a field and set bumper dimensions |
 | Auto | Set autonomous duration for remaining-time branches |
+| Integrations | Install and manage optional WPILib MCP servers |
 
 Implement state behavior and robot-specific driver bindings in Java. See [Java programming](java-programming.md#robot-states) and [Vision](vision.md).
 
@@ -100,6 +105,7 @@ The release ZIP includes the prebuilt application and its launcher:
 
 ```text
 Power Tool.cmd
+power-tool/launch.ps1
 power-tool/app/Power Tool.exe
 power-tool/app/resources/
 power-tool/release.txt
@@ -110,8 +116,8 @@ its Electron runtime and provides NetworkTables tools, robot settings, autonomou
 editing, and log viewing. Its bundled application files are excluded from Git by
 `/power-tool/app/`; robot source and auto definitions remain available to commit.
 
-Power Tool opens on a generic **Dashboard** view with discovered camera streams, a field view, an autonomous dropdown, and optional drivetrain and robot telemetry. The starter robot collects feedback through `DriveTelemetry` at the normal robot loop rate and publishes it every 100 ms. Power Tool requests and batches telemetry at the same 100 ms cadence. See [Dashboard setup](../powerlib-dashboard/DASHBOARD.md) for existing-project integration, camera discovery, and topic mappings.
+Power Tool opens on a generic **Dashboard** view with discovered camera streams, a field view, an autonomous dropdown, and optional drivetrain and robot telemetry. The starter robot collects feedback through `DriveTelemetry` at the normal robot loop rate and publishes it every 100 ms. [Dashboard setup and topic mappings](../powerlib-dashboard/DASHBOARD.md)
 
-Get new versions from [GitHub Releases](https://github.com/FRC9410/Robot-Library/releases). Review the release notes before updating an existing robot project.
+Use the app-only archive to [update Power Tool in an existing robot project](getting-started.md#update-power-tool).
 
 The [dashboard integration reference](../powerlib-dashboard/DASHBOARD.md) describes camera discovery and topic mappings. Source customization and packaging are covered in [Development](development.md).
