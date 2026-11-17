@@ -20,7 +20,10 @@ Use this guide when changing PowerLib, developing the desktop app, or producing 
 | `powerlib-dashboard/` | Electron, React and dashboard source |
 | `distribution/project-overlay/` | Release launcher, Git ignore rules and starter instructions |
 | `distribution/integrations/` | Shared integration catalog bundled with the app and full project ZIP |
-| `skills/` | Project-local agent skill and simulation templates |
+| `.agents/skills/` | Agent skills shipped with robot projects, such as `powerlib-sim` and its simulation templates. The only copy to edit. |
+| `.claude/skills/` | Symlinks into `.agents/skills/` so Claude Code finds the same skills |
+| `AGENTS.md` | Instructions for all coding agents; `CLAUDE.md` imports it |
+| `GLOSSARY.md` | The project's terms and the synonyms to avoid |
 | `tests/` | Java, integration and release validation tools |
 
 ## Develop Power Tool

@@ -76,6 +76,13 @@ with zipfile.ZipFile(args.zip) as archive:
             if path.is_file():
                 name = path.relative_to(source).as_posix()
                 assert archive.read(name) == path.read_bytes(), name
+    skills = root / '.agents/skills'
+    for path in skills.rglob('*'):
+        if path.is_file():
+            relative = path.relative_to(skills).as_posix()
+            for agent_dir in ['.agents/skills/', '.claude/skills/']:
+                assert archive.read(agent_dir + relative) == path.read_bytes(), agent_dir + relative
+    assert not any(name.startswith('skills/') for name in names), 'Skills must ship under .agents/skills/ and .claude/skills/'
     for name in names:
         assert not Path(name).is_absolute() and '..' not in Path(name).parts
     archive.extractall(fixture)
@@ -96,7 +103,8 @@ for name in ['integrations/README.md', 'integrations/mcp-wpilib/pyproject.toml',
     assert subprocess.run(['git', 'check-ignore', '-q', name], cwd=fixture, env=git_env).returncode == 0, name
 for name in ['src/main/java/frc/robot/RobotContainer.java', 'vendordeps/ChoreoLib2026.json',
              'gradle/wrapper/gradle-wrapper.jar', 'power-tool/generated/powerlib-autos.json',
-             'logs/README.md', 'integrations/mapping.json', 'integrations/wpilib.json']:
+             'logs/README.md', 'integrations/mapping.json', 'integrations/wpilib.json',
+             '.claude/skills/powerlib-sim/SKILL.md', '.agents/skills/powerlib-sim/SKILL.md']:
     assert subprocess.run(['git', 'check-ignore', '-q', name], cwd=fixture, env=git_env).returncode == 1, name
 print(f'ZIP layout, template contents, project/team preservation and Git exclusions passed ({len(application_files)} application files).', flush=True)
 

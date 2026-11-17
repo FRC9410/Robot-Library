@@ -35,8 +35,11 @@ import org.ironmaple.simulation.gamepieces.GamePieceOnFieldSimulation.GamePieceI
 public class SimManager {
   {{GAME_PIECE_TYPE_CONSTANTS}}
 
+  // GamePieceInfo always has 7 fields: type, shape, height, mass, linearDamping,
+  // angularDamping, coefficientOfRestitution.
   {{GAME_PIECE_INFO_CONSTANTS}}
 
+  // getGamePiecesArrayByType() returns Pose3d[], so these are Pose3d publishers.
   {{GAME_PIECE_PUBLISHERS}}
 
   private SimManager() {}
@@ -47,11 +50,13 @@ public class SimManager {
     spawnGamePieces();
   }
 
+  // Call from Robot.autonomousInit() and Robot.teleopInit().
   public static void resetField() {
     SimulatedArena.getInstance().resetFieldForAuto();
     spawnGamePieces();
   }
 
+  // Call from Robot.robotPeriodic(), guarded by RobotBase.isSimulation().
   public static void publishPoses() {
     {{PUBLISH_POSES_BODY}}
   }
@@ -61,6 +66,10 @@ public class SimManager {
   }
 }
 ```
+
+Create publishers with raw NetworkTables (`NetworkTableInstance.getDefault()`), never
+`SmartDashboard`. Write the finished file to
+`src/main/java/frc/robot/utils/simulation/SimManager.java`.
 
 ## Examples
 

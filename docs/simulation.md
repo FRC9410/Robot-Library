@@ -20,7 +20,7 @@ Simulation output is written to `build/power-tool/simulation.log`. The Power Too
 
 ## Set up MapleSim with the project skill
 
-The release ZIP includes project-local agent skills in the root-level `skills/` directory so they travel with the robot project.
+The release ZIP puts the same project skills in `.agents/skills/` for Codex and `.claude/skills/` for Claude Code, so they travel with the robot project. Commit both folders with the rest of the project.
 
 ### Available skills
 
@@ -36,6 +36,7 @@ The release ZIP includes project-local agent skills in the root-level `skills/` 
 | `src/main/java/frc/robot/utils/simulation/MapleSimSwerveDrivetrain.java` | Created — MapleSim physics wrapper |
 | `src/main/java/frc/robot/utils/simulation/SimManager.java` | Created — game piece spawning and pose publishing |
 | `src/.../subsystems/Swerve.java` | Modified — sim thread and pose publisher |
+| `src/.../RobotContainer.java` | Modified when needed — single `StateMachine`, default drive command, `getStateMachine()` |
 | `src/.../Robot.java` | Modified — `simulationPeriodic()`, `resetField()`, `publishPoses()` |
 | `sim-config.md` | Created — reference doc with all values used |
 
@@ -43,7 +44,7 @@ The `powerlib-sim` skill is available in any robot project set up with Robot-Lib
 
 The skill collects your robot's physical properties (weight, bumper size, motor types, wheel COF) and your season's game piece definitions (shape, mass, damping, spawn locations), then generates and modifies all the required files so simulation works out of the box with `./gradlew simulateJava`.
 
-To use it, open your coding agent in your robot project and say something like:
+To use it, open Claude Code or Codex in your robot project and say something like:
 
 ```
 set up sim for this robot
