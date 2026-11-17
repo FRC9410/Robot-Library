@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { build } from "esbuild";
 import { checkGeneratedCommands } from "./auto-command-check.mjs";
+import platform from "./platform.cjs";
 import { checkAdvancedAutos } from "./auto-advanced-check.mjs";
 import { checkAutoEditing } from "./auto-editing-check.mjs";
 
@@ -214,7 +215,7 @@ public final class RobotChecks {
   assert.equal(await fs.readFile(generatedPath, "utf8"), editingJava, "Named points and mirrored routines regenerate without source drift");
 
   if (!process.argv.includes("--skip-compile")) {
-    const javaHome = process.env.POWERLIB_JAVA_HOME || path.join(process.env.PUBLIC || "C:/Users/Public", "wpilib/2026/jdk");
+    const javaHome = platform.javaHome();
     const jarsDirectory = path.resolve(project, "../build/library-checks/dependencies");
     const jars = (await fs.readdir(jarsDirectory)).filter(name => name.endsWith(".jar")).map(name => path.join(jarsDirectory, name));
     const classes = path.join(fixture, "classes"); await fs.mkdir(classes);
@@ -222,7 +223,7 @@ public final class RobotChecks {
     const argumentsFile = path.join(fixture, "javac.args");
     await fs.writeFile(argumentsFile, ["-encoding", "UTF-8", "-cp", jars.join(path.delimiter), "-d", classes, ...sources]
       .map(value => JSON.stringify(value.replaceAll("\\", "/"))).join("\n"));
-    const compiled = spawnSync(path.join(javaHome, "bin", process.platform === "win32" ? "javac.exe" : "javac"), [`@${argumentsFile}`], { encoding: "utf8" });
+    const compiled = spawnSync(platform.jdkTool(javaHome, "javac"), [`@${argumentsFile}`], { encoding: "utf8" });
     assert.equal(compiled.status, 0, compiled.stderr || compiled.error?.message);
     console.log("Generated autos compile with the complete robot source and real WPILib/vendor dependencies.");
     await checkGeneratedCommands({ fixture, root, classes, jars, javaHome, states: state.states, autoName: state.document.autos[0].name,

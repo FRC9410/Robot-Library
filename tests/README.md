@@ -11,7 +11,7 @@ node powerlib-dashboard/scripts/packaged-project-check.mjs
 
 The first check creates a disposable project from the installed WPILib 2026.2.1 VS Code extension, extracts the actual release ZIP, checks every template and Git exclusion, preserves project settings/team/wrapper/entry points, and runs GradleRIO build plus simulation preparation. It uses cached dependencies in offline mode. The second launches the extracted packaged executable with isolated preferences and tests renderer/preload, source and auto IPC, and log list/download against a local fake SFTP robot. It requires Node only on the maintainer's test machine. Evidence stays under `build/project-zip-check-*/`; no robot is deployed.
 
-Run these checks from the Robot-Library root in PowerShell 7. They write fixtures and logs under ignored `build/` directories. Java checks need the installed WPILib 2026 JDK/Maven files and cached Phoenix/vendor dependencies. Dashboard checks need its npm dependencies installed.
+Run these checks from the Robot-Library root in PowerShell 7 (`pwsh`) on Windows or macOS. They write fixtures and logs under ignored `build/` directories. Java checks need the installed WPILib 2026 JDK/Maven files (`%PUBLIC%\wpilib\2026` on Windows, `~/wpilib/2026` on macOS, or set `POWERLIB_WPILIB_ROOT`) and cached Phoenix/vendor dependencies. Dashboard checks need its npm dependencies installed.
 
 ```powershell
 ./tests/run-library-checks.ps1
@@ -37,7 +37,7 @@ try {
 ```
 
 For the isolated mechanism UI check, run
-`powerlib-dashboard/node_modules/electron/dist/electron.exe powerlib-dashboard/scripts/mechanism-tuning-electron-check.cjs`
+`npm exec --prefix powerlib-dashboard -- electron powerlib-dashboard/scripts/mechanism-tuning-electron-check.cjs`
 from the repository root. It uses simulated telemetry and captures all
 publications in memory without connecting to a robot.
 
@@ -49,8 +49,8 @@ Additional standalone checks from the repository root:
 node powerlib-dashboard/scripts/characterization-check.mjs
 powerlib-dashboard/node_modules/electron/dist/electron.exe powerlib-dashboard/scripts/characterization-ui-check.cjs
 node powerlib-dashboard/scripts/robot-actions-check.mjs
-powerlib-dashboard/node_modules/electron/dist/electron.exe powerlib-dashboard/scripts/camera-electron-check.cjs
-powerlib-dashboard/node_modules/electron/dist/electron.exe powerlib-dashboard/scripts/vision-config-electron-check.cjs
+npm exec --prefix powerlib-dashboard -- electron powerlib-dashboard/scripts/camera-electron-check.cjs
+npm exec --prefix powerlib-dashboard -- electron powerlib-dashboard/scripts/vision-config-electron-check.cjs
 ```
 
 The launcher check intercepts application launches and UAC requests. It verifies normal launch, inherited administrator access, explicit `-Administrator`, project paths containing spaces, canceled UAC, and the distribution overlay's helper placement. The hidden desktop check exercises the app's separate characterization elevation prompt and cancellation with `--fixture-unelevated`.
@@ -69,7 +69,7 @@ Chord tests use fake send/pause callbacks to verify physical scan codes, a 200 m
 
 The robot-action check uses a disposable fake Gradle project to verify build-before-deploy/simulation, failure handling and Driver Station mode selection. The Electron checks exercise camera behavior and vision settings with isolated fixtures.
 
-`powerlib-dashboard/node_modules/electron/dist/electron.exe powerlib-dashboard/scripts/networktables-drawer-electron-check.cjs`
+`npm exec --prefix powerlib-dashboard -- electron powerlib-dashboard/scripts/networktables-drawer-electron-check.cjs`
 checks the production View menu/preload with an in-memory NT client: right-side drawer layout, filtering, menu/close/Escape toggles, full-topic subscription cleanup, and Logs navigation, window sizing and preservation across tab switches. Robot connections are blocked.
 
 The generated-robot check copies the release template trees into an isolated fixture, compiles the full robot template with real WPILib/vendor jars, runs the shared Java source editor, verifies initializer-only edits and unchanged custom source, and compiles all four mechanism types. Supply `-GradleExecutable` if Gradle 8.11 is outside the normal WPILib cache. This validates Java compilation, not deployment to a roboRIO.

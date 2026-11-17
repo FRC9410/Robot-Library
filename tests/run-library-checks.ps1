@@ -1,8 +1,11 @@
 param(
-    [string]$WpilibRoot = "$env:PUBLIC/wpilib/2026",
-    [string]$GradleCache = "$env:USERPROFILE/.gradle/caches"
+    [string]$WpilibRoot = '',
+    [string]$GradleCache = "$HOME/.gradle/caches"
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'platform.ps1')
+if (-not $WpilibRoot) { $WpilibRoot = Get-DefaultWpilibRoot }
+Assert-WpilibJdk $WpilibRoot
 $root = Split-Path $PSScriptRoot -Parent
 $output = Join-Path $root 'build/library-checks'
 New-Item -ItemType Directory -Path $output -Force | Out-Null
@@ -27,16 +30,17 @@ $arguments = @('-encoding', 'UTF-8', '-classpath', $classpath, '-d', $output) + 
 $argumentFile = Join-Path $output 'javac.args'
 $argumentText = ($arguments | ForEach-Object { '"' + $_.Replace('\', '/').Replace('"', '\"') + '"' }) -join "`n"
 [IO.File]::WriteAllText($argumentFile, $argumentText, [Text.UTF8Encoding]::new($false))
-& (Join-Path $WpilibRoot 'jdk/bin/javac.exe') "@$argumentFile"
+& (Get-JdkTool $WpilibRoot 'javac') "@$argumentFile"
 if ($LASTEXITCODE -ne 0) { throw 'Library compilation failed.' }
 $native = Join-Path $output 'native'
 New-Item -ItemType Directory -Path $native -Force | Out-Null
-Get-ChildItem $GradleCache -Recurse -Filter '*.dll' |
-    Where-Object { $_.FullName -match 'transformed.*windowsx86-64' } |
+$nativePattern = Get-NativeLibraryPattern
+Get-ChildItem $GradleCache -Recurse -Filter $nativePattern.Filter |
+    Where-Object { $_.FullName -match "transformed.*$($nativePattern.Folder)" } |
     ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $native -Force }
 $testClasses = @(Get-ChildItem (Join-Path $PSScriptRoot 'java') -Recurse -Filter '*Test.java' | ForEach-Object {
     $package = [regex]::Match((Get-Content $_.FullName -Raw), 'package\s+([\w.]+);').Groups[1].Value
     "$package.$($_.BaseName)"
 })
-& (Join-Path $WpilibRoot 'jdk/bin/java.exe') "-Djava.library.path=$native" "-Dpowerlib.fixtureRoot=$output" '-cp' "$output$([IO.Path]::PathSeparator)$classpath" org.junit.runner.JUnitCore @testClasses
+& (Get-JdkTool $WpilibRoot 'java') "-Djava.library.path=$native" "-Dpowerlib.fixtureRoot=$output" '-cp' "$output$([IO.Path]::PathSeparator)$classpath" org.junit.runner.JUnitCore @testClasses
 if ($LASTEXITCODE -ne 0) { throw 'Library tests failed.' }

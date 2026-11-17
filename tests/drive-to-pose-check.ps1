@@ -1,5 +1,8 @@
-param([string]$WpilibRoot = "$env:PUBLIC/wpilib/2026")
+param([string]$WpilibRoot = '')
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'platform.ps1')
+if (-not $WpilibRoot) { $WpilibRoot = Get-DefaultWpilibRoot }
+Assert-WpilibJdk $WpilibRoot
 $root = Split-Path $PSScriptRoot -Parent
 $fixture = [IO.Path]::GetFullPath((Join-Path $root 'build/drive-to-pose-check'))
 if (-not $fixture.StartsWith([IO.Path]::GetFullPath($root) + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
@@ -21,8 +24,8 @@ $sources = @(
 $arguments = @('-encoding', 'UTF-8', '-classpath', $classpath, '-d', $classes) + $sources
 $argumentFile = Join-Path $fixture 'javac.args'
 [IO.File]::WriteAllText($argumentFile, (($arguments | ForEach-Object { '"' + $_.Replace('\', '/').Replace('"', '\"') + '"' }) -join "`n"))
-& (Join-Path $WpilibRoot 'jdk/bin/javac.exe') "@$argumentFile"
+& (Get-JdkTool $WpilibRoot 'javac') "@$argumentFile"
 if ($LASTEXITCODE -ne 0) { throw 'DriveToPose command fixture compilation failed.' }
 $native = Join-Path $root 'build/library-checks/native'
-& (Join-Path $WpilibRoot 'jdk/bin/java.exe') "-Djava.library.path=$native" '-cp' "$classes$([IO.Path]::PathSeparator)$classpath" frc.robot.commands.DriveToPoseCheck
+& (Get-JdkTool $WpilibRoot 'java') "-Djava.library.path=$native" '-cp' "$classes$([IO.Path]::PathSeparator)$classpath" frc.robot.commands.DriveToPoseCheck
 if ($LASTEXITCODE -ne 0) { throw 'DriveToPose command behavior checks failed.' }

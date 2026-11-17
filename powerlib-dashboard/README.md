@@ -140,7 +140,7 @@ file or restarting the app. Built-in layouts and saved custom grid dimensions ar
 
 Run `npm run check:fields` for field geometry checks. Run
 `npm run check:field-upload` for uploaded-field validation and persistence checks. Run
-`node_modules/electron/dist/electron.exe scripts/field-layout-electron-check.cjs`
+`npx electron scripts/field-layout-electron-check.cjs`
 for the isolated App/menu/preload check, or append an installed `power-tool` path
 to run the same check against that copy. It blocks robot connections, generates
 a sample log, and saves screenshots under `build/dashboard-checks/`.

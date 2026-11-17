@@ -1,11 +1,11 @@
-param([string]$WpilibRoot = "$env:PUBLIC/wpilib/2026", [string]$GradleExecutable = '')
+param([string]$WpilibRoot = '', [string]$GradleExecutable = '')
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'platform.ps1')
+if (-not $WpilibRoot) { $WpilibRoot = Get-DefaultWpilibRoot }
+Assert-WpilibJdk $WpilibRoot
 $root = Split-Path -Parent $PSScriptRoot
-if (-not $GradleExecutable) {
-    $GradleExecutable = Get-ChildItem "$env:USERPROFILE/.gradle/permwrapper/dists/gradle-8.11-bin" -Recurse -Filter gradle.bat |
-        Select-Object -First 1 -ExpandProperty FullName
-}
-if (-not (Test-Path -LiteralPath $GradleExecutable)) { throw 'Supply Gradle 8.11 with -GradleExecutable.' }
+if (-not $GradleExecutable) { $GradleExecutable = Find-Gradle811 }
+if (-not $GradleExecutable -or -not (Test-Path -LiteralPath $GradleExecutable)) { throw 'Supply Gradle 8.11 with -GradleExecutable.' }
 $fixture = Join-Path $root ('build/app-generation-check-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $fixture | Out-Null
 $dependencies = (Join-Path $root 'build/library-checks/dependencies').Replace('\', '/').Replace("'", "\'")
@@ -26,7 +26,14 @@ try {
         }
     }
     # Use the ordinary robot build command, with the real cached Gradle distribution.
-    [IO.File]::WriteAllText((Join-Path $fixture 'gradlew.bat'), "@echo off`r`ncall `"$GradleExecutable`" --offline -g `"$(Join-Path $root 'build/validation-gradle-cache')`" %*`r`nexit /b %errorlevel%`r`n")
+    $gradleCache = Join-Path $root 'build/validation-gradle-cache'
+    if ($IsWindowsHost) {
+        [IO.File]::WriteAllText((Join-Path $fixture 'gradlew.bat'), "@echo off`r`ncall `"$GradleExecutable`" --offline -g `"$gradleCache`" %*`r`nexit /b %errorlevel%`r`n")
+    } else {
+        $wrapper = Join-Path $fixture 'gradlew'
+        [IO.File]::WriteAllText($wrapper, "#!/bin/sh`nexec `"$GradleExecutable`" --offline -g `"$gradleCache`" `"`$@`"`n")
+        & chmod +x $wrapper
+    }
     [IO.File]::WriteAllText((Join-Path $fixture 'src/main/java/frc/robot/constants/AuditGlobalConstants.java'), @'
 package frc.robot.constants;
 public class AuditGlobalConstants {
@@ -50,9 +57,11 @@ public class RetiringState implements frc.powerlib.statemachine.State<frc.robot.
   }
 }
 '@)
-    $electron = Join-Path $root 'powerlib-dashboard/node_modules/electron/dist/electron.exe'
+    $electron = Get-ElectronBinary $root
     $arguments = '"' + (Join-Path $root 'powerlib-dashboard/scripts/app-generation-electron-check.cjs') + '" "' + $fixture + '"'
-    $process = Start-Process -FilePath $electron -ArgumentList $arguments -WorkingDirectory $fixture -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $fixture 'app.stdout.log') -RedirectStandardError (Join-Path $fixture 'app.stderr.log')
+    # -WindowStyle exists only on Windows; the check hides its own window on other systems.
+    $hidden = if ($IsWindowsHost) { @{ WindowStyle = 'Hidden' } } else { @{} }
+    $process = Start-Process -FilePath $electron -ArgumentList $arguments -WorkingDirectory $fixture @hidden -PassThru -RedirectStandardOutput (Join-Path $fixture 'app.stdout.log') -RedirectStandardError (Join-Path $fixture 'app.stderr.log')
     if (-not $process.WaitForExit(240000)) { Stop-Process -Id $process.Id; throw "App generation check timed out. Logs: $fixture" }
     Get-Content -LiteralPath (Join-Path $fixture 'app.stdout.log') -Tail 10
     if ($process.ExitCode -ne 0) { throw (Get-Content (Join-Path $fixture 'app.stderr.log') -Tail 45 | Out-String) }

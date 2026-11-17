@@ -2,6 +2,9 @@
   "name": "power-tool",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=24 <25"
+  },
   "description": "Electron React power tool for Team 9410 PowerLib and FRC NT4 NetworkTables.",
   "main": "dist-electron/main.js",
   "type": "module",
@@ -26,8 +29,8 @@
     "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
     "predev": "npm run build:electron",
     "build": "tsc && vite build && npm run build:electron",
-    "package:app": "powershell -NoProfile -ExecutionPolicy Bypass -File ../build-dashboard.ps1 -SkipInstall",
-    "package:publish": "powershell -NoProfile -ExecutionPolicy Bypass -File ../build-dashboard.ps1 -Publish -SkipInstall",
+    "package:app": "pwsh -NoProfile -File ../build-dashboard.ps1 -SkipInstall",
+    "package:publish": "pwsh -NoProfile -File ../build-dashboard.ps1 -Publish -SkipInstall",
     "package:win": "npm run package:publish",
     "preview": "vite preview",
     "start": "electron ."
@@ -113,5 +116,12 @@
     "typescript": "^5.9.3",
     "vite": "^7.2.7",
     "wait-on": "^9.0.3"
+  },
+  "allowScripts": {
+    "electron": true,
+    "esbuild": true,
+    "cpu-features": false,
+    "ssh2": false,
+    "electron-winstaller": false
   }
 }

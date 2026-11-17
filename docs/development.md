@@ -25,6 +25,23 @@ Use this guide when changing PowerLib, developing the desktop app, or producing 
 
 ## Develop Power Tool
 
+You can develop on Windows or macOS. The release ZIP and the packaged app that teams use are
+Windows x64 only.
+
+### Set up a development machine
+
+| | Windows | macOS |
+|---|---|---|
+| Node.js 24 (from `.nvmrc`) | Node.js 24 LTS installer, or `nvm use` | `brew install node@24`, then put `/opt/homebrew/opt/node@24/bin` first on your `PATH` (or `nvm use`) |
+| PowerShell 7 (`pwsh`) | `winget install Microsoft.PowerShell` | `brew install powershell` |
+| WPILib 2026 (Java checks and robot builds) | WPILib installer, to `%PUBLIC%\wpilib\2026` | WPILib installer, to `~/wpilib/2026` |
+
+Use Node 24, not a newer version: Electron 39's installer can't unpack its download on
+Node 26, which leaves Power Tool unable to start. `package.json` approves install scripts
+only for `electron` and `esbuild` (`allowScripts`); npm 11 skips the rest.
+
+### Run and build
+
 From `powerlib-dashboard/`:
 
 ```powershell
@@ -35,6 +52,9 @@ npm run build
 ```
 
 The packaged release contains the runtime. Edit React components and imported assets in a source checkout, then rebuild to distribute them. See [Custom dashboard](../powerlib-dashboard/dashboard/README.md) and the [Power Tool source reference](../powerlib-dashboard/README.md).
+
+`npm run package:app` packages Power Tool for the machine you run it on (a `.app` on macOS),
+for trying a packaged build locally.
 
 ## Build the distribution
 
