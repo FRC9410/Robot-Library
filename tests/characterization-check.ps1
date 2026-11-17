@@ -1,5 +1,8 @@
-param([string]$WpilibRoot="$env:PUBLIC/wpilib/2026")
+param([string]$WpilibRoot='')
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'platform.ps1')
+if (-not $WpilibRoot) { $WpilibRoot = Get-DefaultWpilibRoot }
+Assert-WpilibJdk $WpilibRoot
 $repoRoot=Split-Path $PSScriptRoot -Parent
 $fixture=Join-Path $repoRoot 'build/characterization-runtime-check'
 $classes=Join-Path $fixture 'classes'
@@ -11,14 +14,14 @@ $sources+=@(Get-ChildItem (Join-Path $PSScriptRoot 'characterization') -Filter '
 $arguments=@('-encoding','UTF-8','-classpath',$classpath,'-d',$classes)+$sources
 $argumentFile=Join-Path $fixture 'javac.args'
 [IO.File]::WriteAllText($argumentFile,(($arguments | ForEach-Object { '"'+$_.Replace('\','/')+'"' }) -join "`n"))
-& (Join-Path $WpilibRoot 'jdk/bin/javac.exe') "@$argumentFile"
+& (Get-JdkTool $WpilibRoot 'javac') "@$argumentFile"
 if ($LASTEXITCODE -ne 0) { throw 'Characterization fixture compilation failed.' }
 Push-Location $fixture
 try {
- & (Join-Path $WpilibRoot 'jdk/bin/java.exe') "-Djava.library.path=$(Join-Path $repoRoot 'build/library-checks/native')" '-cp' "$classes$([IO.Path]::PathSeparator)$classpath" frc.powerlib.characterization.CharacterizationCheck
+ & (Get-JdkTool $WpilibRoot 'java') "-Djava.library.path=$(Join-Path $repoRoot 'build/library-checks/native')" '-cp' "$classes$([IO.Path]::PathSeparator)$classpath" frc.powerlib.characterization.CharacterizationCheck
  if ($LASTEXITCODE -ne 0) { throw 'Characterization runtime checks failed.' }
- & (Join-Path $WpilibRoot 'jdk/bin/java.exe') "-Djava.library.path=$(Join-Path $repoRoot 'build/library-checks/native')" '-cp' "$classes$([IO.Path]::PathSeparator)$classpath" frc.powerlib.characterization.CharacterizationCheck external-ds
+ & (Get-JdkTool $WpilibRoot 'java') "-Djava.library.path=$(Join-Path $repoRoot 'build/library-checks/native')" '-cp' "$classes$([IO.Path]::PathSeparator)$classpath" frc.powerlib.characterization.CharacterizationCheck external-ds
  if ($LASTEXITCODE -ne 0) { throw 'External Driver Station characterization checks failed.' }
- & (Join-Path $WpilibRoot 'jdk/bin/java.exe') "-Djava.library.path=$(Join-Path $repoRoot 'build/library-checks/native')" '-cp' "$classes$([IO.Path]::PathSeparator)$classpath" frc.powerlib.characterization.SwerveCharacterizationCheck
+ & (Get-JdkTool $WpilibRoot 'java') "-Djava.library.path=$(Join-Path $repoRoot 'build/library-checks/native')" '-cp' "$classes$([IO.Path]::PathSeparator)$classpath" frc.powerlib.characterization.SwerveCharacterizationCheck
  if ($LASTEXITCODE -ne 0) { throw 'CTRE drivetrain characterization checks failed.' }
 } finally { Pop-Location }
